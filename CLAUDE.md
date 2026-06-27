@@ -96,12 +96,15 @@ historial; solo se agrega.
 - **Recursos (4)**: comida 🍖, madera 🪵, oro 💰, piedra 🪨. Nodos finitos; la
   recolección se suma directa al marcador (sin viaje de retorno). Al agotarse un
   nodo, el aldeano busca el siguiente del mismo tipo.
-- **Unidades (5)**: Aldeano, Milicia, Piquetero, Arquero, Caballo.
-- **Edificios (8)**: Centro Urbano, Casa, Cuartel, Galería de Tiro, Establo,
-  Herrería, Torre y Castillo. Prerrequisitos: Galería y Establo requieren
-  Cuartel; el Castillo requiere Edad Feudal (Era III).
-- **Cuadrilátero de combate (×2)**: Arquero → Milicia → Piquetero → Caballo →
-  Arquero (cada uno fuerte contra el siguiente).
+- **Unidades**: Aldeano, Milicia, Piquetero, Arquero, Caballo y 3 Héroes
+  (Espada/Arco/Jinete, del Castillo). Los aldeanos también pueden atacar.
+- **Edificios (12)**: Centro Urbano, Casa, Cuartel, Galería de Tiro, Establo,
+  Herrería, Torre, Castillo, Granja, Mina de Oro, Mina de Piedra y Bosquero.
+  Prerrequisitos: Galería y Establo requieren Cuartel; el Castillo requiere
+  Edad Feudal (Era III).
+- **Cuadrilátero de combate (×2)**: por categoría, Arquero → Milicia →
+  Piquetero → Caballo → Arquero (cada uno fuerte contra el siguiente). Los
+  héroes heredan la categoría de su tipo base.
 - **Entrenamiento por cola**: cada edificio productor tiene cola con coste y
   tiempo; punto de reunión (rally) configurable tocando el terreno.
 - **Construcción**: el jugador coloca cimientos (silueta que sigue el dedo) y
@@ -114,7 +117,9 @@ historial; solo se agrega.
   avanza de era, entrena ejército variado y lanza oleadas de ataque.
 - **Población**: límite dinámico según edificios (ver «Población dinámica»),
   mostrado en la barra superior.
-- **Auto-defensa**: las unidades militares inactivas atacan enemigos cercanos.
+- **Auto-defensa y retaliación**: las unidades militares inactivas atacan
+  enemigos cercanos, y CUALQUIER unidad golpeada (incluidos aldeanos) responde
+  al atacante; el aldeano vuelve a su recurso al terminar.
 - **Victoria/Derrota**: gana quien destruye el Centro Urbano rival.
 - **UI/UX**: barra superior de recursos, panel inferior de acciones contextual,
   avisos (hints), pausa (⏸), pantallas de inicio y de fin.
@@ -164,3 +169,27 @@ historial; solo se agrega.
 - **IA mejorada** (PR #4): el enemigo avanza de era, construye casas al acercarse
   al tope de población, levanta castillos (en Difícil/Era III), reparte sus
   aldeanos de forma ponderada y entrena la unidad que puede pagar.
+- **Resumen de partida** (PR #5): al terminar se muestra una tabla comparativa
+  (Tú vs IA) con era alcanzada, unidades entrenadas, enemigos eliminados,
+  unidades perdidas, edificios construidos/perdidos y tecnologías; resalta en
+  verde quién gana cada métrica.
+- **Edificios de producción de recursos** (PR #5): Granja 🌾 (comida), Mina de
+  Oro ⛏️ (oro) y Mina de Piedra 🪨 (piedra) de las que los aldeanos recolectan
+  de forma renovable; Bosquero 🌲 que planta árboles cercanos (madera renovable).
+- **Héroes del Castillo** (PR #5): unidades especiales más fuertes — Héroe Espada
+  🦸, Héroe Arco 🏹 y Héroe Jinete 🐎 — entrenadas en el Castillo; siguen el
+  cuadrilátero según su categoría y muestran un aura dorada con ⭐.
+- **Aldeanos combaten y se defienden** (PR #5): pueden recibir orden de atacar y
+  responden solos cuando los atacan (retaliación), volviendo a su recurso
+  después.
+- **Río con puente** (PR #5): el río es vertical y separa a los jugadores;
+  bloquea construcción y paso, salvo por un puente central por donde cruzan las
+  unidades (guiado automático hacia el puente). Los riscos también bloquean paso.
+- **Aldeanos inactivos buscan trabajo** (PR #5): un aldeano sin tarea va a
+  terminar construcciones pendientes; si no hay, sigue con su recurso o el más
+  cercano. El botón «Detener» los deja quietos a propósito.
+- **Tres manuales de IA** (PR #5): doctrinas por dificultad. Fácil: economía
+  mínima y siempre ataca el Centro Urbano. Normal: granjas/minas y torres,
+  ataca el objetivo más cercano y se defiende. Difícil: economía completa,
+  castillo y héroes, y objetivos estratégicos (primero neutraliza torres/castillo,
+  luego arrasa la economía —aldeanos y producción— y por último el Centro).

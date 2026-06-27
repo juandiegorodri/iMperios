@@ -79,3 +79,30 @@ historial. Ver normas en `CLAUDE.md`.
 - Verificado en Chromium headless: menú y opciones, casa (+5) y castillo (+50),
   avance de edades, tecnología de recurso (+30%), cancelación con reembolso,
   mapas con obstáculos que bloquean construcción; sin errores de consola.
+
+## 2026-06-27 — PR #5: resumen, producción de recursos, héroes, IA y río con puente
+- **Resumen de partida**: tabla comparativa (Tú vs IA) con era, unidades
+  entrenadas/perdidas, enemigos eliminados, edificios construidos/perdidos y
+  tecnologías (`renderSummary`, conteo en `stats`).
+- **Edificios de producción**: Granja, Mina de Oro, Mina de Piedra (recolección
+  renovable) y Bosquero (planta árboles). `nearestGatherFor`/`nearestAnyResource`,
+  gather desde edificios en el bucle.
+- **Héroes del Castillo**: Héroe Espada/Arco/Jinete (`UNIT` con `cat` y `hero`);
+  cuadrilátero por categoría; aura ⭐ en el render.
+- **Aldeanos combaten y se defienden**: orden de ataque para aldeanos y
+  retaliación de toda unidad golpeada (`damage` marca `hitBy`; el bucle responde
+  y el aldeano reanuda su recurso con `resumeGather`).
+- **Río con puente**: río vertical que separa a los jugadores; `blocksUnit`
+  impide cruzarlo salvo por el puente; `stepToward` guía a las unidades al
+  puente. Los riscos también bloquean el paso.
+- **Aldeanos inactivos buscan trabajo** (`autoAssignIdle`): terminan obras,
+  siguen con su recurso o el más cercano; «Detener» fija `halt` para dejarlos
+  quietos.
+- **Tres manuales de IA** (`DOCTRINE` + `pickWaveTarget`): Fácil (ataca el Centro),
+  Normal (objetivo más cercano, economía y torres) y Difícil (héroes y objetivos
+  estratégicos: defensas → economía → Centro).
+- Documentación actualizada (`CLAUDE.md`, `filemap.md`, `progress.md`).
+- Verificado en Chromium headless: granja renovable, auto-trabajo, cruce por el
+  puente (izq.→der.), retaliación de aldeano, resumen (7 filas), doctrinas y la
+  IA construyendo/entrenando; sin errores. Corrección: el río pasaba a ser
+  vertical para no partir las bases.
