@@ -23,6 +23,8 @@
   .res{ display:flex; align-items:center; gap:4px; padding:3px 8px; background:#0c0d10;
     border:1px solid var(--line); border-radius:8px; white-space:nowrap; }
   .res small{ color:var(--muted); font-weight:500; }
+  .res .rate{ font-size:11px; font-weight:600; color:var(--muted); margin-left:2px; }
+  .res .rate.on{ color:var(--good); }
   #era{ margin-left:auto; color:var(--accent); font-size:13px; text-align:right; }
   /* Panel inferior de acciones */
   #actions{ position:fixed; left:0; right:0; bottom:0; z-index:10; display:flex; flex-wrap:wrap;
@@ -65,10 +67,10 @@
 <canvas id="game"></canvas>
 
 <div id="topbar">
-  <div class="res">🍖 <span id="rFood">0</span></div>
-  <div class="res">🪵 <span id="rWood">0</span></div>
-  <div class="res">🪙 <span id="rGold">0</span></div>
-  <div class="res">🪨 <span id="rStone">0</span></div>
+  <div class="res">🍖 <span id="rFood">0</span><span class="rate" id="rateFood">+0/s</span></div>
+  <div class="res">🪵 <span id="rWood">0</span><span class="rate" id="rateWood">+0/s</span></div>
+  <div class="res">🪙 <span id="rGold">0</span><span class="rate" id="rateGold">+0/s</span></div>
+  <div class="res">🪨 <span id="rStone">0</span><span class="rate" id="rateStone">+0/s</span></div>
   <div class="res">👥 <span id="rPop">0</span></div>
   <div id="era">Edad Inicial</div>
 </div>
@@ -597,7 +599,8 @@ function enemyAI(dt){
     const reqs = BLD[btype].req||[];
     for(const r of reqs) if(!hasBuilding('enemy',r)) return false;
     if(!canAfford(enemy, BLD[btype].cost)) return false;
-    const builder = entities.find(e=>e.kind==='unit'&&e.owner==='enemy'&&e.type==='villager');
+    // Elegir un aldeano que NO esté ya construyendo, para no desviar al constructor actual
+    const builder = entities.find(e=>e.kind==='unit'&&e.owner==='enemy'&&e.type==='villager'&&e.state!=='build');
     if(!builder) return false;
     pay(enemy, BLD[btype].cost);
     const ang=Math.random()*Math.PI*2;
@@ -606,7 +609,10 @@ function enemyAI(dt){
     builder.state='build'; builder.build=nb.id;
     return true;
   }
-  if(vills>=4){
+  // No empezar un edificio nuevo mientras haya otro en construcción (evita
+  // que la IA reparta y abandone obras a medias, p. ej. desviarse a la torre).
+  const constructing = entities.some(e=>e.kind==='building'&&e.owner==='enemy'&&!e.built);
+  if(vills>=4 && !constructing){
     if(buildIfNeeded('barracks')) {}
     else if(buildIfNeeded('range')) {}
     else if(buildIfNeeded('stable')) {}
@@ -1129,6 +1135,22 @@ function updateTopbar(){
   document.getElementById('rGold').textContent=Math.floor(player.res.gold);
   document.getElementById('rStone').textContent=Math.floor(player.res.stone);
   document.getElementById('rPop').textContent=(popCount('player'))+'/'+POP_CAP;
+  // Nivel de producción actual por recurso (suma de aldeanos recolectando cada tipo)
+  const rates={food:0,wood:0,gold:0,stone:0};
+  for(const e of entities){
+    if(e.kind==='unit'&&e.owner==='player'&&e.type==='villager'&&e.state==='gather'&&e.gather){
+      const node = find(e.gather.id)||e.gather;
+      const rt = e.gather.rtype || (node&&node.rtype);
+      if(rt && node && node.amount>0 && dist(e,node) <= radiusOf(node)+14){
+        rates[rt]+=gatherRate(e);
+      }
+    }
+  }
+  for(const rt of ['food','wood','gold','stone']){
+    const el=document.getElementById('rate'+rt[0].toUpperCase()+rt.slice(1));
+    el.textContent='+'+rates[rt].toFixed(1)+'/s';
+    el.classList.toggle('on', rates[rt]>0);
+  }
   document.getElementById('era').textContent = player.age>=2?'⚒️ Edad de las Herramientas':'Edad Inicial';
   // contador de aldeanos inactivos
   const idle = idleVillagers();

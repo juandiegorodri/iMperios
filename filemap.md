@@ -60,7 +60,8 @@ El archivo se organiza en estas secciones (en orden de aparición):
     (incluye multiplicador de producción y botón Deseleccionar), `buildingButtons`,
     `deselectAll`.
 13. **Barra superior y utilidades de UI**: `updateTopbar` (incluye contador de
-    inactivos), `idleVillagers`, `selectNextIdle`, `showHint`, `endGame`.
+    inactivos y **tasa de producción por recurso**), `idleVillagers`,
+    `selectNextIdle`, `showHint`, `endGame`.
 14. **Botones globales y arranque**: listeners de inicio/fin/centrar/pausa/
     inactivos, bloqueo de gestos del navegador, refresco periódico del panel,
     `resize()` + `requestAnimationFrame(loop)`.

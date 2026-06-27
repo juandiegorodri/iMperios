@@ -40,3 +40,16 @@ historial. Ver normas en `CLAUDE.md`.
 - Normas añadidas: cada funcionalidad nueva debe actualizar `CLAUDE.md`,
   `filemap.md` (si cambia la estructura) y `progress.md`.
 - Verificado en Chromium headless (`prodSpeed` correcto, sin errores).
+
+## 2026-06-27 — PR #3 (continuación): nivel de producción + arreglo de IA
+- **Tasa de recolección en la barra superior**: junto a cada recurso se muestra
+  la producción actual (p. ej. «+1.4/s»), sumando la tasa de los aldeanos que
+  recolectan ese recurso; se resalta en verde cuando hay producción activa.
+  Implementado en `updateTopbar`.
+- **Arreglo de IA (bug)**: la IA dejaba el cuartel a medio construir y dejaba de
+  producir porque desviaba al aldeano constructor para hacer la torre. Ahora
+  `buildIfNeeded` solo toma aldeanos que no estén construyendo y la IA no inicia
+  un edificio nuevo mientras haya otro en construcción (construcción secuencial).
+- Documentación actualizada (`CLAUDE.md`, `filemap.md`, `progress.md`).
+- Verificado en Chromium headless: tasas correctas (+0.7/s, +1.4/s); la IA
+  termina el cuartel, entrena unidades y construye en orden; sin errores.

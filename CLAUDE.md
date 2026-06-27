@@ -132,3 +132,7 @@ historial; solo se agrega.
   edificios del mismo tipo productor tenga un bando, más rápido entrena ese tipo
   de unidades. Multiplicador = 1 + 0.5 × (nº de edificios − 1); 1 = ×1, 2 = ×1.5,
   3 = ×2, … Se muestra en el panel del edificio.
+- **Nivel de producción por recurso** (PR #3): junto a cada recurso de la barra
+  superior se muestra la tasa actual de recolección (p. ej. «+1.4/s»), calculada
+  según los aldeanos que están recolectando ese recurso. Se resalta en verde
+  cuando hay producción activa.
