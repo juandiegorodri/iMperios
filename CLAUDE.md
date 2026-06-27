@@ -15,16 +15,21 @@ dependencias, sin servidor, sin proceso de compilación).
 - Diseño completo: ver **`DESIGN.md`**.
 - Mapa de archivos y estructura del código: ver **`filemap.md`**.
 - Bitácora de avance: ver **`progress.md`**.
+- Línea gráfica y lista de sprites: ver **`assets/ART.md`**.
 
 ## 2. Stack y restricciones
 
-- **Un solo archivo jugable**: `index.html` (HTML + CSS + JS embebido). No
+- **Lógica en un solo archivo**: `index.html` (HTML + CSS + JS embebido). No
   añadir build tools, frameworks ni dependencias externas salvo que se acuerde.
+- **Gráficos (desde PR #6)**: sprites PNG en `assets/sprites/` cargados en
+  tiempo de ejecución. Si un sprite falta, el motor usa un **emoji de respaldo**,
+  así el juego sigue funcionando aunque falten los assets. Generación/estilo de
+  los sprites: ver `assets/ART.md`.
 - **Táctil primero**: objetivos de toque ≥ 44 px; 1 dedo = órdenes/caja de
   selección, 2 dedos = paneo + zoom. Debe funcionar también con ratón/rueda en
   escritorio (para pruebas).
-- **Render**: vista cenital, sprites a base de emoji y figuras (cero assets).
-  Escalado por `devicePixelRatio` para nitidez Retina.
+- **Render**: vista cenital; sprites pixel-art (`assets/sprites/`) con respaldo
+  de emoji. Escalado por `devicePixelRatio` para nitidez Retina.
 - **Idioma**: la UI y los comentarios del código están en **español**.
 
 ## 3. Flujo de trabajo (git / despliegue)
@@ -75,8 +80,14 @@ Registro cronológico. Por cada tanda de trabajo añade una entrada **al final**
 con: fecha, número de PR (si aplica), y lista de cambios. No borres el
 historial; solo se agrega.
 
+### 5.4 `assets/ART.md` — línea gráfica y sprites
+Si se añaden o cambian **sprites**, seguir el estilo de `assets/ART.md` y
+actualizar su lista de elementos/estado. Sprites finales en `assets/sprites/`,
+hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
+
 > Regla rápida: **funcionalidad nueva ⇒ actualizar `CLAUDE.md` (lista) +
-> `filemap.md` (si hubo cambios de estructura) + `progress.md` (siempre).**
+> `filemap.md` (si hubo cambios de estructura) + `progress.md` (siempre)**; si
+> toca gráficos, también `assets/ART.md`.
 
 ---
 
@@ -193,3 +204,9 @@ historial; solo se agrega.
   ataca el objetivo más cercano y se defiende. Difícil: economía completa,
   castillo y héroes, y objetivos estratégicos (primero neutraliza torres/castillo,
   luego arrasa la economía —aldeanos y producción— y por último el Centro).
+- **Gráficos con sprites** (PR #6): sprites pixel-art (vista cenital, estilo
+  8-bit) para las 8 unidades, los 12 edificios y los 4 recursos, generados con
+  Ideogram según `assets/ART.md` y cargados desde `assets/sprites/`. El motor
+  los dibuja con anillo de bando y sombra; si falta un sprite, usa el emoji.
+  Incluye una pantalla **«Prueba gráfica»** en el menú que lista todos los
+  sprites y marca los que no cargan.

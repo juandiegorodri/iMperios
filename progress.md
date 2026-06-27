@@ -106,3 +106,20 @@ historial. Ver normas en `CLAUDE.md`.
   puente (izq.→der.), retaliación de aldeano, resumen (7 filas), doctrinas y la
   IA construyendo/entrenando; sin errores. Corrección: el río pasaba a ser
   vertical para no partir las bases.
+
+## 2026-06-27 — PR #6: gráficos con sprites (Ideogram)
+- Creado **`assets/ART.md`**: línea gráfica (8-bit, vista cenital) + lista
+  completa de sprites y animaciones.
+- Generadas con Ideogram 6 hojas de sprites (recursos, militares, aldeano+héroes
+  y 3 de edificios), descargadas, **recortadas por cuadrícula**, con **fondo
+  magenta quitado** (familia magenta) y auto-ajustadas → 24 PNG en
+  `assets/sprites/`. Hojas fuente en `assets/_raw/`.
+- **Loop de verificación**: revisión visual en rejilla; se regeneró la hoja de
+  economía (había salido en fondo blanco/pictórico) para unificar el estilo.
+- Integración en el motor: `loadSprites`, `spr`, `drawSprite`, `drawShadow`;
+  `drawResource/drawBuilding/drawUnit` ahora dibujan sprite con anillo de bando
+  y sombra, con **respaldo de emoji**. Barras de vida e insignias reubicadas.
+- Pantalla **«Prueba gráfica»** en el menú (`openGfxTest`): muestra los 24
+  sprites y marca los que no cargan (verificado 24/24, 0 fallidos, sin errores).
+- Documentación actualizada (`CLAUDE.md`, `filemap.md`, `progress.md`,
+  `assets/ART.md`).

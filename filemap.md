@@ -13,6 +13,9 @@ código nuevas (ver normas en `CLAUDE.md`).
 | `filemap.md` | Este archivo: mapa de archivos y estructura del código. |
 | `progress.md` | Bitácora cronológica de avance. |
 | `README.md` | Cómo jugar, controles y cómo desplegar. |
+| `assets/ART.md` | Manual de línea gráfica y lista de sprites/animaciones. |
+| `assets/sprites/*.png` | Sprites finales del juego (unidades, edificios, recursos). |
+| `assets/_raw/*.webp` | Hojas fuente generadas con Ideogram (para re-recortar). |
 
 ## Estructura interna de `index.html`
 
@@ -38,6 +41,8 @@ El archivo se organiza en estas secciones (en orden de aparición):
 2. **Estado global**: `cam`, `entities`, `selection`, `player`, `enemy`
    (con `mods.resMult` y `stats`), `gameSpeed`, `mapTheme`, `terrain`, `bridge`,
    flags (`running`, `paused`, `gameOver`, `difficulty`).
+2.5. **Sprites gráficos**: `SPRITE_FILES`, `sprites`, `loadSprites`, `spr`,
+   `drawSprite` (dibuja un PNG escalado con respaldo de emoji) y `drawShadow`.
 3. **Utilidades**: `dist`, `clamp`, `find`, `radiusOf`, recursos/coste
    (`canAfford`, `pay`, `costStr`, `popCount`, `popCap`), `hasBuilding`,
    `countBuildings`, `prodSpeed` (bono de producción por nº de edificios).
@@ -62,9 +67,8 @@ El archivo se organiza en estas secciones (en orden de aparición):
    puente y bloqueo de obstáculos), `spawnTrained`, `removeEntity`, `enemyAI` +
    `DOCTRINE` (3 manuales) y `pickWaveTarget` (objetivo estratégico).
 10. **Render**: `render`, `drawTerrain` (río/puente/riscos), `drawGround`,
-    `onScreen`, `drawResource`, `drawBuilding` (disparo y radio de torre/castillo),
-    `drawUnit` (insignia de recurso/inactivo y aura ⭐ de héroe), `drawHpBar`,
-    `roundRect`.
+    `onScreen`, `drawResource`/`drawBuilding`/`drawUnit` (dibujan **sprite** con
+    anillo de bando y sombra; respaldo de emoji), `drawHpBar`, `roundRect`.
 11. **Entrada táctil**: objeto `input`, manejadores `pointerdown/move/up/cancel`,
     `wheel`, teclado; `pickAt`, `handleTap`, `handleDoubleTap`,
     `finishBoxSelect`, `selectedUnits`, `selectedBuilding`; colocación
@@ -76,8 +80,8 @@ El archivo se organiza en estas secciones (en orden de aparición):
 13. **Barra superior y utilidades de UI**: `updateTopbar` (contador de inactivos
     y tasa de producción por recurso), `idleVillagers`, `selectNextIdle`,
     `showHint`, `endGame` y `renderSummary` (tabla del resumen final).
-14. **Menú principal y arranque**: `MAP_DESC`, `refreshMenu` y listeners de los
-    grupos de opciones del menú (mapa, recursos, velocidad, IA, posición) +
-    botón Empezar; listeners de fin/centrar/pausa/inactivos; bloqueo de gestos
-    del navegador; refresco periódico del panel; `resize()` +
+14. **Menú principal y arranque**: `MAP_DESC`, `refreshMenu` y listeners de las
+    opciones del menú; botón Empezar; **prueba gráfica** (`openGfxTest` + botón);
+    listeners de fin/centrar/pausa/inactivos; bloqueo de gestos del navegador;
+    refresco periódico del panel; `loadSprites()` + `resize()` +
     `requestAnimationFrame(loop)`.

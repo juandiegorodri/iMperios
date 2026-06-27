@@ -76,6 +76,12 @@
   #endStats th:first-child,#endStats td:first-child{ text-align:left; color:var(--muted); font-weight:500; }
   #endStats thead th{ color:var(--accent); font-weight:700; border-bottom:1px solid var(--accent); }
   #endStats td.win{ color:var(--good); font-weight:700; }
+  #gfxGrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:8px; margin:8px 0 16px; }
+  .gfxCell{ background:#26331f; border:1px solid var(--line); border-radius:8px; height:108px;
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-end; padding:5px; }
+  .gfxCell img{ max-height:76px; max-width:100%; object-fit:contain; }
+  .gfxCell.bad{ border-color:var(--bad); }
+  .gfxCell small{ font-size:10px; color:var(--muted); margin-top:4px; text-align:center; }
   .hidden{ display:none !important; }
   #hint{ position:fixed; left:50%; bottom:84px; transform:translateX(-50%); z-index:9;
     background:#000a; border:1px solid var(--line); border-radius:20px; padding:6px 14px; font-size:13px;
@@ -160,7 +166,20 @@
       </div>
     </div>
 
-    <div class="row"><button class="btn big" id="btnStart">▶ Empezar partida</button></div>
+    <div class="row">
+      <button class="btn big" id="btnStart">▶ Empezar partida</button>
+      <button class="btn big" id="btnGfx">🎨 Prueba gráfica</button>
+    </div>
+  </div>
+</div>
+
+<!-- Prueba gráfica: muestra todos los sprites cargados -->
+<div id="gfxTest" class="overlay hidden">
+  <div class="card" style="width:min(900px,96vw);max-height:92vh;overflow:auto">
+    <h1>🎨 Prueba gráfica</h1>
+    <p id="gfxInfo">Sprites cargados desde <code>assets/sprites/</code>.</p>
+    <div id="gfxGrid"></div>
+    <div class="row"><button class="btn big" id="btnGfxClose">Cerrar</button></div>
   </div>
 </div>
 
@@ -317,6 +336,44 @@ const enemy  = { res:{food:300, wood:300, gold:200, stone:200}, age:1, mods:fres
 let bridge = null;          // {x0,x1,y0,y1} hueco transitable del río (puente)
 
 function side(owner){ return owner==='player'?player:enemy; }
+
+// ---------- Sprites gráficos (assets/sprites/*.png) ----------
+// Nombres = res_<recurso>, unit_<tipo>, bld_<edificio>. Si un sprite no carga,
+// el motor usa el emoji de respaldo, así el juego nunca se rompe.
+const SPRITE_FILES = [
+  'res_food','res_wood','res_gold','res_stone',
+  'unit_villager','unit_infantry','unit_pike','unit_archer','unit_cavalry',
+  'unit_hero_sword','unit_hero_archer','unit_hero_cav',
+  'bld_town','bld_house','bld_barracks','bld_range','bld_stable','bld_blacksmith',
+  'bld_tower','bld_castle','bld_farm','bld_goldmine','bld_quarry','bld_lumbercamp',
+];
+const sprites = {};
+let spritesReady = 0;
+function loadSprites(){
+  for(const n of SPRITE_FILES){
+    const img = new Image(); const rec = { img, ready:false };
+    img.onload = ()=>{ rec.ready=true; spritesReady++; };
+    img.onerror = ()=>{};
+    img.src = 'assets/sprites/'+n+'.png';
+    sprites[n] = rec;
+  }
+}
+function spr(name){ const r=sprites[name]; return (r&&r.ready)?r.img : null; }
+// Dibuja un sprite centrado en (cx,cy) escalado a una altura objetivo.
+// anchorBottom: ancla la base del sprite en cy (para que "pise" el suelo).
+function drawSprite(name, cx, cy, targetH, anchorBottom){
+  const img = spr(name); if(!img) return false;
+  const sc = targetH/img.naturalHeight, w = img.naturalWidth*sc, h = targetH;
+  const dy = anchorBottom ? (cy - h) : (cy - h/2);
+  ctx.drawImage(img, cx - w/2, dy, w, h);
+  return true;
+}
+// Sombra elíptica bajo unidades/edificios para anclarlos al suelo.
+function drawShadow(cx, cy, rx){
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(1, 0.4);
+  ctx.beginPath(); ctx.arc(0,0,rx,0,Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,.28)'; ctx.fill(); ctx.restore();
+}
 
 // ---------- Utilidades ----------
 const dist = (a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
@@ -1158,12 +1215,16 @@ function drawResource(e){
   if(!onScreen(e)) return;
   const s=worldToScreen(e.x,e.y); const d=RES[e.rtype];
   const sz = 26*cam.zoom;
-  ctx.font = `${sz}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(d.emoji, s.x, s.y);
+  const H = 40*cam.zoom;
+  drawShadow(s.x, s.y+H*0.42, 15*cam.zoom);
+  if(!drawSprite('res_'+e.rtype, s.x, s.y, H, false)){
+    ctx.font = `${sz}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(d.emoji, s.x, s.y);
+  }
   // barra de cantidad
   const w=26*cam.zoom, frac=e.amount/e.maxAmount;
-  ctx.fillStyle='#0008'; ctx.fillRect(s.x-w/2, s.y+sz*0.55, w, 3);
-  ctx.fillStyle=d.color; ctx.fillRect(s.x-w/2, s.y+sz*0.55, w*frac, 3);
+  ctx.fillStyle='#0008'; ctx.fillRect(s.x-w/2, s.y+sz*0.6, w, 3);
+  ctx.fillStyle=d.color; ctx.fillRect(s.x-w/2, s.y+sz*0.6, w*frac, 3);
 }
 
 function drawBuilding(e){
@@ -1171,17 +1232,27 @@ function drawBuilding(e){
   const s=worldToScreen(e.x,e.y); const d=BLD[e.btype];
   const sz=d.size*cam.zoom;
   const sel = e.owner==='player' && selection.includes(e.id);
-  // base
-  ctx.fillStyle = e.owner==='player' ? '#26384f' : '#4a2630';
-  ctx.strokeStyle = e.owner==='player' ? '#5b86c4' : '#c46a6a';
-  ctx.lineWidth = sel?3:1.5;
-  roundRect(s.x-sz/2, s.y-sz/2, sz, sz, 8*cam.zoom);
-  ctx.fill(); ctx.stroke();
-  // emoji
+  const img = spr('bld_'+e.btype);
+  // anillo de bando en el suelo (pequeño y sutil, para distinguir jugador/IA)
+  ctx.save(); ctx.translate(s.x, s.y+sz*0.34); ctx.scale(1,0.4);
+  ctx.beginPath(); ctx.arc(0,0,sz*0.46,0,Math.PI*2);
+  ctx.fillStyle = e.owner==='player' ? 'rgba(91,134,196,.22)' : 'rgba(196,106,106,.22)';
+  ctx.fill();
+  ctx.lineWidth=1.5; ctx.strokeStyle = e.owner==='player' ? 'rgba(91,134,196,.5)' : 'rgba(196,106,106,.5)';
+  ctx.stroke(); ctx.restore();
   ctx.globalAlpha = e.built?1:0.55;
-  ctx.font=`${Math.floor(d.size*0.55*cam.zoom)}px serif`;
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(d.emoji, s.x, s.y);
+  if(img){
+    drawSprite('bld_'+e.btype, s.x, s.y + sz*0.12, d.size*1.7*cam.zoom, true);
+  } else {
+    // respaldo: rect + emoji
+    ctx.fillStyle = e.owner==='player' ? '#26384f' : '#4a2630';
+    ctx.strokeStyle = e.owner==='player' ? '#5b86c4' : '#c46a6a';
+    ctx.lineWidth = sel?3:1.5;
+    roundRect(s.x-sz/2, s.y-sz/2, sz, sz, 8*cam.zoom); ctx.fill(); ctx.stroke();
+    ctx.font=`${Math.floor(d.size*0.55*cam.zoom)}px serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(d.emoji, s.x, s.y);
+  }
   ctx.globalAlpha=1;
   // progreso de construcción
   if(!e.built){
@@ -1189,10 +1260,10 @@ function drawBuilding(e){
     ctx.fillStyle='#000a'; ctx.fillRect(s.x-w/2, s.y+sz/2+3, w, 5);
     ctx.fillStyle='#caa46a'; ctx.fillRect(s.x-w/2, s.y+sz/2+3, w*frac, 5);
   } else {
-    drawHpBar(s.x, s.y-sz/2-7, sz, e.hp/e.maxHp, e.owner);
+    drawHpBar(s.x, s.y - sz*1.5, sz, e.hp/e.maxHp, e.owner);
   }
   // selección
-  if(sel){ ctx.strokeStyle='#caa46a'; ctx.lineWidth=2; ctx.strokeRect(s.x-sz/2-3,s.y-sz/2-3,sz+6,sz+6); }
+  if(sel){ ctx.strokeStyle='#caa46a'; ctx.lineWidth=2; ctx.strokeRect(s.x-sz/2-3,s.y-sz*1.6,sz+6,sz*1.85); }
   // rally
   if(sel && e.rally){ const r=worldToScreen(e.rally.x,e.rally.y);
     ctx.fillStyle='#caa46a'; ctx.font=`${16*cam.zoom}px serif`; ctx.fillText('🚩', r.x, r.y); }
@@ -1218,43 +1289,41 @@ function drawUnit(e){
   ctx.beginPath(); ctx.arc(s.x, s.y+sz*0.35, sz*0.5, 0, Math.PI*2);
   ctx.fillStyle = e.owner==='player' ? 'rgba(91,134,196,.55)' : 'rgba(196,106,106,.55)';
   ctx.fill();
-  // aura dorada para héroes
-  if(d.hero){
-    ctx.beginPath(); ctx.arc(s.x, s.y+sz*0.1, sz*0.7, 0, Math.PI*2);
-    ctx.fillStyle='rgba(230,190,90,.28)'; ctx.fill();
-  }
-  // emoji
-  ctx.font=`${sz}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(d.emoji, s.x, s.y);
-  // insignia de héroe (estrella)
-  if(d.hero){
-    ctx.font=`${12*cam.zoom}px serif`;
-    ctx.fillText('⭐', s.x+sz*0.45, s.y-sz*0.45);
+  const uH = 40*cam.zoom * (e.anim>0?1.12:1);
+  if(!drawSprite('unit_'+e.type, s.x, s.y+sz*0.35, uH, true)){
+    // respaldo: aura + emoji + estrella de héroe
+    if(d.hero){
+      ctx.beginPath(); ctx.arc(s.x, s.y+sz*0.1, sz*0.7, 0, Math.PI*2);
+      ctx.fillStyle='rgba(230,190,90,.28)'; ctx.fill();
+    }
+    ctx.font=`${sz}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(d.emoji, s.x, s.y);
+    if(d.hero){ ctx.font=`${12*cam.zoom}px serif`; ctx.fillText('⭐', s.x+sz*0.45, s.y-sz*0.45); }
   }
   // símbolo del recurso que recolecta el aldeano (insignia)
   if(e.type==='villager' && e.state==='gather' && e.gather){
     const g=find(e.gather.id);
     const rt = (g&&g.kind==='building') ? BLD[g.btype].produces : (e.gather.rtype || (g||{}).rtype);
     if(rt && RES[rt]){
-      const bx=s.x+sz*0.5, by=s.y-sz*0.5, br=8*cam.zoom;
+      const bx=s.x+16*cam.zoom, by=s.y-22*cam.zoom, br=8*cam.zoom;
       ctx.beginPath(); ctx.arc(bx,by,br,0,Math.PI*2);
       ctx.fillStyle='#0b0c0fdd'; ctx.fill();
       ctx.strokeStyle='#caa46a'; ctx.lineWidth=1; ctx.stroke();
-      ctx.font=`${11*cam.zoom}px serif`;
+      ctx.font=`${11*cam.zoom}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(RES[rt].emoji, bx, by);
     }
   }
   // insignia de aldeano inactivo
   if(e.type==='villager' && e.owner==='player' && e.state==='idle'){
-    const bx=s.x+sz*0.5, by=s.y-sz*0.5, br=8*cam.zoom;
+    const bx=s.x+16*cam.zoom, by=s.y-22*cam.zoom, br=8*cam.zoom;
     ctx.beginPath(); ctx.arc(bx,by,br,0,Math.PI*2);
     ctx.fillStyle='#0b0c0fdd'; ctx.fill();
     ctx.strokeStyle='#d6b24a'; ctx.lineWidth=1; ctx.stroke();
-    ctx.font=`${11*cam.zoom}px serif`; ctx.fillStyle='#d6b24a';
+    ctx.font=`${11*cam.zoom}px serif`; ctx.fillStyle='#d6b24a'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('💤', bx, by);
   }
   // barra de vida (si dañado)
-  if(e.hp<e.maxHp) drawHpBar(s.x, s.y-sz*0.65, 22*cam.zoom, e.hp/e.maxHp, e.owner);
+  if(e.hp<e.maxHp) drawHpBar(s.x, s.y-30*cam.zoom, 24*cam.zoom, e.hp/e.maxHp, e.owner);
   // selección
   if(sel){ ctx.strokeStyle='#caa46a'; ctx.lineWidth=2;
     ctx.beginPath(); ctx.arc(s.x, s.y+sz*0.35, sz*0.62, 0, Math.PI*2); ctx.stroke(); }
@@ -1748,6 +1817,24 @@ document.querySelectorAll('#startScreen .opt').forEach(group=>{
 });
 document.getElementById('btnStart').addEventListener('click',()=>startGame(gameConfig));
 refreshMenu();
+
+// ---------- Prueba gráfica ----------
+function openGfxTest(){
+  const grid=document.getElementById('gfxGrid'); grid.innerHTML='';
+  let loaded=0;
+  for(const n of SPRITE_FILES){
+    const cell=document.createElement('div'); cell.className='gfxCell';
+    const img=document.createElement('img'); img.src='assets/sprites/'+n+'.png';
+    img.onload=()=>{ loaded++; document.getElementById('gfxInfo').textContent=`${loaded}/${SPRITE_FILES.length} sprites OK.`; };
+    img.onerror=()=>{ cell.classList.add('bad'); };
+    const lbl=document.createElement('small'); lbl.textContent=n;
+    cell.appendChild(img); cell.appendChild(lbl); grid.appendChild(cell);
+  }
+  document.getElementById('gfxInfo').textContent='Cargando…';
+  document.getElementById('gfxTest').classList.remove('hidden');
+}
+document.getElementById('btnGfx').addEventListener('click', openGfxTest);
+document.getElementById('btnGfxClose').addEventListener('click',()=>document.getElementById('gfxTest').classList.add('hidden'));
 document.getElementById('btnRestart').addEventListener('click',()=>{
   document.getElementById('endScreen').classList.add('hidden');
   document.getElementById('startScreen').classList.remove('hidden');
@@ -1770,6 +1857,7 @@ document.addEventListener('touchmove', e=>{ if(e.target===canvas) e.preventDefau
 setInterval(()=>{ if(running && !gameOver) updateActionPanel(); }, 900);
 
 // ---------- Arranque ----------
+loadSprites();
 resize();
 requestAnimationFrame(loop);
 </script>
