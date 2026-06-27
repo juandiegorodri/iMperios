@@ -40,8 +40,12 @@
   .btn.danger{ border-color:#5a2c2c; }
   /* Botones flotantes utilitarios */
   #util{ position:fixed; right:8px; top:54px; z-index:10; display:flex; flex-direction:column; gap:6px; }
-  #util .ub{ width:46px; height:46px; border-radius:23px; background:#1b1e24cc; border:1px solid var(--line);
+  #util .ub{ position:relative; width:46px; height:46px; border-radius:23px; background:#1b1e24cc; border:1px solid var(--line);
     color:var(--txt); font-size:18px; display:flex; align-items:center; justify-content:center; }
+  #util .ub .badge{ position:absolute; top:-4px; right:-4px; min-width:20px; height:20px; padding:0 4px;
+    border-radius:10px; background:var(--bad); color:#fff; font-size:12px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; border:1px solid #0008; }
+  #btnIdle.has{ border-color:var(--accent); box-shadow:0 0 0 2px #caa46a55; }
   /* Overlays */
   .overlay{ position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
     background:#000a; }
@@ -70,6 +74,7 @@
 </div>
 
 <div id="util">
+  <div class="ub" id="btnIdle" title="Aldeanos inactivos">👷<span class="badge" id="idleBadge">0</span></div>
   <div class="ub" id="btnCenter" title="Centrar">⌂</div>
   <div class="ub" id="btnPause" title="Pausa">⏸</div>
 </div>
@@ -141,6 +146,8 @@ const BLD = {
   range:      { name:'Galería de Tiro',emoji:'🎯', hp:600,  size:54, cost:{wood:175}, build:22, req:['barracks'] },
   stable:     { name:'Establo',       emoji:'🐴', hp:600,  size:54, cost:{wood:175}, build:22, req:['barracks'] },
   blacksmith: { name:'Herrería',      emoji:'🔨', hp:600,  size:54, cost:{wood:150}, build:20, req:[] },
+  tower:      { name:'Torre',         emoji:'🗼', hp:900,  size:46, cost:{wood:50,stone:125}, build:18, req:[],
+                atk:9, range:160, cd:0.9 },
 };
 
 const AGE_COST = { stone:150, gold:100 };
@@ -205,7 +212,8 @@ function makeBuilding(owner, btype, x, y, built){
   const d = BLD[btype];
   return { id:genId(), kind:'building', owner, btype, x, y,
     hp: built? d.hp : Math.max(1, d.hp*0.05), maxHp:d.hp,
-    built:!!built, progress: built? d.build : 0, queue:[], rally:null };
+    built:!!built, progress: built? d.build : 0, queue:[], rally:null,
+    cd:0, anim:0, shotAt:null };
 }
 function makeResource(rtype, x, y){
   const d = RES[rtype];
@@ -466,9 +474,21 @@ function update(dt){
     e.x = clamp(e.x, 8, WORLD.w-8); e.y = clamp(e.y, 8, WORLD.h-8);
   }
 
-  // Edificios: cola de producción
+  // Edificios: cola de producción + torres defensivas
   for(const e of entities){
     if(e.kind!=='building' || !e.built) continue;
+    // Torres y edificios con ataque: disparan a enemigos cercanos
+    const bd = BLD[e.btype];
+    if(bd.atk){
+      if(e.cd>0) e.cd-=dt;
+      if(e.anim>0) e.anim-=dt;
+      const tgt = nearestEnemy(e, bd.range);
+      if(tgt && e.cd<=0){
+        let dmg = bd.atk;
+        if(tgt.kind==='unit') dmg = Math.max(1, dmg - unitArmor(tgt));
+        tgt.hp -= dmg; e.cd = bd.cd; e.anim=0.2; e.shotAt={x:tgt.x,y:tgt.y};
+      }
+    }
     if(e.queue.length){
       const job = e.queue[0];
       job.time -= dt;
@@ -581,6 +601,7 @@ function enemyAI(dt){
     if(buildIfNeeded('barracks')) {}
     else if(buildIfNeeded('range')) {}
     else if(buildIfNeeded('stable')) {}
+    else if(difficulty!=='easy' && buildIfNeeded('tower')) {}
   }
 
   // Entrenar ejército variado
@@ -710,6 +731,17 @@ function drawBuilding(e){
   // rally
   if(sel && e.rally){ const r=worldToScreen(e.rally.x,e.rally.y);
     ctx.fillStyle='#caa46a'; ctx.font=`${16*cam.zoom}px serif`; ctx.fillText('🚩', r.x, r.y); }
+  // disparo de torre
+  if(d.atk && e.anim>0 && e.shotAt){
+    const ts=worldToScreen(e.shotAt.x, e.shotAt.y);
+    ctx.strokeStyle='#ffd97a'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(s.x, s.y-sz*0.2); ctx.lineTo(ts.x, ts.y); ctx.stroke();
+  }
+  // radio de alcance de la torre cuando está seleccionada
+  if(sel && d.atk){
+    ctx.strokeStyle='rgba(202,164,106,.35)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(s.x, s.y, d.range*cam.zoom, 0, Math.PI*2); ctx.stroke();
+  }
 }
 
 function drawUnit(e){
@@ -724,6 +756,27 @@ function drawUnit(e){
   // emoji
   ctx.font=`${sz}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText(d.emoji, s.x, s.y);
+  // símbolo del recurso que recolecta el aldeano (insignia)
+  if(e.type==='villager' && e.state==='gather' && e.gather){
+    const rt = e.gather.rtype || (find(e.gather.id)||{}).rtype;
+    if(rt && RES[rt]){
+      const bx=s.x+sz*0.5, by=s.y-sz*0.5, br=8*cam.zoom;
+      ctx.beginPath(); ctx.arc(bx,by,br,0,Math.PI*2);
+      ctx.fillStyle='#0b0c0fdd'; ctx.fill();
+      ctx.strokeStyle='#caa46a'; ctx.lineWidth=1; ctx.stroke();
+      ctx.font=`${11*cam.zoom}px serif`;
+      ctx.fillText(RES[rt].emoji, bx, by);
+    }
+  }
+  // insignia de aldeano inactivo
+  if(e.type==='villager' && e.owner==='player' && e.state==='idle'){
+    const bx=s.x+sz*0.5, by=s.y-sz*0.5, br=8*cam.zoom;
+    ctx.beginPath(); ctx.arc(bx,by,br,0,Math.PI*2);
+    ctx.fillStyle='#0b0c0fdd'; ctx.fill();
+    ctx.strokeStyle='#d6b24a'; ctx.lineWidth=1; ctx.stroke();
+    ctx.font=`${11*cam.zoom}px serif`; ctx.fillStyle='#d6b24a';
+    ctx.fillText('💤', bx, by);
+  }
   // barra de vida (si dañado)
   if(e.hp<e.maxHp) drawHpBar(s.x, s.y-sz*0.65, 22*cam.zoom, e.hp/e.maxHp, e.owner);
   // selección
@@ -1008,6 +1061,7 @@ function updateActionPanel(){
     if(b.queue.length) info += ` · cola: ${b.queue.length} (${Math.ceil(b.queue[0].time)}s)`;
     selinfoEl.innerHTML=info;
     if(b.built) buildingButtons(b);
+    actionsEl.appendChild(btnEl('✕ Deseleccionar','','',true, deselectAll));
     return;
   }
 
@@ -1016,7 +1070,7 @@ function updateActionPanel(){
   selinfoEl.innerHTML = Object.keys(types).map(t=>`<b>${types[t]}</b> ${UNIT[t].name}`).join(' · ');
   const hasVill = units.some(u=>u.type==='villager');
   if(hasVill){
-    for(const bt of ['barracks','range','stable','blacksmith']){
+    for(const bt of ['barracks','range','stable','blacksmith','tower']){
       const d=BLD[bt];
       const reqOk=(d.req||[]).every(r=>hasBuilding('player',r));
       const en=canAfford(player,d.cost)&&reqOk;
@@ -1027,7 +1081,10 @@ function updateActionPanel(){
   actionsEl.appendChild(btnEl('✋ Detener','','danger',true, ()=>{
     for(const u of units){ u.state='idle'; u.target=null; u.move=null; u.gather=null; u.build=null; }
   }));
+  actionsEl.appendChild(btnEl('✕ Deseleccionar','','',true, deselectAll));
 }
+
+function deselectAll(){ selection=[]; updateActionPanel(); }
 
 function buildingButtons(b){
   const pop = popCount('player')+countQueued('player');
@@ -1061,7 +1118,26 @@ function updateTopbar(){
   document.getElementById('rStone').textContent=Math.floor(player.res.stone);
   document.getElementById('rPop').textContent=(popCount('player'))+'/'+POP_CAP;
   document.getElementById('era').textContent = player.age>=2?'⚒️ Edad de las Herramientas':'Edad Inicial';
-  // refrescar habilitación de botones cada cierto tiempo
+  // contador de aldeanos inactivos
+  const idle = idleVillagers();
+  const badge=document.getElementById('idleBadge');
+  const btnI=document.getElementById('btnIdle');
+  badge.textContent = idle.length;
+  badge.style.display = idle.length? 'flex':'none';
+  btnI.classList.toggle('has', idle.length>0);
+}
+
+function idleVillagers(){
+  return entities.filter(e=>e.kind==='unit'&&e.owner==='player'&&e.type==='villager'&&e.state==='idle');
+}
+let idleCycle=0;
+function selectNextIdle(){
+  const idle=idleVillagers();
+  if(!idle.length){ showHint('No hay aldeanos inactivos. ¡Bien!'); return; }
+  idleCycle=(idleCycle)%idle.length;
+  const v=idle[idleCycle]; idleCycle++;
+  selection=[v.id]; updateActionPanel(); centerOn(v.x,v.y);
+  showHint('Aldeano inactivo '+(idleCycle)+'/'+idle.length+'. Tócalo sobre un recurso.');
 }
 
 // ---------- Hints ----------
@@ -1093,6 +1169,7 @@ document.getElementById('btnCenter').addEventListener('click',()=>{
   const t=entities.find(e=>e.kind==='building'&&e.owner==='player'&&e.btype==='town');
   if(t) centerOn(t.x,t.y);
 });
+document.getElementById('btnIdle').addEventListener('click', selectNextIdle);
 document.getElementById('btnPause').addEventListener('click',function(){
   paused=!paused; this.textContent=paused?'▶':'⏸'; if(paused) showHint('Pausa');
 });
