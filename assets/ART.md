@@ -68,10 +68,10 @@ reglas y se guardan en `assets/sprites/`.
 > «Anim» describe la animación objetivo (de momento se implementan estáticos +
 > el rebote/escala que ya hace el motor; los fotogramas extra son fase 2).
 >
-> **Hecho (PR #6): las 8 unidades, los 12 edificios y los 4 recursos ya están
-> generados, verificados (24/24) e integrados (✅).** Falta el terreno y los
-> efectos (fase 2). Las hojas fuente están en `assets/_raw/*.webp` y los sprites
-> finales en `assets/sprites/*.png`.
+> **Hecho (PR #6): las 8 unidades, los 12 edificios y los 4 recursos.**
+> **Hecho (PR #7): terreno (pasto, agua, roca/tierra), montaña, muralla, torre de
+> muralla y puerta.** Total 32 sprites integrados (✅). Hojas fuente en
+> `assets/_raw/*.webp` y sprites finales en `assets/sprites/*.png`.
 
 ### Unidades (neutras; el bando lo da el anillo)
 | Sprite | Archivo | Anim objetivo | Estado |

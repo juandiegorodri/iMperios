@@ -249,6 +249,10 @@ const BLD = {
   goldmine:   { name:'Mina de Oro',   emoji:'⛏️', hp:280,  size:46, cost:{wood:100}, build:18, req:[], produces:'gold' },
   quarry:     { name:'Mina de Piedra',emoji:'🪨', hp:280,  size:46, cost:{wood:100}, build:18, req:[], produces:'stone' },
   lumbercamp: { name:'Bosquero',      emoji:'🌲', hp:200,  size:44, cost:{wood:40}, build:14, req:[], plants:true },
+  // Murallas (se colocan con la herramienta de muralla, no en el menú normal).
+  wall:       { name:'Muralla',       emoji:'🧱', hp:700,  size:30, cost:{stone:5},  build:5, req:[], wall:true },
+  wall_tower: { name:'Torre de Muralla',emoji:'🏯',hp:1100, size:38, cost:{stone:20}, build:9, req:[], wall:true,
+                atk:8, range:155, cd:1.0 },
 };
 
 // Edades (índice = nº de era). `cost` = coste para AVANZAR a esa era.
@@ -334,6 +338,8 @@ const enemy  = { res:{food:300, wood:300, gold:200, stone:200}, age:1, mods:fres
   stats:freshStats(), ai:{ timer:0, attackTimer:0 } };
 
 let bridge = null;          // {x0,x1,y0,y1} hueco transitable del río (puente)
+let frameWalls = [];        // murallas construidas (recalculado cada frame)
+let pings = [];             // efectos de selección/deselección
 
 function side(owner){ return owner==='player'?player:enemy; }
 
@@ -346,6 +352,8 @@ const SPRITE_FILES = [
   'unit_hero_sword','unit_hero_archer','unit_hero_cav',
   'bld_town','bld_house','bld_barracks','bld_range','bld_stable','bld_blacksmith',
   'bld_tower','bld_castle','bld_farm','bld_goldmine','bld_quarry','bld_lumbercamp',
+  'bld_wall','bld_wall_tower',
+  'tile_grass','tile_water','tile_mountain','tile_dirt','obj_mountain','obj_gate',
 ];
 const sprites = {};
 let spritesReady = 0;
@@ -413,6 +421,7 @@ function startGame(cfg){
   gameSpeed = SPEED_PRESETS[cfg.speed].mult;
   mapTheme = cfg.map;
   entities = []; selection = []; nextId = 1; placement = null; terrain = []; bridge = null;
+  frameWalls = []; pings = [];
   gameOver = false; paused = false; running = true;
 
   // Recursos iniciales según preset
@@ -661,6 +670,9 @@ function gatherRate(e, rtype){
 function damage(attacker, target){
   let dmg = unitAtk(attacker);
   const aCat = UNIT[attacker.type].cat;
+  // El arquero a distancia pega completo; en cuerpo a cuerpo (enemigo pegado)
+  // su daño baja a la mitad: no es especialista del combate cercano.
+  if(aCat==='archer' && dist(attacker,target) < 40) dmg *= 0.5;
   if(target.kind==='unit' && STRONG_VS[aCat]===UNIT[target.type].cat) dmg*=BONUS;
   if(target.kind==='unit') dmg -= unitArmor(target);
   dmg = Math.max(1, dmg);
@@ -766,6 +778,8 @@ function cancelQueued(b, idx){
 }
 
 function update(dt){
+  // Murallas construidas (para colisión de movimiento de este frame)
+  frameWalls = entities.filter(e=>e.kind==='building'&&BLD[e.btype].wall&&e.built);
   // Unidades
   for(const e of entities){
     if(e.kind!=='unit') continue;
@@ -820,17 +834,34 @@ function update(dt){
     }
     else if(e.state==='build' && e.build){
       const b = find(e.build);
-      if(!b || b.built){ e.state='idle'; e.build=null; }
+      if(!b){ e.state='idle'; e.build=null; }
+      else if(b.built && b.hp>=b.maxHp){ e.state='idle'; e.build=null; }   // nada que hacer
       else {
         const reach = radiusOf(b)+14;
         if(dist(e,b) > reach){ stepToward(e, b, dt); }
-        else {
+        else if(!b.built){
+          // CONSTRUIR
           b.progress += dt; e.anim=0.3;
           const need = BLD[b.btype].build;
           b.hp = Math.max(b.hp, BLD[b.btype].hp * (0.05 + 0.95*Math.min(1,b.progress/need)));
           if(b.progress>=need){ b.built=true; b.hp=BLD[b.btype].hp; e.state='idle'; e.build=null;
             side(b.owner).stats.built++;
             if(e.owner==='player') showHint(BLD[b.btype].name+' construido.'); }
+        } else {
+          // REPARAR (gasta recursos del coste de construcción)
+          const dh = Math.min(b.maxHp - b.hp, 22*dt);
+          const cost = BLD[b.btype].cost, s = side(e.owner);
+          const pay = {}; let canPay=true;
+          for(const k in cost){ pay[k] = cost[k]*0.5*(dh/b.maxHp); if((s.res[k]||0) < pay[k]) canPay=false; }
+          if(canPay){
+            for(const k in pay) s.res[k]-=pay[k];
+            b.hp += dh; e.anim=0.3;
+            if(b.hp>=b.maxHp){ b.hp=b.maxHp; e.state='idle'; e.build=null;
+              if(e.owner==='player') showHint(BLD[b.btype].name+' reparado.'); }
+          } else {
+            e.state='idle'; e.build=null;
+            if(e.owner==='player') showHint('Sin recursos para reparar.');
+          }
         }
       }
     }
@@ -938,7 +969,24 @@ function stepToward(e, t, dt){
     else if(!blocksUnit(e.x,ny)) nx=e.x;
     else { nx=e.x; ny=e.y; }
   }
+  // Murallas: bloquean a las unidades del bando contrario (salvo si su objetivo
+  // es la propia muralla, para poder atacarla).
+  if(blockedByWall(e, nx, ny)){
+    if(!blockedByWall(e, nx, e.y)) ny=e.y;
+    else if(!blockedByWall(e, e.x, ny)) nx=e.x;
+    else { nx=e.x; ny=e.y; }
+  }
   e.x=nx; e.y=ny;
+}
+// ¿La posición choca con una muralla enemiga? (no bloquea a su propio dueño)
+function blockedByWall(e, x, y){
+  for(const w of frameWalls){
+    if(w.owner===e.owner) continue;
+    if(e.state==='attack' && e.target && e.target.id===w.id) continue;
+    const r = radiusOf(w) + 11;
+    if((x-w.x)*(x-w.x)+(y-w.y)*(y-w.y) < r*r) return true;
+  }
+  return false;
 }
 
 function spawnTrained(b, type){
@@ -1127,10 +1175,10 @@ function pickWaveTarget(army, mode){
 // ============================ RENDER ============================
 function render(){
   ctx.clearRect(0,0,viewW(),viewH());
-  // Fondo (color según el mapa)
-  ctx.fillStyle=(MAPS[mapTheme]&&MAPS[mapTheme].ground)||'#26331f'; ctx.fillRect(0,0,viewW(),viewH());
-  drawTerrain();
+  // Fondo (color según el mapa) → suelo con textura → terreno (río/riscos) encima
+  ctx.fillStyle=(MAPS[mapTheme]&&MAPS[mapTheme].ground)||'#1a1d16'; ctx.fillRect(0,0,viewW(),viewH());
   drawGround();
+  drawTerrain();
 
   // Entidades ordenadas por Y (efecto de profundidad)
   const sorted = entities.slice().sort((a,b)=>a.y-b.y);
@@ -1153,19 +1201,40 @@ function render(){
     ctx.fillRect(x,y,w,h); ctx.strokeRect(x,y,w,h);
   }
 
-  // Silueta de colocación de edificio
+  // Efectos de selección/deselección
+  drawPings();
+
+  // Silueta de colocación de edificio / muralla
   if(placement){
     const w = screenToWorld(input.curScreen.x, input.curScreen.y);
-    const s = worldToScreen(w.x,w.y); const d=BLD[placement.btype];
-    const sz = d.size*cam.zoom;
-    const ok = placementValid(w.x,w.y) && canAfford(player, d.cost);
-    ctx.globalAlpha=0.6;
-    ctx.fillStyle = ok? 'rgba(95,177,95,.4)':'rgba(208,90,90,.4)';
-    ctx.fillRect(s.x-sz/2, s.y-sz/2, sz, sz);
-    ctx.globalAlpha=1;
-    ctx.font = `${Math.floor(d.size*0.6*cam.zoom)}px serif`;
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(d.emoji, s.x, s.y);
+    if(placement.wall){
+      if(placement.start){
+        // Vista previa de la línea de muralla con sus tramos
+        const pts = wallPoints(placement.start, {x:w.x,y:w.y});
+        const a=worldToScreen(placement.start.x,placement.start.y), b=worldToScreen(w.x,w.y);
+        ctx.strokeStyle='rgba(202,164,106,.6)'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+        pts.forEach((pt,i)=>{ const sp=worldToScreen(pt.x,pt.y); const tower=i%WALL_TOWER_EVERY===0;
+          ctx.fillStyle = onObstacle(pt.x,pt.y) ? 'rgba(208,90,90,.7)' : (tower?'rgba(120,160,210,.85)':'rgba(180,180,170,.85)');
+          ctx.fillRect(sp.x-6*cam.zoom, sp.y-6*cam.zoom, 12*cam.zoom, 12*cam.zoom); });
+      } else {
+        const s=worldToScreen(w.x,w.y);
+        ctx.fillStyle='rgba(180,180,170,.8)'; ctx.fillRect(s.x-6*cam.zoom,s.y-6*cam.zoom,12*cam.zoom,12*cam.zoom);
+      }
+    } else {
+      const s = worldToScreen(w.x,w.y); const d=BLD[placement.btype];
+      const sz = d.size*cam.zoom;
+      const ok = placementValid(w.x,w.y) && canAfford(player, d.cost);
+      ctx.globalAlpha=0.6;
+      ctx.fillStyle = ok? 'rgba(95,177,95,.4)':'rgba(208,90,90,.4)';
+      ctx.fillRect(s.x-sz/2, s.y-sz/2, sz, sz);
+      ctx.globalAlpha=1;
+      if(!drawSprite('bld_'+placement.btype, s.x, s.y, d.size*1.3*cam.zoom, false)){
+        ctx.font = `${Math.floor(d.size*0.6*cam.zoom)}px serif`;
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(d.emoji, s.x, s.y);
+      }
+    }
   }
 }
 
@@ -1175,33 +1244,57 @@ function drawTerrain(){
     const a=worldToScreen(t.x,t.y);
     const w=t.w*cam.zoom, h=t.h*cam.zoom;
     if(t.kind==='river'){
-      ctx.fillStyle='#2f5d86'; ctx.fillRect(a.x,a.y,w,h);
-      ctx.fillStyle='rgba(120,180,220,.25)'; ctx.fillRect(a.x,a.y,w,h*0.4);
+      if(!fillPattern('tile_water', a.x,a.y,w,h, 300)){ ctx.fillStyle='#2f5d86'; ctx.fillRect(a.x,a.y,w,h); }
+      ctx.fillStyle='rgba(40,90,130,.25)'; ctx.fillRect(a.x,a.y,w,h);  // tinte para distinguir el cauce
     } else if(t.kind==='bridge'){
       ctx.fillStyle='#8a6a44'; ctx.fillRect(a.x,a.y,w,h);
       ctx.strokeStyle='#5e4628'; ctx.lineWidth=2;
       const planks=Math.max(2,Math.floor(t.w/14));
       for(let i=0;i<=planks;i++){ const px=a.x+(w/planks)*i; ctx.beginPath(); ctx.moveTo(px,a.y); ctx.lineTo(px,a.y+h); ctx.stroke(); }
     } else if(t.kind==='cliff'){
-      ctx.fillStyle='#56504642'; ctx.fillRect(a.x,a.y,w,h);
-      ctx.fillStyle='#6b6356'; ctx.strokeStyle='#3a352c'; ctx.lineWidth=2;
-      roundRect(a.x,a.y,w,h,6*cam.zoom); ctx.fill(); ctx.stroke();
-      ctx.font=`${22*cam.zoom}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('⛰️', a.x+w/2, a.y+h/2);
+      ctx.save(); roundRect(a.x,a.y,w,h,6*cam.zoom); ctx.clip();
+      if(!fillPattern('tile_mountain', a.x,a.y,w,h, 300)){ ctx.fillStyle='#6b6356'; ctx.fillRect(a.x,a.y,w,h); }
+      ctx.restore();
+      ctx.strokeStyle='#3a352c'; ctx.lineWidth=2; roundRect(a.x,a.y,w,h,6*cam.zoom); ctx.stroke();
+      // montañas decorativas encima
+      if(!drawSprite('obj_mountain', a.x+w*0.5, a.y+h*0.6, Math.min(w,h)*1.1, false)){
+        ctx.font=`${22*cam.zoom}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText('⛰️', a.x+w/2, a.y+h/2);
+      }
     }
   }
 }
 
+// Cache de patrones de textura (createPattern) por nombre de sprite.
+const _patterns = {};
+function getPattern(name){
+  if(_patterns[name]!==undefined) return _patterns[name];
+  const img = spr(name);
+  if(!img){ return null; }   // aún no cargado; reintentar en frames siguientes
+  _patterns[name] = ctx.createPattern(img, 'repeat');
+  return _patterns[name];
+}
+// Rellena un rectángulo (en pantalla) con una textura que se desplaza/escala con la cámara.
+function fillPattern(name, sx, sy, sw, sh, worldTile){
+  const pat = getPattern(name); if(!pat) return false;
+  const z = cam.zoom * (worldTile/256);
+  try { pat.setTransform(new DOMMatrix([z,0,0,z, -cam.x*cam.zoom, -cam.y*cam.zoom])); } catch(e){}
+  ctx.fillStyle = pat; ctx.fillRect(sx, sy, sw, sh);
+  return true;
+}
+
 function drawGround(){
-  // Cuadrícula sutil
-  const step=130;
-  ctx.strokeStyle='rgba(255,255,255,0.035)'; ctx.lineWidth=1;
-  const x0 = -((cam.x*cam.zoom)% (step*cam.zoom));
-  for(let x=x0; x<viewW(); x+=step*cam.zoom){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,viewH()); ctx.stroke(); }
-  const y0 = -((cam.y*cam.zoom)% (step*cam.zoom));
-  for(let y=y0; y<viewH(); y+=step*cam.zoom){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(viewW(),y); ctx.stroke(); }
-  // Borde del mundo
   const tl=worldToScreen(0,0), br=worldToScreen(WORLD.w,WORLD.h);
+  const gx=Math.max(0,tl.x), gy=Math.max(0,tl.y);
+  const gw=Math.min(viewW(),br.x)-gx, gh=Math.min(viewH(),br.y)-gy;
+  if(gw>0 && gh>0){
+    const groundTile = mapTheme==='cliffs' ? 'tile_dirt' : 'tile_grass';
+    if(!fillPattern(groundTile, gx, gy, gw, gh, 300)){
+      ctx.fillStyle=(MAPS[mapTheme]&&MAPS[mapTheme].ground)||'#26331f'; ctx.fillRect(gx,gy,gw,gh);
+    }
+    if(mapTheme==='forest'){ ctx.fillStyle='rgba(15,30,12,.35)'; ctx.fillRect(gx,gy,gw,gh); } // bosque más oscuro
+  }
+  // Borde del mundo
   ctx.strokeStyle='rgba(0,0,0,.5)'; ctx.lineWidth=3;
   ctx.strokeRect(tl.x,tl.y, br.x-tl.x, br.y-tl.y);
 }
@@ -1233,16 +1326,17 @@ function drawBuilding(e){
   const sz=d.size*cam.zoom;
   const sel = e.owner==='player' && selection.includes(e.id);
   const img = spr('bld_'+e.btype);
-  // anillo de bando en el suelo (pequeño y sutil, para distinguir jugador/IA)
-  ctx.save(); ctx.translate(s.x, s.y+sz*0.34); ctx.scale(1,0.4);
-  ctx.beginPath(); ctx.arc(0,0,sz*0.46,0,Math.PI*2);
-  ctx.fillStyle = e.owner==='player' ? 'rgba(91,134,196,.22)' : 'rgba(196,106,106,.22)';
-  ctx.fill();
-  ctx.lineWidth=1.5; ctx.strokeStyle = e.owner==='player' ? 'rgba(91,134,196,.5)' : 'rgba(196,106,106,.5)';
-  ctx.stroke(); ctx.restore();
+  const scale = d.wall ? 1.45 : 1.7;
+  const spriteH = d.size*scale*cam.zoom;
+  // sombra neutra bajo el edificio (sin el anillo de bando que parecía sombra rara)
+  drawShadow(s.x, s.y+sz*0.28, sz*0.5);
   ctx.globalAlpha = e.built?1:0.55;
   if(img){
-    drawSprite('bld_'+e.btype, s.x, s.y + sz*0.12, d.size*1.7*cam.zoom, true);
+    if(e.btype==='wall'){
+      drawSprite('bld_wall', s.x, s.y, d.size*1.05*cam.zoom, false);   // segmento bajo, centrado
+    } else {
+      drawSprite('bld_'+e.btype, s.x, s.y + sz*0.12, spriteH, true);
+    }
   } else {
     // respaldo: rect + emoji
     ctx.fillStyle = e.owner==='player' ? '#26384f' : '#4a2630';
@@ -1254,16 +1348,24 @@ function drawBuilding(e){
     ctx.fillText(d.emoji, s.x, s.y);
   }
   ctx.globalAlpha=1;
+  // bandera de bando al tope del edificio (no en murallas), para saber de quién es
+  if(!d.wall && e.built){
+    const fy = s.y + sz*0.12 - spriteH + 8*cam.zoom, fx = s.x + sz*0.32;
+    ctx.strokeStyle='rgba(0,0,0,.5)'; ctx.lineWidth=2*cam.zoom;
+    ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(fx, fy-13*cam.zoom); ctx.stroke();
+    ctx.fillStyle = e.owner==='player' ? '#5b86c4' : '#d05a5a';
+    ctx.beginPath(); ctx.moveTo(fx, fy-13*cam.zoom); ctx.lineTo(fx+11*cam.zoom, fy-9.5*cam.zoom); ctx.lineTo(fx, fy-6*cam.zoom); ctx.closePath(); ctx.fill();
+  }
   // progreso de construcción
   if(!e.built){
     const w=sz, frac=Math.min(1,e.progress/d.build);
     ctx.fillStyle='#000a'; ctx.fillRect(s.x-w/2, s.y+sz/2+3, w, 5);
     ctx.fillStyle='#caa46a'; ctx.fillRect(s.x-w/2, s.y+sz/2+3, w*frac, 5);
-  } else {
-    drawHpBar(s.x, s.y - sz*1.5, sz, e.hp/e.maxHp, e.owner);
+  } else if(!(d.wall && e.hp>=e.maxHp)){
+    drawHpBar(s.x, s.y - spriteH + sz*0.12 - 6*cam.zoom, sz, e.hp/e.maxHp, e.owner);
   }
-  // selección
-  if(sel){ ctx.strokeStyle='#caa46a'; ctx.lineWidth=2; ctx.strokeRect(s.x-sz/2-3,s.y-sz*1.6,sz+6,sz*1.85); }
+  // selección (corchetes animados)
+  if(sel) drawSelBox(s.x, s.y + sz*0.12 - spriteH/2, sz*0.95, spriteH*0.6);
   // rally
   if(sel && e.rally){ const r=worldToScreen(e.rally.x,e.rally.y);
     ctx.fillStyle='#caa46a'; ctx.font=`${16*cam.zoom}px serif`; ctx.fillText('🚩', r.x, r.y); }
@@ -1324,14 +1426,51 @@ function drawUnit(e){
   }
   // barra de vida (si dañado)
   if(e.hp<e.maxHp) drawHpBar(s.x, s.y-30*cam.zoom, 24*cam.zoom, e.hp/e.maxHp, e.owner);
-  // selección
-  if(sel){ ctx.strokeStyle='#caa46a'; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.arc(s.x, s.y+sz*0.35, sz*0.62, 0, Math.PI*2); ctx.stroke(); }
+  // selección (anillo pulsante a los pies)
+  if(sel) drawSelRing(s.x, s.y+sz*0.35, sz*0.66);
   // flecha de arquero atacando
   if(e.type==='archer' && e.anim>0 && e.target){
     const t=find(e.target.id); if(t){ const ts=worldToScreen(t.x,t.y);
       ctx.strokeStyle='#eee'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(ts.x,ts.y); ctx.stroke(); }
   }
+}
+
+// --- Selección animada ---
+function selPulse(){ return 0.5 + 0.5*Math.sin(performance.now()/180); }
+function drawSelRing(cx, cy, r){
+  const p=selPulse();
+  ctx.save(); ctx.translate(cx,cy); ctx.scale(1,0.5);
+  ctx.strokeStyle=`rgba(255,224,140,${0.55+0.4*p})`; ctx.lineWidth=2.5;
+  ctx.beginPath(); ctx.arc(0,0,r+p*2*cam.zoom,0,Math.PI*2); ctx.stroke();
+  ctx.restore();
+}
+function drawSelBox(cx, cy, hw, hh){
+  const p=selPulse(), L=Math.min(hw,hh)*0.5;
+  ctx.strokeStyle=`rgba(255,224,140,${0.6+0.4*p})`; ctx.lineWidth=2.5;
+  const x0=cx-hw, x1=cx+hw, y0=cy-hh, y1=cy+hh;
+  const seg=[[x0,y0,1,1],[x1,y0,-1,1],[x0,y1,1,-1],[x1,y1,-1,-1]];
+  for(const [x,y,sx,sy] of seg){
+    ctx.beginPath(); ctx.moveTo(x, y+sy*L); ctx.lineTo(x,y); ctx.lineTo(x+sx*L, y); ctx.stroke();
+  }
+}
+// --- Efectos de selección/deselección (pings) ---
+function addPing(x, y, grow, color){ pings.push({x, y, grow, color:color||'#ffe08c', t0:performance.now()}); }
+function pingEntities(ids, grow){
+  for(const id of ids){ const e=find(id); if(e) addPing(e.x, e.y, grow); }
+}
+function drawPings(){
+  const now=performance.now();
+  for(let i=pings.length-1;i>=0;i--){
+    const pg=pings[i], age=(now-pg.t0)/350;
+    if(age>=1){ pings.splice(i,1); continue; }
+    const s=worldToScreen(pg.x, pg.y);
+    const r=(pg.grow ? (8+age*26) : (30-age*22))*cam.zoom;
+    ctx.save(); ctx.translate(s.x, s.y+6*cam.zoom); ctx.scale(1,0.5);
+    ctx.strokeStyle=pg.color; ctx.globalAlpha=1-age; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.arc(0,0,Math.max(2,r),0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.globalAlpha=1;
 }
 
 function drawHpBar(cx, cy, w, frac, owner){
@@ -1502,6 +1641,12 @@ function handleTap(p){
       for(const u of vills){ u.state='build'; u.build=ent.id; u.halt=false; }
       if(vills.length) return;
     }
+    // Reparar un edificio propio dañado (gasta recursos del coste)
+    if(ent && ent.owner==='player' && ent.kind==='building' && ent.built && ent.hp<ent.maxHp && !BLD[ent.btype].produces){
+      const vills = selUnits.filter(u=>u.type==='villager');
+      if(vills.length){ for(const u of vills){ u.state='build'; u.build=ent.id; u.halt=false; }
+        showHint('Reparando '+BLD[ent.btype].name+'…'); return; }
+    }
     // Si tocaste una unidad propia → seleccionarla (cae abajo). Si no, mover.
     if(!(ent && ent.owner==='player')){
       for(const u of selUnits){ u.state='move'; u.move={x:world.x,y:world.y}; u.target=null; u.gather=null; u.build=null; u.halt=false; }
@@ -1517,9 +1662,10 @@ function handleTap(p){
 
   // Selección
   if(ent && ent.owner==='player'){
-    selection=[ent.id]; updateActionPanel(); return;
+    selection=[ent.id]; addPing(ent.x, ent.y, true); updateActionPanel(); return;
   }
   // toque en vacío → deseleccionar
+  if(selection.length){ pingEntities(selection, false); }
   selection=[]; updateActionPanel();
 }
 
@@ -1528,6 +1674,7 @@ function handleDoubleTap(p){
   if(ent && ent.owner==='player' && ent.kind==='unit'){
     // seleccionar todas las del mismo tipo visibles en pantalla
     selection = entities.filter(e=>e.kind==='unit'&&e.owner==='player'&&e.type===ent.type&&onScreen(e)).map(e=>e.id);
+    pingEntities(selection, true);
     updateActionPanel();
     showHint('Seleccionados todos los '+UNIT[ent.type].name+'.');
   } else { handleTap(p); }
@@ -1541,6 +1688,7 @@ function finishBoxSelect(){
   const mil = picked.filter(u=>u.type!=='villager');
   if(mil.length) picked=mil;
   selection = picked.map(e=>e.id);
+  pingEntities(selection, true);
   updateActionPanel();
 }
 
@@ -1558,6 +1706,7 @@ function placementValid(x,y){
   return true;
 }
 function tryPlaceBuilding(p){
+  if(placement.wall){ wallTap(p); return; }   // murallas usan dos toques
   const w=screenToWorld(p.x,p.y); const d=BLD[placement.btype];
   if(!placementValid(w.x,w.y)){ showHint('No se puede construir ahí.'); return; }
   if(!canAfford(player,d.cost)){ showHint('Recursos insuficientes.'); placement=null; updateActionPanel(); return; }
@@ -1570,6 +1719,42 @@ function tryPlaceBuilding(p){
   placement=null;
   updateActionPanel();
   showHint('Cimientos colocados. Tus aldeanos construirán.');
+}
+
+// --- Murallas: primer toque = inicio, segundo toque = fin de la línea ---
+const WALL_SP = 28;          // separación entre segmentos
+const WALL_TOWER_EVERY = 6;  // un segmento de cada N es Torre de Muralla
+function wallTap(p){
+  const w=screenToWorld(p.x,p.y);
+  if(!placement.start){
+    placement.start = {x:w.x, y:w.y};
+    showHint('Muralla: toca el punto final.');
+    return;
+  }
+  const pts = wallPoints(placement.start, {x:w.x,y:w.y});
+  // coste total
+  const cost = {stone:0};
+  pts.forEach((pt,i)=>{ cost.stone += (i%WALL_TOWER_EVERY===0?BLD.wall_tower.cost.stone:BLD.wall.cost.stone); });
+  if(!canAfford(player, cost)){ showHint('Necesitas 🪨'+Math.ceil(cost.stone)+' para '+pts.length+' tramos.'); placement=null; updateActionPanel(); return; }
+  pay(player, cost);
+  const vills=selectedUnits().filter(u=>u.type==='villager');
+  let placed=0;
+  pts.forEach((pt,i)=>{
+    if(onObstacle(pt.x,pt.y)) return;
+    const bt = (i%WALL_TOWER_EVERY===0)?'wall_tower':'wall';
+    const b=makeBuilding('player', bt, pt.x, pt.y, false);
+    entities.push(b); placed++;
+  });
+  placement=null; updateActionPanel();
+  showHint('Muralla: '+placed+' tramos. Tus aldeanos la construirán.');
+}
+// Puntos equiespaciados de una línea (inclusive en los extremos).
+function wallPoints(a, b){
+  const D=Math.hypot(b.x-a.x, b.y-a.y);
+  const n=Math.max(1, Math.round(D/WALL_SP));
+  const pts=[];
+  for(let i=0;i<=n;i++){ const t=i/n; pts.push({x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t}); }
+  return pts;
 }
 
 // ============================ UI: PANEL DE ACCIONES ============================
@@ -1593,7 +1778,13 @@ function clearActions(){
 function updateActionPanel(){
   clearActions();
   if(placement){
-    selinfoEl.innerHTML = `Colocando <b>${BLD[placement.btype].name}</b> — toca el mapa.`;
+    if(placement.wall){
+      selinfoEl.innerHTML = placement.start
+        ? 'Muralla: toca el <b>punto final</b>.'
+        : 'Muralla: toca el <b>punto inicial</b> (🪨5 por tramo, torre cada '+WALL_TOWER_EVERY+').';
+    } else {
+      selinfoEl.innerHTML = `Colocando <b>${BLD[placement.btype].name}</b> — toca el mapa.`;
+    }
     actionsEl.appendChild(btnEl('Cancelar','','danger',true, ()=>{ placement=null; updateActionPanel(); }));
     return;
   }
@@ -1650,6 +1841,9 @@ function updateActionPanel(){
       if(d.reqAge&&!ageOk) sub+=' · '+AGES[d.reqAge].name;
       actionsEl.appendChild(btnEl(d.emoji+' '+d.name, sub, 'build', en, ()=>{ placement={btype:bt}; updateActionPanel(); }));
     }
+    // Muralla (herramienta de dos toques: inicio y fin)
+    actionsEl.appendChild(btnEl('🧱 Muralla', '🪨5/tramo', 'build', player.res.stone>=BLD.wall.cost.stone,
+      ()=>{ placement={btype:'wall', wall:true, start:null}; updateActionPanel(); showHint('Muralla: toca el punto inicial.'); }));
   }
   actionsEl.appendChild(btnEl('✋ Detener','','danger',true, ()=>{
     for(const u of units){ u.state='idle'; u.target=null; u.move=null; u.gather=null; u.build=null; u.resumeGather=null; u.halt=true; }
@@ -1657,7 +1851,7 @@ function updateActionPanel(){
   actionsEl.appendChild(btnEl('✕ Deseleccionar','','',true, deselectAll));
 }
 
-function deselectAll(){ selection=[]; updateActionPanel(); }
+function deselectAll(){ if(selection.length) pingEntities(selection, false); selection=[]; updateActionPanel(); }
 
 function buildingButtons(b){
   const pop = popCount('player')+countQueued('player');

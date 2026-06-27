@@ -42,7 +42,11 @@ El archivo se organiza en estas secciones (en orden de aparición):
    (con `mods.resMult` y `stats`), `gameSpeed`, `mapTheme`, `terrain`, `bridge`,
    flags (`running`, `paused`, `gameOver`, `difficulty`).
 2.5. **Sprites gráficos**: `SPRITE_FILES`, `sprites`, `loadSprites`, `spr`,
-   `drawSprite` (dibuja un PNG escalado con respaldo de emoji) y `drawShadow`.
+   `drawSprite` (PNG escalado con respaldo de emoji), `drawShadow`, y patrones de
+   textura `getPattern`/`fillPattern` (suelo/agua/roca). Selección animada
+   (`drawSelBox`/`drawSelRing`) y efectos `pings`. Murallas: `WALL_SP`,
+   `WALL_TOWER_EVERY`, `wallTap`/`wallPoints`, colisión `blockedByWall`
+   (`frameWalls`). La reparación vive en la rama `build` del bucle de unidades.
 3. **Utilidades**: `dist`, `clamp`, `find`, `radiusOf`, recursos/coste
    (`canAfford`, `pay`, `costStr`, `popCount`, `popCap`), `hasBuilding`,
    `countBuildings`, `prodSpeed` (bono de producción por nº de edificios).

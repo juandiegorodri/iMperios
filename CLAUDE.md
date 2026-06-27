@@ -207,6 +207,20 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
 - **Gráficos con sprites** (PR #6): sprites pixel-art (vista cenital, estilo
   8-bit) para las 8 unidades, los 12 edificios y los 4 recursos, generados con
   Ideogram según `assets/ART.md` y cargados desde `assets/sprites/`. El motor
-  los dibuja con anillo de bando y sombra; si falta un sprite, usa el emoji.
-  Incluye una pantalla **«Prueba gráfica»** en el menú que lista todos los
-  sprites y marca los que no cargan.
+  los dibuja con sombra; si falta un sprite, usa el emoji. Incluye una pantalla
+  **«Prueba gráfica»** en el menú que lista todos los sprites y marca los que no
+  cargan.
+- **Sprites de terreno y selección mejorada** (PR #7): texturas de suelo (pasto/
+  tierra), agua del río y roca de los riscos (con montañas decorativas); el
+  anillo bajo los edificios se sustituyó por sombra + bandera de bando; la
+  selección usa corchetes/anillo dorado animado y hay efecto de
+  selección/deselección (pings).
+- **Reparar edificios** (PR #7): un aldeano puede reparar un edificio propio
+  dañado tocándolo; gasta parte de los recursos del coste de construcción.
+- **Murallas** (PR #7): herramienta de dos toques (inicio y fin) que coloca una
+  línea de tramos de muralla (piedra), con **Torres de Muralla** cada N tramos
+  que disparan solas (arqueros protegidos). Las murallas bloquean el paso de las
+  unidades rivales.
+- **Arquero en cuerpo a cuerpo** (PR #7): a distancia pega completo, pero si el
+  enemigo lo alcanza de cerca su daño baja a la mitad (no es especialista del
+  combate cercano).

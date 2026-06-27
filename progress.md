@@ -123,3 +123,21 @@ historial. Ver normas en `CLAUDE.md`.
   sprites y marca los que no cargan (verificado 24/24, 0 fallidos, sin errores).
 - Documentación actualizada (`CLAUDE.md`, `filemap.md`, `progress.md`,
   `assets/ART.md`).
+
+## 2026-06-27 — PR #7: terreno, selección, reparar, murallas, arquero c.a.c.
+- **Sprites de terreno** (Ideogram): pasto/agua/roca/tierra (tiles) + montaña,
+  muralla, torre de muralla y puerta. Suelo con textura por `createPattern`
+  (`getPattern`/`fillPattern`); río con agua y riscos con roca + `obj_mountain`.
+  32 sprites en total.
+- **Selección mejorada**: se quitó el anillo bajo los edificios (parecía sombra);
+  ahora hay sombra neutra + bandera de bando, corchetes/anillo dorado animado
+  (`drawSelBox`/`drawSelRing`) y efecto de selección/deselección (`pings`).
+- **Reparar edificios**: tocar un edificio propio dañado con aldeanos lo repara
+  gastando parte del coste (rama de `build` ampliada a construir/reparar).
+- **Murallas**: herramienta de dos toques (`wallTap`/`wallPoints`), coste en
+  piedra por tramo, **Torres de Muralla** cada N que disparan (arqueros
+  protegidos), y colisión que bloquea a unidades rivales (`frameWalls`/
+  `blockedByWall`).
+- **Arquero c.a.c.**: daño a la mitad si el enemigo lo alcanza de cerca.
+- Verificado en Chromium headless: 32/32 sprites, murallas (vertical/horizontal),
+  reparación (hp 360→393), penalización del arquero (10→5), sin errores.
