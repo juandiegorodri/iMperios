@@ -1,0 +1,10 @@
+# No hace falta desplegar en el sitio web:
+ios/
+server.js
+assets/_raw/
+DESIGN.md
+CLAUDE.md
+filemap.md
+progress.md
+iOS.md
+assets/ART.md

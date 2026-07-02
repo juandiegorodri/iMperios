@@ -8,9 +8,16 @@ emoji si faltan, así el juego nunca se rompe).
 
 ## Cómo jugar
 
-Sírvelo como sitio estático y ábrelo en Safari. Lo más cómodo:
-- **GitHub Pages**: Settings → Pages → rama `main` → `/ (root)`. URL:
-  `https://juandiegorodri.github.io/Ageofempires/`.
+Sírvelo como sitio estático y ábrelo en Safari. Opciones:
+- **Vercel** (recomendado): conecta el repo; es un sitio **estático sin build**
+  (ver `vercel.json`). Sirve `index.html` en la raíz. Al fusionar en `main` se
+  despliega solo. Incluye manifest e icono para **«Añadir a pantalla de inicio»**.
+- **GitHub Pages**: Settings → Pages → rama `main` → `/ (root)`.
+
+> ⚠️ El **multijugador por red local** usa WebSocket `ws://` y por seguridad del
+> navegador **no funciona desde una web `https://`** (Vercel/Pages). Úsalo desde
+> la **app de iPad** (`ios/`) o abriendo el juego por `http`/`localhost`
+> (`node server.js`). El modo un jugador funciona perfecto en la web.
 
 En el **menú principal** eliges: mapa (Llanura / Río / Selva Negra / Riscos),
 recursos iniciales, velocidad, inteligencia de la IA y tu posición. También hay

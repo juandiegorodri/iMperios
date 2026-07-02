@@ -176,3 +176,19 @@ historial. Ver normas en `CLAUDE.md`.
   victoria/derrota sincronizada; sin errores de consola en ninguno de los dos
   lados. Regresión de un jugador OK. El proyecto Xcode no se pudo compilar aquí
   (entorno Linux); estructura estándar documentada en `iOS.md`.
+
+## 2026-07-02 — PR #9: optimización, pulido iOS y despliegue en Vercel
+- **Rendimiento**: índice `id→entidad` O(1) (`_byId`/`rebuildIndex`/`find`) y
+  **culling** de entidades fuera de pantalla en `render` (antes ordenaba y
+  dibujaba todas). Estrés con ~122 entidades: sin errores, fluido.
+- **iOS/PWA**: `manifest.webmanifest`, `apple-touch-icon`/favicon (icono del
+  castillo generado), `theme-color`, meta de app web; inputs a 16px (sin
+  auto-zoom), `-webkit-touch-callout`/tap-highlight off, panel de acciones con
+  scroll (`max-height`/`pan-y`), listeners de `orientationchange`/`visualViewport`.
+- **Vercel**: `vercel.json` (sitio estático, caché de sprites) y `.vercelignore`
+  (excluye `ios/`, `server.js`, `assets/_raw/`, `.md`). Deploy de `main` sin build.
+- **Guarda de contenido mixto**: el multijugador `ws://` avisa que no funciona
+  desde `https://` (Vercel); sí en la app iOS (file://) o por http/localhost.
+- **Sombras de edificios**: confirmadas eliminadas.
+- Verificado en Chromium (viewport iPad): un jugador y multijugador sin errores
+  de consola; captura a 1024×768.

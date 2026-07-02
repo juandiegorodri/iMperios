@@ -242,3 +242,9 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
   nativo + IP local inyectada). Ver `iOS.md`.
 - **Sin sombras bajo edificios** (PR #8): se eliminaron porque desentonaban con
   los sprites.
+- **Optimización y pulido iOS/Vercel** (PR #9): índice id→entidad O(1) (`find`),
+  culling de entidades fuera de pantalla en el render, meta/PWA para iPad
+  (manifest, apple-touch-icon, theme-color, sin auto-zoom en inputs, panel de
+  acciones con scroll), config de despliegue estático en Vercel (`vercel.json`,
+  `.vercelignore`) y aviso claro de que el multijugador `ws://` no funciona desde
+  `https://`.

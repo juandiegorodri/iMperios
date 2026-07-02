@@ -16,6 +16,10 @@ código nuevas (ver normas en `CLAUDE.md`).
 | `assets/ART.md` | Manual de línea gráfica y lista de sprites/animaciones. |
 | `assets/sprites/*.png` | Sprites finales del juego (unidades, edificios, recursos). |
 | `assets/_raw/*.webp` | Hojas fuente generadas con Ideogram (para re-recortar). |
+| `vercel.json` | Config de despliegue estático en Vercel (caché de sprites, headers). |
+| `.vercelignore` | Excluye del deploy web `ios/`, `server.js`, `assets/_raw/` y los `.md`. |
+| `manifest.webmanifest` | Web App Manifest (PWA: nombre, iconos, pantalla completa). |
+| `assets/icon-180.png` / `icon-512.png` | Iconos de la app (apple-touch-icon / manifest). |
 | `iOS.md` | App de iPad y arquitectura del multijugador P2P. |
 | `server.js` | Relé WebSocket (Node, sin dependencias) para multijugador en escritorio. |
 | `ios/MiniAoE.xcodeproj/` | Proyecto Xcode (app iPad, target único). |
