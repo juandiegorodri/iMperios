@@ -71,6 +71,8 @@
     border:1px solid var(--line); background:var(--panel2); color:var(--txt); font-size:14px; font-weight:600; }
   .opt-b.sel{ border-color:var(--accent); background:#33302410; box-shadow:0 0 0 2px #caa46a66; color:#fff; }
   .opt-desc{ font-size:12px; color:var(--muted); margin-top:5px; min-height:16px; }
+  #joinIp{ flex:2 1 auto; min-width:180px; min-height:44px; border-radius:10px; border:1px solid var(--line);
+    background:#0c0d10; color:var(--txt); padding:0 10px; font-size:14px; }
   #endStats{ width:100%; border-collapse:collapse; margin:6px 0 16px; font-size:14px; }
   #endStats th,#endStats td{ padding:7px 10px; border-bottom:1px solid var(--line); text-align:right; }
   #endStats th:first-child,#endStats td:first-child{ text-align:left; color:var(--muted); font-weight:500; }
@@ -164,6 +166,19 @@
         <button class="opt-b" data-val="right">Derecha</button>
         <button class="opt-b" data-val="random">Aleatoria</button>
       </div>
+    </div>
+
+    <div class="opt">
+      <div class="opt-title">📶 Multijugador en tiempo real (misma red)</div>
+      <div class="opt-row">
+        <button class="opt-b" id="btnHost">Crear partida (anfitrión)</button>
+        <button class="opt-b" id="btnJoin">Unirse a una partida</button>
+      </div>
+      <div class="opt-row hidden" id="joinRow" style="margin-top:6px">
+        <input id="joinIp" placeholder="IP del anfitrión (ej. 192.168.1.50)">
+        <button class="opt-b" id="btnJoinGo">Conectar</button>
+      </div>
+      <div class="opt-desc" id="mpStatus"></div>
     </div>
 
     <div class="row">
@@ -383,6 +398,170 @@ function drawShadow(cx, cy, rx){
   ctx.fillStyle='rgba(0,0,0,.28)'; ctx.fill(); ctx.restore();
 }
 
+/* ==================== MULTIJUGADOR P2P (host autoritativo) ====================
+   Un jugador es el ANFITRIÓN (servidor): corre la simulación completa y envía
+   instantáneas de estado ~7 veces/s. El otro es el CLIENTE: solo renderiza y
+   envía comandos (mover, atacar, entrenar…). Ambos se comunican por WebSocket
+   a través de un relé en el puerto 8765: en la app iOS lo levanta el propio
+   dispositivo anfitrión (RelayServer.swift); en escritorio, `node server.js`.
+   Truco de perspectiva: al cliente se le envía el estado con los bandos
+   INTERCAMBIADOS ('player'<->'enemy'), así todo el código de UI existente
+   funciona sin cambios — el cliente siempre "se ve" como 'player'.          */
+const NET_PORT = 8765;
+const net = { mode:null, ws:null, ready:false, snapT:0, uiT:0 };
+function inMP(){ return net.mode!==null; }
+function netSend(o){ if(net.ws && net.ws.readyState===1) net.ws.send(JSON.stringify(o)); }
+function netStatus(msg){ const el=document.getElementById('mpStatus'); if(el) el.textContent=msg; }
+
+function netConnect(host, onOpen){
+  let ws;
+  try{ ws = new WebSocket('ws://'+host+':'+NET_PORT); }
+  catch(err){ netStatus('No se pudo conectar: '+err.message); net.mode=null; return; }
+  net.ws = ws;
+  ws.onopen = ()=>{ net.ready=true; onOpen(); };
+  ws.onmessage = (ev)=>{ let m; try{ m=JSON.parse(ev.data); }catch(_){ return; } netOnMessage(m); };
+  ws.onclose = ()=>{ net.ready=false;
+    if(inMP() && running && !gameOver){ paused=true; showHint('Conexión perdida con el otro jugador.'); }
+    netStatus('Conexión cerrada.'); };
+  ws.onerror = ()=>{ netStatus('Error de conexión. ¿Servidor listo en el puerto '+NET_PORT+'?'); };
+}
+function netHostStart(){
+  net.mode='host';
+  netStatus('Conectando al servidor local…');
+  netConnect('127.0.0.1', ()=>{
+    netSend({t:'hello', role:'host'});
+    const ip = window.__NATIVE_IP || 'la IP de este dispositivo';
+    netStatus('Esperando al otro jugador… debe unirse a: '+ip);
+  });
+}
+function netJoinStart(ip){
+  net.mode='client';
+  netStatus('Conectando a '+ip+'…');
+  netConnect(ip, ()=>{ netSend({t:'hello', role:'client'}); netStatus('Conectado. Esperando al anfitrión…'); });
+}
+
+// --- Serialización de estado (host → cliente, con bandos intercambiados) ---
+function flipOwner(o){ return o==='player' ? 'enemy' : o==='enemy' ? 'player' : o; }
+function serEntity(e){
+  const o={ id:e.id, kind:e.kind, x:Math.round(e.x*10)/10, y:Math.round(e.y*10)/10 };
+  if(e.owner) o.o=flipOwner(e.owner);
+  if(e.kind==='unit'){ o.u=e.type; o.hp=Math.round(e.hp); o.mhp=e.maxHp; o.st=e.state;
+    if(e.gather && e.gather.id) o.g=e.gather.id; }
+  else if(e.kind==='building'){ o.b=e.btype; o.hp=Math.round(e.hp); o.mhp=e.maxHp; o.bt=e.built?1:0;
+    o.pg=Math.round(e.progress*10)/10; if(e.dir) o.dir=e.dir;
+    if(e.queue.length) o.q=e.queue.map(j=>({type:j.type,time:Math.round(j.time*10)/10,total:j.total}));
+    if(e.reserve!==undefined){ o.rv=Math.round(e.reserve); o.mrv=e.maxReserve; }
+    if(e.rally) o.ry={x:Math.round(e.rally.x),y:Math.round(e.rally.y)}; }
+  else if(e.kind==='resource'){ o.r=e.rtype; o.am=Math.round(e.amount); o.mam=e.maxAmount; }
+  return o;
+}
+function deserEntity(o){
+  const e={ id:o.id, kind:o.kind, owner:o.o, x:o.x, y:o.y, hp:o.hp, maxHp:o.mhp, anim:0, cd:0, queue:[] };
+  if(o.kind==='unit'){ e.type=o.u; e.state=o.st||'idle'; if(o.g) e.gather={id:o.g}; }
+  else if(o.kind==='building'){ e.btype=o.b; e.built=!!o.bt; e.progress=o.pg||0; if(o.dir) e.dir=o.dir;
+    e.queue=(o.q||[]).map(j=>({type:j.type,time:j.time,total:j.total}));
+    if(o.rv!==undefined){ e.reserve=o.rv; e.maxReserve=o.mrv; }
+    if(o.ry) e.rally=o.ry; }
+  else if(o.kind==='resource'){ e.rtype=o.r; e.amount=o.am; e.maxAmount=o.mam; }
+  return e;
+}
+function serSide(s){ return { res:{...s.res}, age:s.age, upg:{...s.upg}, stats:{...s.stats} }; }
+// El "yo" del cliente es el lado 'enemy' del host (por eso va flipado).
+function makeSnap(){
+  return { t:'snap', ents: entities.map(serEntity), me: serSide(enemy), foe: serSide(player) };
+}
+function applySnap(m){
+  entities = m.ents.map(deserEntity);
+  Object.assign(player, m.me);
+  Object.assign(enemy,  m.foe);
+}
+
+// --- Mensajería ---
+function netOnMessage(m){
+  if(net.mode==='host'){
+    if(m.t==='hello' && m.role==='client'){
+      netStatus('¡Jugador conectado! Empezando partida…');
+      startGame(gameConfig);
+    }
+    else if(m.t==='cmd') hostHandleCmd(m);
+  } else if(net.mode==='client'){
+    if(m.t==='init') clientStartFromInit(m);
+    else if(m.t==='snap'){ if(running && !gameOver) applySnap(m); }
+    else if(m.t==='end') clientEnd(m.win);
+  }
+}
+function netSendInit(){
+  netSend({ t:'init', cfg:{ map:mapTheme }, terrain, bridge, snap:makeSnap() });
+}
+function clientStartFromInit(m){
+  mapTheme = m.cfg.map; gameSpeed = 1;
+  terrain = m.terrain||[]; bridge = m.bridge||null;
+  entities=[]; selection=[]; placement=null; pings=[]; frameWalls=[];
+  player.mods=freshMods(); enemy.mods=freshMods();
+  applySnap(m.snap);
+  gameOver=false; paused=false; running=true;
+  const t=entities.find(e=>e.kind==='building'&&e.owner==='player'&&e.btype==='town');
+  cam.zoom=1; if(t) centerOn(t.x,t.y);
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('endScreen').classList.add('hidden');
+  updateActionPanel();
+  showHint('¡Multijugador! Destruye el Centro Urbano rival.');
+}
+function clientEnd(win){
+  if(gameOver) return; gameOver=true; running=false;
+  document.getElementById('endTitle').textContent = win?'🏆 ¡Victoria!':'💀 Derrota';
+  document.getElementById('endText').textContent = win
+    ? 'Destruiste el Centro Urbano rival. ¡Bien jugado!'
+    : 'Tu Centro Urbano cayó. Vuelve a intentarlo.';
+  renderSummary();
+  document.getElementById('endScreen').classList.remove('hidden');
+}
+
+// --- El host aplica los comandos del cliente (que en el host es el lado 'enemy') ---
+function hostHandleCmd(m){
+  const own='enemy';
+  const units=(m.ids||[]).map(find).filter(e=>e&&e.kind==='unit'&&e.owner===own);
+  const tgt = (m.g!==undefined) ? find(m.g) : null;
+  switch(m.c){
+    case 'move': for(const u of units){ u.state='move'; u.move={x:m.x,y:m.y}; u.target=null; u.gather=null; u.build=null; u.halt=false; } break;
+    case 'gather': if(tgt) for(const u of units){ if(u.type!=='villager') continue;
+      u.state='gather'; u.gather=tgt; u.resumeGather=null; u.halt=false;
+      u.lastRtype = tgt.kind==='building' ? BLD[tgt.btype].produces : tgt.rtype; } break;
+    case 'attack': if(tgt && tgt.owner==='player') for(const u of units){ u.state='attack'; u.target=tgt; u.resumeGather=null; u.halt=false; } break;
+    case 'buildjob': if(tgt && tgt.kind==='building' && tgt.owner===own)
+      for(const u of units){ if(u.type==='villager'){ u.state='build'; u.build=tgt.id; u.halt=false; } } break;
+    case 'stop': for(const u of units){ u.state='idle'; u.target=null; u.move=null; u.gather=null; u.build=null; u.resumeGather=null; u.halt=true; } break;
+    case 'train': { const b=find(m.b); if(b && b.owner===own && b.built && UNIT[m.u]) queueUnit(b, m.u); break; }
+    case 'cancel': { const b=find(m.b); if(b && b.owner===own) cancelQueued(b, m.i); break; }
+    case 'age': tryAdvanceAge(own); break;
+    case 'upg': if(UPG[m.k]) buyUpgrade(own, m.k); break;
+    case 'econ': if(ECON[m.r]) buyEcon(own, m.r, m.i); break;
+    case 'rally': { const b=find(m.b); if(b && b.owner===own) b.rally={x:m.x,y:m.y}; break; }
+    case 'place': hostPlace(m, units); break;
+    case 'wall': hostWall(m); break;
+  }
+}
+function hostPlace(m, units){
+  const d=BLD[m.bt]; if(!d || d.wall) return;
+  if((d.req||[]).some(r=>!hasBuilding('enemy',r))) return;
+  if(d.reqAge && enemy.age<d.reqAge) return;
+  if(!placementValid(m.x,m.y) || !canAfford(enemy,d.cost)) return;
+  pay(enemy,d.cost);
+  const b=makeBuilding('enemy', m.bt, m.x, m.y, false); entities.push(b);
+  for(const u of units) if(u.type==='villager'){ u.state='build'; u.build=b.id; u.halt=false; }
+}
+function hostWall(m){
+  const pts=wallPoints({x:m.x0,y:m.y0},{x:m.x1,y:m.y1});
+  const cost={stone:0};
+  pts.forEach((pt,i)=>{ cost.stone += (i%WALL_TOWER_EVERY===0?BLD.wall_tower.cost.stone:BLD.wall.cost.stone); });
+  if(!canAfford(enemy,cost)) return;
+  pay(enemy,cost);
+  const dir=Math.abs(m.x0-m.x1)>=Math.abs(m.y0-m.y1)?'h':'v';
+  pts.forEach((pt,i)=>{ if(onObstacle(pt.x,pt.y)) return;
+    const b=makeBuilding('enemy', i%WALL_TOWER_EVERY===0?'wall_tower':'wall', pt.x,pt.y,false);
+    b.dir=dir; entities.push(b); });
+}
+
 // ---------- Utilidades ----------
 const dist = (a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
@@ -455,7 +634,8 @@ function startGame(cfg){
   document.getElementById('startScreen').classList.add('hidden');
   document.getElementById('endScreen').classList.add('hidden');
   updateActionPanel();
-  showHint('Mapa: '+MAPS[mapTheme].name+'. Manda tus aldeanos a recolectar.');
+  if(net.mode==='host'){ netSendInit(); showHint('¡Multijugador! Destruye el Centro Urbano rival.'); }
+  else showHint('Mapa: '+MAPS[mapTheme].name+'. Manda tus aldeanos a recolectar.');
 }
 
 // Cluster de recursos estándar alrededor de un punto (con pesos opcionales)
@@ -600,6 +780,7 @@ function prodSpeed(owner, btype){
 
 // ---------- Entrenamiento / cola ----------
 function queueUnit(b, type){
+  if(net.mode==='client'){ netSend({t:'cmd', c:'train', b:b.id, u:type}); return; }
   const s = side(b.owner);
   const d = UNIT[type];
   if(popCount(b.owner) + countQueued(b.owner) >= popCap(b.owner)){ if(b.owner==='player') showHint('Población al máximo. Construye Casas o un Castillo.'); return; }
@@ -613,6 +794,7 @@ function countQueued(owner){
 }
 
 function tryAdvanceAge(owner){
+  if(net.mode==='client'){ netSend({t:'cmd', c:'age'}); return; }
   const s = side(owner);
   if(s.age>=MAX_AGE){ if(owner==='player') showHint('Ya estás en la era máxima.'); return; }
   const next = AGES[s.age+1];
@@ -623,6 +805,7 @@ function tryAdvanceAge(owner){
 
 // Compra de una tecnología económica (tier) de un recurso.
 function buyEcon(owner, res, tierIdx){
+  if(net.mode==='client'){ netSend({t:'cmd', c:'econ', r:res, i:tierIdx}); return; }
   const s = side(owner); const t = ECON[res][tierIdx];
   if(!t || s.upg[t.key]) return;
   if(s.age < t.reqAge){ if(owner==='player') showHint('Requiere '+AGES[t.reqAge].name+'.'); return; }
@@ -638,6 +821,7 @@ function nextEcon(owner, res){
 }
 
 function buyUpgrade(owner, key){
+  if(net.mode==='client'){ netSend({t:'cmd', c:'upg', k:key}); return; }
   const s = side(owner); const u = UPG[key];
   if(s.age<2){ if(owner==='player') showHint('Avanza de Era primero.'); return; }
   if(s.upg[key]){ return; }
@@ -764,13 +948,21 @@ function loop(now){
   let dt = (now-last)/1000; last = now;
   dt = Math.min(dt, 0.05) * gameSpeed;   // escalado por velocidad de la partida
   dt = Math.min(dt, 0.09);
-  if(running && !paused && !gameOver){ update(dt); }
+  if(running && !paused && !gameOver){
+    if(net.mode==='client'){
+      // El cliente no simula: renderiza las instantáneas del anfitrión
+      net.uiT-=dt; if(net.uiT<=0){ net.uiT=0.2; updateTopbar(); }
+    } else {
+      update(dt);
+    }
+  }
   render();
   requestAnimationFrame(loop);
 }
 
 // Cancelar una unidad de la cola de un edificio (reembolsa el coste).
 function cancelQueued(b, idx){
+  if(net.mode==='client'){ netSend({t:'cmd', c:'cancel', b:b.id, i:idx}); return; }
   if(idx<0 || idx>=b.queue.length) return;
   const job = b.queue[idx];
   const s = side(b.owner);
@@ -804,8 +996,9 @@ function update(dt){
       const tgt = nearestEnemy(e, AGGRO);
       if(tgt){ e.target=tgt; e.state='attack'; }
     }
-    // Aldeano propio inactivo (no detenido) busca trabajo automáticamente
-    if(e.owner==='player' && e.type==='villager' && e.state==='idle' && !e.halt){
+    // Aldeano inactivo (no detenido) busca trabajo automáticamente.
+    // En multijugador aplica también a los aldeanos del jugador remoto ('enemy').
+    if(e.type==='villager' && e.state==='idle' && !e.halt && (e.owner==='player' || inMP())){
       autoAssignIdle(e);
     }
 
@@ -967,6 +1160,12 @@ function update(dt){
   if(!eTown){ endGame(true); }
   else if(!pTown){ endGame(false); }
 
+  // Multijugador: el anfitrión difunde instantáneas de estado (~7/s)
+  if(net.mode==='host' && net.ready && !gameOver){
+    net.snapT -= dt;
+    if(net.snapT<=0){ net.snapT=0.15; netSend(makeSnap()); }
+  }
+
   updateTopbar();
 }
 
@@ -1043,6 +1242,7 @@ function removeEntity(ent){
 
 // ---------- IA enemiga ----------
 function enemyAI(dt){
+  if(inMP()) return;   // en multijugador el lado 'enemy' lo controla el otro jugador
   const ai = enemy.ai;
   ai.timer -= dt; ai.attackTimer -= dt;
 
@@ -1349,8 +1549,6 @@ function drawBuilding(e){
   const img = spr('bld_'+e.btype);
   const scale = d.wall ? 1.45 : 1.7;
   const spriteH = d.size*scale*cam.zoom;
-  // sombra neutra bajo el edificio (sin el anillo de bando que parecía sombra rara)
-  drawShadow(s.x, s.y+sz*0.28, sz*0.5);
   ctx.globalAlpha = e.built?1:0.55;
   if(img){
     if(e.btype==='wall'){
@@ -1642,43 +1840,59 @@ function handleTap(p){
   const selUnits = selectedUnits();
   const selBuild = selectedBuilding();
 
-  // Si hay unidades propias seleccionadas → orden contextual
+  // Si hay unidades propias seleccionadas → orden contextual.
+  // En multijugador (cliente) la orden se envía al anfitrión como comando.
+  const isCli = net.mode==='client';
+  const ids = arr => arr.map(u=>u.id);
   if(selUnits.length){
     if(ent && ent.kind==='resource'){
       const vills = selUnits.filter(u=>u.type==='villager');
-      if(vills.length){ for(const u of vills){ u.state='gather'; u.gather=ent; u.resumeGather=null; u.lastRtype=ent.rtype; u.halt=false; } showHint('Recolectando '+ent.rtype+'.'); return; }
+      if(vills.length){
+        if(isCli){ netSend({t:'cmd', c:'gather', ids:ids(vills), g:ent.id}); showHint('Recolectando '+ent.rtype+'.'); return; }
+        for(const u of vills){ u.state='gather'; u.gather=ent; u.resumeGather=null; u.lastRtype=ent.rtype; u.halt=false; }
+        showHint('Recolectando '+ent.rtype+'.'); return;
+      }
     }
     // Edificio de producción propio (granja/mina/cantera)
     if(ent && ent.owner==='player' && ent.kind==='building' && ent.built && BLD[ent.btype].produces){
       const vills = selUnits.filter(u=>u.type==='villager');
       if(vills.length){
         if(ent.reserve!==undefined && ent.reserve<=0){
-          // agotado → recargar (reparación)
+          if(isCli){ netSend({t:'cmd', c:'buildjob', ids:ids(vills), g:ent.id}); showHint('Recargando '+BLD[ent.btype].name+'…'); return; }
           for(const u of vills){ u.state='build'; u.build=ent.id; u.halt=false; }
           showHint('Recargando '+BLD[ent.btype].name+'…'); return;
         }
+        if(isCli){ netSend({t:'cmd', c:'gather', ids:ids(vills), g:ent.id}); showHint('Trabajando en '+BLD[ent.btype].name+'.'); return; }
         for(const u of vills){ u.state='gather'; u.gather=ent; u.resumeGather=null; u.lastRtype=BLD[ent.btype].produces; u.halt=false; }
         showHint('Trabajando en '+BLD[ent.btype].name+'.'); return;
       }
     }
     if(ent && (ent.owner==='enemy')){
       // Todas las unidades pueden atacar (incluidos aldeanos)
+      if(isCli){ netSend({t:'cmd', c:'attack', ids:ids(selUnits), g:ent.id}); return; }
       for(const u of selUnits){ u.state='attack'; u.target=ent; u.resumeGather=null; u.halt=false; }
       return;
     }
     if(ent && ent.owner==='player' && ent.kind==='building' && !ent.built){
       const vills = selUnits.filter(u=>u.type==='villager');
-      for(const u of vills){ u.state='build'; u.build=ent.id; u.halt=false; }
-      if(vills.length) return;
+      if(vills.length){
+        if(isCli){ netSend({t:'cmd', c:'buildjob', ids:ids(vills), g:ent.id}); return; }
+        for(const u of vills){ u.state='build'; u.build=ent.id; u.halt=false; }
+        return;
+      }
     }
     // Reparar un edificio propio dañado (gasta recursos del coste)
     if(ent && ent.owner==='player' && ent.kind==='building' && ent.built && ent.hp<ent.maxHp && !BLD[ent.btype].produces){
       const vills = selUnits.filter(u=>u.type==='villager');
-      if(vills.length){ for(const u of vills){ u.state='build'; u.build=ent.id; u.halt=false; }
-        showHint('Reparando '+BLD[ent.btype].name+'…'); return; }
+      if(vills.length){
+        if(isCli){ netSend({t:'cmd', c:'buildjob', ids:ids(vills), g:ent.id}); showHint('Reparando '+BLD[ent.btype].name+'…'); return; }
+        for(const u of vills){ u.state='build'; u.build=ent.id; u.halt=false; }
+        showHint('Reparando '+BLD[ent.btype].name+'…'); return;
+      }
     }
     // Si tocaste una unidad propia → seleccionarla (cae abajo). Si no, mover.
     if(!(ent && ent.owner==='player')){
+      if(isCli){ netSend({t:'cmd', c:'move', ids:ids(selUnits), x:world.x, y:world.y}); return; }
       for(const u of selUnits){ u.state='move'; u.move={x:world.x,y:world.y}; u.target=null; u.gather=null; u.build=null; u.halt=false; }
       return;
     }
@@ -1687,6 +1901,7 @@ function handleTap(p){
   // Si hay un edificio propio seleccionado y tocas terreno → fijar rally
   if(selBuild && !ent){
     selBuild.rally = {x:world.x, y:world.y};
+    if(isCli) netSend({t:'cmd', c:'rally', b:selBuild.id, x:world.x, y:world.y});
     showHint('Punto de reunión fijado.'); return;
   }
 
@@ -1739,6 +1954,12 @@ function tryPlaceBuilding(p){
   if(placement.wall){ wallTap(p); return; }   // murallas usan dos toques
   const w=screenToWorld(p.x,p.y); const d=BLD[placement.btype];
   if(!placementValid(w.x,w.y)){ showHint('No se puede construir ahí.'); return; }
+  if(net.mode==='client'){
+    const vills=selectedUnits().filter(u=>u.type==='villager').map(u=>u.id);
+    netSend({t:'cmd', c:'place', bt:placement.btype, x:w.x, y:w.y, ids:vills});
+    placement=null; updateActionPanel();
+    showHint('Cimientos enviados al anfitrión.'); return;
+  }
   if(!canAfford(player,d.cost)){ showHint('Recursos insuficientes.'); placement=null; updateActionPanel(); return; }
   pay(player,d.cost);
   const b=makeBuilding('player', placement.btype, w.x, w.y, false);
@@ -1760,6 +1981,11 @@ function wallTap(p){
     placement.start = {x:w.x, y:w.y};
     showHint('Muralla: toca el punto final.');
     return;
+  }
+  if(net.mode==='client'){
+    netSend({t:'cmd', c:'wall', x0:placement.start.x, y0:placement.start.y, x1:w.x, y1:w.y});
+    placement=null; updateActionPanel();
+    showHint('Muralla enviada al anfitrión.'); return;
   }
   const pts = wallPoints(placement.start, {x:w.x,y:w.y});
   // coste total
@@ -1883,6 +2109,7 @@ function updateActionPanel(){
       ()=>{ placement={btype:'wall', wall:true, start:null}; updateActionPanel(); showHint('Muralla: toca el punto inicial.'); }));
   }
   actionsEl.appendChild(btnEl('✋ Detener','','danger',true, ()=>{
+    if(net.mode==='client'){ netSend({t:'cmd', c:'stop', ids:units.map(u=>u.id)}); return; }
     for(const u of units){ u.state='idle'; u.target=null; u.move=null; u.gather=null; u.build=null; u.resumeGather=null; u.halt=true; }
   }));
   actionsEl.appendChild(btnEl('✕ Deseleccionar','','',true, deselectAll));
@@ -1993,6 +2220,7 @@ function showHint(msg){
 // ---------- Fin de partida ----------
 function endGame(win){
   if(gameOver) return; gameOver=true; running=false;
+  if(net.mode==='host'){ netSend(makeSnap()); netSend({t:'end', win:!win}); }
   document.getElementById('endTitle').textContent = win?'🏆 ¡Victoria!':'💀 Derrota';
   document.getElementById('endText').textContent = win
     ? 'Destruiste el Centro Urbano enemigo. ¡Bien jugado!'
@@ -2013,7 +2241,7 @@ function renderSummary(){
     ['🏚️ Edificios perdidos', p.lostB, e.lostB, 'min'],
     ['🔬 Tecnologías', Object.keys(player.upg).length, Object.keys(enemy.upg).length, 'max'],
   ];
-  let html='<thead><tr><th>Estadística</th><th>Tú</th><th>IA</th></tr></thead><tbody>';
+  let html='<thead><tr><th>Estadística</th><th>Tú</th><th>'+(inMP()?'Rival':'IA')+'</th></tr></thead><tbody>';
   for(const [label,pv,ev,cmp] of rows){
     let pc='', ec='';
     if(cmp==='max'){ if(pv>ev) pc='win'; else if(ev>pv) ec='win'; }
@@ -2046,8 +2274,22 @@ document.querySelectorAll('#startScreen .opt').forEach(group=>{
     b.addEventListener('click',()=>{ gameConfig[opt]=b.getAttribute('data-val'); refreshMenu(); });
   });
 });
-document.getElementById('btnStart').addEventListener('click',()=>startGame(gameConfig));
+document.getElementById('btnStart').addEventListener('click',()=>{
+  if(inMP()){ netStatus('En multijugador la partida empieza sola cuando el otro jugador se conecta.'); return; }
+  startGame(gameConfig);
+});
 refreshMenu();
+
+// ---------- Multijugador: botones del menú ----------
+document.getElementById('btnHost').addEventListener('click', ()=>{ if(!inMP()) netHostStart(); });
+document.getElementById('btnJoin').addEventListener('click', ()=>{
+  document.getElementById('joinRow').classList.toggle('hidden');
+});
+document.getElementById('btnJoinGo').addEventListener('click', ()=>{
+  const ip=document.getElementById('joinIp').value.trim();
+  if(!ip){ netStatus('Escribe la IP del anfitrión.'); return; }
+  if(!inMP()) netJoinStart(ip);
+});
 
 // ---------- Prueba gráfica ----------
 function openGfxTest(){
@@ -2067,6 +2309,7 @@ function openGfxTest(){
 document.getElementById('btnGfx').addEventListener('click', openGfxTest);
 document.getElementById('btnGfxClose').addEventListener('click',()=>document.getElementById('gfxTest').classList.add('hidden'));
 document.getElementById('btnRestart').addEventListener('click',()=>{
+  if(inMP()){ location.reload(); return; }   // en multijugador se recarga para reconectar limpio
   document.getElementById('endScreen').classList.add('hidden');
   document.getElementById('startScreen').classList.remove('hidden');
 });
@@ -2076,6 +2319,7 @@ document.getElementById('btnCenter').addEventListener('click',()=>{
 });
 document.getElementById('btnIdle').addEventListener('click', selectNextIdle);
 document.getElementById('btnPause').addEventListener('click',function(){
+  if(inMP()){ showHint('La pausa no está disponible en multijugador.'); return; }
   paused=!paused; this.textContent=paused?'▶':'⏸'; if(paused) showHint('Pausa');
 });
 

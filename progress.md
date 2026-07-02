@@ -155,3 +155,24 @@ historial. Ver normas en `CLAUDE.md`.
   según la orientación de la línea (`b.dir`). 34 sprites en total.
 - Verificado: tasa desde granja (+0.7/s), recarga 0→500 gastando 60 de madera,
   murallas en ambas orientaciones, sin errores.
+
+## 2026-07-02 — PR #8: multijugador P2P en tiempo real + app iOS
+- **Multijugador P2P**: anfitrión autoritativo (simula todo, IA desactivada) y
+  cliente que renderiza instantáneas (~7/s) y envía comandos; bandos invertidos
+  en el cable para reutilizar toda la UI sin refactor. Menú «📶 Multijugador»
+  (crear partida / unirse por IP). Protocolo y detalles en `iOS.md`.
+- **Relé WebSocket** (puerto 8765): `server.js` en Node (sin dependencias, con
+  handshake y framing RFC 6455 a mano) para escritorio/pruebas.
+- **App iOS (iPad)** en `ios/`: proyecto Xcode con WKWebView que empaqueta
+  `index.html` + `assets/` por referencia, `RelayServer.swift`
+  (Network.framework) como relé nativo del anfitrión, IP local inyectada como
+  `window.__NATIVE_IP`, permisos de red local en `Info.plist`.
+- **Sombras de edificios eliminadas** (desentonaban con los sprites).
+- Documentación: nuevo **`iOS.md`**; actualizados `CLAUDE.md`, `filemap.md`,
+  `README.md`.
+- Verificado de punta a punta con el relé Node y dos Chromium headless:
+  conexión (74 entidades en ambos), entrenar desde el cliente (cola y recursos
+  del anfitrión + reflejo en la instantánea), orden de recolección vía UI real,
+  victoria/derrota sincronizada; sin errores de consola en ninguno de los dos
+  lados. Regresión de un jugador OK. El proyecto Xcode no se pudo compilar aquí
+  (entorno Linux); estructura estándar documentada en `iOS.md`.

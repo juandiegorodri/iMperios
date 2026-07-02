@@ -16,6 +16,11 @@ código nuevas (ver normas en `CLAUDE.md`).
 | `assets/ART.md` | Manual de línea gráfica y lista de sprites/animaciones. |
 | `assets/sprites/*.png` | Sprites finales del juego (unidades, edificios, recursos). |
 | `assets/_raw/*.webp` | Hojas fuente generadas con Ideogram (para re-recortar). |
+| `iOS.md` | App de iPad y arquitectura del multijugador P2P. |
+| `server.js` | Relé WebSocket (Node, sin dependencias) para multijugador en escritorio. |
+| `ios/MiniAoE.xcodeproj/` | Proyecto Xcode (app iPad, target único). |
+| `ios/MiniAoE/*.swift` | `MiniAoEApp` (entrada), `GameWebView` (WKWebView), `RelayServer` (relé WS + IP local). |
+| `ios/MiniAoE/Info.plist` | Permisos de red local, orientaciones de iPad, ATS. |
 
 ## Estructura interna de `index.html`
 
@@ -47,6 +52,13 @@ El archivo se organiza en estas secciones (en orden de aparición):
    (`drawSelBox`/`drawSelRing`) y efectos `pings`. Murallas: `WALL_SP`,
    `WALL_TOWER_EVERY`, `wallTap`/`wallPoints`, colisión `blockedByWall`
    (`frameWalls`). La reparación vive en la rama `build` del bucle de unidades.
+2.6. **Multijugador P2P** (bloque `MULTIJUGADOR P2P`): estado `net`, conexión
+   (`netConnect`/`netHostStart`/`netJoinStart`), serialización con bandos
+   invertidos (`serEntity`/`deserEntity`/`makeSnap`/`applySnap`), mensajería
+   (`netOnMessage`/`netSendInit`/`clientStartFromInit`/`clientEnd`) y comandos
+   del cliente aplicados por el anfitrión (`hostHandleCmd`/`hostPlace`/
+   `hostWall`). Guardas de cliente en la economía, órdenes y colocación.
+   Ver `iOS.md` para el protocolo completo.
 3. **Utilidades**: `dist`, `clamp`, `find`, `radiusOf`, recursos/coste
    (`canAfford`, `pay`, `costStr`, `popCount`, `popCap`), `hasBuilding`,
    `countBuildings`, `prodSpeed` (bono de producción por nº de edificios).

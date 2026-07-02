@@ -16,6 +16,7 @@ dependencias, sin servidor, sin proceso de compilación).
 - Mapa de archivos y estructura del código: ver **`filemap.md`**.
 - Bitácora de avance: ver **`progress.md`**.
 - Línea gráfica y lista de sprites: ver **`assets/ART.md`**.
+- App iOS y arquitectura multijugador: ver **`iOS.md`**.
 
 ## 2. Stack y restricciones
 
@@ -231,3 +232,13 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
 - **Terreno claro y murallas H/V** (PR #7): texturas de suelo en tonos claros
   para que las unidades contrasten; sprites de muralla horizontal y vertical
   según la orientación.
+- **Multijugador en tiempo real P2P** (PR #8): un jugador crea la partida
+  (anfitrión = servidor autoritativo, sin IA) y el otro se une con su IP.
+  Relé WebSocket en el puerto 8765 (`server.js` en escritorio,
+  `RelayServer.swift` en la app iOS). El cliente renderiza instantáneas (~7/s)
+  y envía comandos; los bandos viajan invertidos para reutilizar toda la UI.
+  Detalles en `iOS.md`.
+- **App iOS para iPad** (PR #8): proyecto Xcode en `ios/` (WKWebView + relé
+  nativo + IP local inyectada). Ver `iOS.md`.
+- **Sin sombras bajo edificios** (PR #8): se eliminaron porque desentonaban con
+  los sprites.

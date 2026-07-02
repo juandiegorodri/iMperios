@@ -35,17 +35,24 @@ enemigo** antes de que destruyan el tuyo.
 Arquero → Milicia → Piquetero → Caballo → Arquero (cada uno fuerte contra el
 siguiente). Los héroes del Castillo heredan la categoría de su tipo.
 
+### Multijugador (misma red)
+Dos jugadores en tiempo real: uno pulsa **«Crear partida (anfitrión)»** y el
+otro **«Unirse»** con la IP del anfitrión. En iPad, la app de `ios/` incluye el
+servidor; en escritorio, corre `node server.js` en la máquina del anfitrión.
+Detalles: **[`iOS.md`](iOS.md)**.
+
 ## Funcionalidades
 
 El listado completo y siempre actualizado está en **[`CLAUDE.md`](CLAUDE.md)**.
 En resumen: 4 edades, ~12 edificios (incl. Casa, Castillo, granjas/minas con
 capacidad finita, Torre), héroes, **murallas** con torres de arqueros, IA con
-tres doctrinas, mapas temáticos (río con puente, riscos), resumen de partida, y
-gráficos pixel-art con vista cenital.
+tres doctrinas, mapas temáticos (río con puente, riscos), resumen de partida,
+**multijugador P2P**, app iOS para iPad, y gráficos pixel-art con vista cenital.
 
 ## Documentación
 
 - **[`DESIGN.md`](DESIGN.md)** — documento de diseño (GDD).
+- **[`iOS.md`](iOS.md)** — app de iPad (Xcode) y arquitectura multijugador.
 - **[`CLAUDE.md`](CLAUDE.md)** — guía del proyecto, normas y listado de
   funcionalidades.
 - **[`filemap.md`](filemap.md)** — mapa de archivos y estructura del código.
