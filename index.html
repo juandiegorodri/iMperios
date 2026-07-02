@@ -2,20 +2,29 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Mini-AoE</title>
+<meta name="apple-mobile-web-app-title" content="Mini-AoE">
+<meta name="theme-color" content="#0e0f12">
+<meta name="description" content="Mini-AoE: Age of Empires ultra básico para jugar con pantalla táctil desde el navegador del iPad.">
+<meta name="format-detection" content="telephone=no">
+<title>Mini-AoE ⚔️</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icon-180.png">
+<link rel="icon" type="image/png" href="assets/icon-180.png">
 <style>
   :root{
     --bg:#0e0f12; --panel:#16181d; --panel2:#1f232b; --line:#2c313b;
     --txt:#e9e9ec; --muted:#9aa3b2; --accent:#caa46a; --good:#5fb15f; --bad:#d05a5a;
   }
-  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none; }
   html,body{ margin:0; padding:0; height:100%; overflow:hidden; background:var(--bg);
     color:var(--txt); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    -webkit-user-select:none; user-select:none; touch-action:none; overscroll-behavior:none; }
-  #game{ position:fixed; inset:0; display:block; }
+    -webkit-user-select:none; user-select:none; touch-action:none; overscroll-behavior:none;
+    position:fixed; width:100%; -webkit-text-size-adjust:100%; }
+  #game{ position:fixed; inset:0; display:block; touch-action:none; }
   /* Barra superior de recursos */
   #topbar{ position:fixed; top:0; left:0; right:0; height:46px; display:flex; align-items:center;
     gap:6px; padding:0 8px; background:linear-gradient(#1b1e24,#13151a); border-bottom:1px solid var(--line);
@@ -29,7 +38,8 @@
   /* Panel inferior de acciones */
   #actions{ position:fixed; left:0; right:0; bottom:0; z-index:10; display:flex; flex-wrap:wrap;
     gap:8px; padding:8px; padding-bottom:calc(8px + env(safe-area-inset-bottom));
-    background:linear-gradient(#13151a,#1b1e24); border-top:1px solid var(--line); min-height:64px; align-items:center; }
+    background:linear-gradient(#13151a,#1b1e24); border-top:1px solid var(--line); min-height:64px; align-items:center;
+    max-height:42vh; overflow-y:auto; touch-action:pan-y; -webkit-overflow-scrolling:touch; }
   #selinfo{ width:100%; font-size:13px; color:var(--muted); display:flex; align-items:center; gap:8px; }
   #selinfo b{ color:var(--txt); }
   .btn{ min-width:44px; min-height:48px; padding:6px 12px; border-radius:10px; border:1px solid var(--line);
@@ -72,7 +82,7 @@
   .opt-b.sel{ border-color:var(--accent); background:#33302410; box-shadow:0 0 0 2px #caa46a66; color:#fff; }
   .opt-desc{ font-size:12px; color:var(--muted); margin-top:5px; min-height:16px; }
   #joinIp{ flex:2 1 auto; min-width:180px; min-height:44px; border-radius:10px; border:1px solid var(--line);
-    background:#0c0d10; color:var(--txt); padding:0 10px; font-size:14px; }
+    background:#0c0d10; color:var(--txt); padding:0 10px; font-size:16px; }
   #endStats{ width:100%; border-collapse:collapse; margin:6px 0 16px; font-size:14px; }
   #endStats th,#endStats td{ padding:7px 10px; border-bottom:1px solid var(--line); text-align:right; }
   #endStats th:first-child,#endStats td:first-child{ text-align:left; color:var(--muted); font-weight:500; }
@@ -175,7 +185,7 @@
         <button class="opt-b" id="btnJoin">Unirse a una partida</button>
       </div>
       <div class="opt-row hidden" id="joinRow" style="margin-top:6px">
-        <input id="joinIp" placeholder="IP del anfitrión (ej. 192.168.1.50)">
+        <input id="joinIp" inputmode="decimal" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="IP del anfitrión (ej. 192.168.1.50)">
         <button class="opt-b" id="btnJoinGo">Conectar</button>
       </div>
       <div class="opt-desc" id="mpStatus"></div>
@@ -425,7 +435,18 @@ function netConnect(host, onOpen){
     netStatus('Conexión cerrada.'); };
   ws.onerror = ()=>{ netStatus('Error de conexión. ¿Servidor listo en el puerto '+NET_PORT+'?'); };
 }
+// El multijugador usa WebSocket ws:// a la red local. Un navegador NO permite
+// ws:// desde una página https:// (contenido mixto). Por eso solo funciona en
+// la app de iPad (file://) o abriendo el juego por http/localhost.
+function netBlockedByHttps(){
+  if(location.protocol==='https:'){
+    netStatus('⚠️ El multijugador por red local no funciona desde https. Usa la app de iPad, o abre el juego por http/localhost.');
+    return true;
+  }
+  return false;
+}
 function netHostStart(){
+  if(netBlockedByHttps()) return;
   net.mode='host';
   netStatus('Conectando al servidor local…');
   netConnect('127.0.0.1', ()=>{
@@ -435,6 +456,7 @@ function netHostStart(){
   });
 }
 function netJoinStart(ip){
+  if(netBlockedByHttps()) return;
   net.mode='client';
   netStatus('Conectando a '+ip+'…');
   netConnect(ip, ()=>{ netSend({t:'hello', role:'client'}); netStatus('Conectado. Esperando al anfitrión…'); });
@@ -472,6 +494,7 @@ function makeSnap(){
 }
 function applySnap(m){
   entities = m.ents.map(deserEntity);
+  rebuildIndex();
   Object.assign(player, m.me);
   Object.assign(enemy,  m.foe);
 }
@@ -565,7 +588,11 @@ function hostWall(m){
 // ---------- Utilidades ----------
 const dist = (a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
-function find(id){ return entities.find(e=>e.id===id); }
+// Índice id→entidad para búsquedas O(1) (find se usa en bucles calientes).
+// Se reconstruye una vez por frame; removeEntity lo mantiene al día.
+const _byId = new Map();
+function rebuildIndex(){ _byId.clear(); for(let i=0;i<entities.length;i++){ const e=entities[i]; _byId.set(e.id,e); } }
+function find(id){ return _byId.get(id); }
 function genId(){ return nextId++; }
 
 function radiusOf(e){
@@ -627,6 +654,7 @@ function startGame(cfg){
 
   // Generar recursos/terreno según el mapa
   generateMap(mapTheme, pBase, eBase);
+  rebuildIndex();
 
   cam.zoom = 1;
   centerOn(pBase.x, pBase.y);
@@ -750,6 +778,8 @@ function resize(){
   clampCam();
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', ()=>setTimeout(resize, 120));
+if(window.visualViewport){ window.visualViewport.addEventListener('resize', resize); }
 
 // ---------- Coste / recursos ----------
 function canAfford(s, cost){ for(const k in cost){ if((s.res[k]||0) < cost[k]) return false; } return true; }
@@ -948,6 +978,7 @@ function loop(now){
   let dt = (now-last)/1000; last = now;
   dt = Math.min(dt, 0.05) * gameSpeed;   // escalado por velocidad de la partida
   dt = Math.min(dt, 0.09);
+  rebuildIndex();   // índice id→entidad fresco para este frame
   if(running && !paused && !gameOver){
     if(net.mode==='client'){
       // El cliente no simula: renderiza las instantáneas del anfitrión
@@ -1228,6 +1259,7 @@ function spawnTrained(b, type){
 function removeEntity(ent){
   const i = entities.indexOf(ent);
   if(i>=0) entities.splice(i,1);
+  _byId.delete(ent.id);
   // limpiar referencias
   selection = selection.filter(id=>id!==ent.id);
   for(const e of entities){
@@ -1401,17 +1433,13 @@ function render(){
   drawGround();
   drawTerrain();
 
-  // Entidades ordenadas por Y (efecto de profundidad)
-  const sorted = entities.slice().sort((a,b)=>a.y-b.y);
-  for(const e of sorted){
-    if(e.kind==='resource') drawResource(e);
-  }
-  for(const e of sorted){
-    if(e.kind==='building') drawBuilding(e);
-  }
-  for(const e of sorted){
-    if(e.kind==='unit') drawUnit(e);
-  }
+  // Solo entidades visibles (culling), ordenadas por Y (efecto de profundidad)
+  const sorted = [];
+  for(let i=0;i<entities.length;i++){ if(onScreen(entities[i])) sorted.push(entities[i]); }
+  sorted.sort((a,b)=>a.y-b.y);
+  for(const e of sorted){ if(e.kind==='resource') drawResource(e); }
+  for(const e of sorted){ if(e.kind==='building') drawBuilding(e); }
+  for(const e of sorted){ if(e.kind==='unit') drawUnit(e); }
 
   // Caja de selección
   if(input.dragSelect){
