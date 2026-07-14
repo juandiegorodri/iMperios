@@ -192,3 +192,20 @@ historial. Ver normas en `CLAUDE.md`.
 - **Sombras de edificios**: confirmadas eliminadas.
 - Verificado en Chromium (viewport iPad): un jugador y multijugador sin errores
   de consola; captura a 1024×768.
+
+## 2026-07-06 — PLAN.md: revisión integral y hoja de ruta por fases
+- Revisión de dirección de juego del proyecto completo (~2.370 líneas, 124
+  funciones, 34 sprites): fortalezas y las 8 brechas que impiden que "se sienta
+  AoE", priorizadas por impacto.
+- Nuevo **`PLAN.md`**: principios de diseño no negociables, «Reglas del
+  ejecutor» para que Sonnet/Opus desarrollen cada fase de forma autónoma
+  (una fase = un PR, con pruebas headless y actualización de docs), y 8 fases
+  detalladas con alcance, anclas al código y criterios de aceptación:
+  F1 animación+proyectiles+sonido · F2 niebla de guerra+minimapa+alertas ·
+  F3 grupos de control+ataque-mover+cámara · F4 pathfinding A*+formaciones+
+  puertas · F5 líneas de mejora+catapulta+guarnición+mercado+balance ·
+  F6 guardar/cargar+ajustes+tutorial · F7 multijugador web (WebRTC/PeerJS,
+  retomando el transporte abstraído) · F8 atlas+rendimiento+QA final.
+- Enlazado desde `CLAUDE.md`, `README.md` y `filemap.md`.
+- El trabajo de WebRTC iniciado en la sesión anterior queda formalizado como
+  Fase 7 (el protocolo host-autoritativo actual no cambia; solo el transporte).

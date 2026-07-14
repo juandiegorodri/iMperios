@@ -59,6 +59,7 @@ tres doctrinas, mapas temáticos (río con puente, riscos), resumen de partida,
 ## Documentación
 
 - **[`DESIGN.md`](DESIGN.md)** — documento de diseño (GDD).
+- **[`PLAN.md`](PLAN.md)** — plan maestro por fases (hoja de ruta ejecutable).
 - **[`iOS.md`](iOS.md)** — app de iPad (Xcode) y arquitectura multijugador.
 - **[`CLAUDE.md`](CLAUDE.md)** — guía del proyecto, normas y listado de
   funcionalidades.

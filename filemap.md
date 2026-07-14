@@ -21,6 +21,7 @@ código nuevas (ver normas en `CLAUDE.md`).
 | `manifest.webmanifest` | Web App Manifest (PWA: nombre, iconos, pantalla completa). |
 | `assets/icon-180.png` / `icon-512.png` | Iconos de la app (apple-touch-icon / manifest). |
 | `iOS.md` | App de iPad y arquitectura del multijugador P2P. |
+| `PLAN.md` | Plan maestro por fases (revisión, principios y hoja de ruta ejecutable). |
 | `server.js` | Relé WebSocket (Node, sin dependencias) para multijugador en escritorio. |
 | `ios/MiniAoE.xcodeproj/` | Proyecto Xcode (app iPad, target único). |
 | `ios/MiniAoE/*.swift` | `MiniAoEApp` (entrada), `GameWebView` (WKWebView), `RelayServer` (relé WS + IP local). |

@@ -17,6 +17,8 @@ dependencias, sin servidor, sin proceso de compilación).
 - Bitácora de avance: ver **`progress.md`**.
 - Línea gráfica y lista de sprites: ver **`assets/ART.md`**.
 - App iOS y arquitectura multijugador: ver **`iOS.md`**.
+- **Plan maestro por fases** (qué construir a continuación y cómo): ver
+  **`PLAN.md`** — al ejecutar una fase, seguir sus «Reglas del ejecutor».
 
 ## 2. Stack y restricciones
 
