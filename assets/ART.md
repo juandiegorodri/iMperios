@@ -125,6 +125,18 @@ reglas y se guardan en `assets/sprites/`.
 | Aura de héroe | `fx_hero_aura.png` | brillo dorado | ⬜ |
 | Bandera de reunión | `fx_rally.png` | punto de rally | ⬜ |
 
+### Murallas y Puerta (PR #7 / Fase 4)
+Sprites ya integrados fuera de la tabla anterior: `bld_wall.png`/
+`bld_wall_h.png`/`bld_wall_v.png` (muro, con variantes horizontal/vertical
+según `e.dir`), `bld_wall_tower.png` (Torre de Muralla) y `obj_mountain.png`
+(montañas decorativas de los riscos). La **Puerta** (Fase 4, edificio `gate`)
+reutiliza el sprite `obj_gate.png` que ya existía en `assets/sprites/` sin
+usar (no tiene variantes h/v propias, se dibuja igual en cualquier
+orientación de la línea de muralla). Único elemento visual nuevo de la Fase 4:
+un pequeño candado 🔒 (cerrada) / 🔓 (abierta) en emoji dibujado sobre la
+Puerta (no un sprite nuevo), siempre visible —no solo al seleccionarla— para
+que se note su estado de un vistazo.
+
 ---
 
 ## 4. Criterios de verificación (el "loop")

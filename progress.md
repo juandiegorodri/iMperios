@@ -444,3 +444,124 @@ Ver `PLAN.md` §4 F3. Cambios:
   botones "⚔️→ Ataque-mover"/"Detener"/"Deseleccionar", los 3 botones de grupo
   de control (①②③, uno con badge "2") y el botón "🪖 Todo el ejército" en
   `#util`, más la bandera y línea de rally sobre el Centro Urbano.
+
+## 2026-07-15 — PR #13: Fase 4 — Pathfinding y formaciones
+- **A\* en rejilla gruesa** (`PLAN.md` §4 F4): reaprovecha el tamaño de celda
+  de la niebla (40px, 65×38 celdas). Grid de obstáculos ESTÁTICOS (río sin
+  puente, riscos, murallas/puertas) cacheado **por bando** (`pathGrids`,
+  `buildPathGrid`/`getPathGrid`) porque una muralla/puerta bloquea distinto a
+  cada bando; se invalida (`invalidatePathGrid`) solo al terminar de construir
+  o destruir una muralla/puerta, al alternar una puerta y al arrancar
+  partida — NUNCA por cuadro. Antes de llamar al A* se comprueba línea de
+  visión directa (`losClear`); si ya está despejada (el caso más común, en
+  terreno abierto) no hace falta pathfinding. `astarPath` usa un min-heap
+  propio (`heapPush`/`heapPop`), heurística octile y movimiento 8-direccional
+  sin cortar esquinas (dos celdas bloqueadas adyacentes no permiten la
+  diagonal); si el destino cae en celda bloqueada, busca la libre más cercana
+  (radio 4). El camino se suaviza saltando waypoints intermedios visibles
+  (`smoothPath`, sustituye además el primer/último waypoint por las
+  coordenadas REALES de inicio/destino, no el centro de su celda).
+  `stepToward` sigue esos waypoints (`e.path`/`e.pathIdx`) cuando el destino
+  es `e.move` (no aplica a perseguir un objetivo vivo de recolección/
+  construcción/ataque, que ya esquivaban localmente); al agotarlos, sigue el
+  código de siempre (línea recta + deslizado + puente). Si una unidad lleva
+  más de 0.6s casi sin avanzar (`e.stuckT`), se recalcula su camino desde
+  donde está.
+- **Cache de camino compartido por orden de grupo**: una orden de mover varias
+  unidades calcula **un solo** A* desde el centroide del grupo
+  (`computeGroupPath`); todas comparten la MISMA referencia al array de
+  waypoints (barato en memoria) pero cada una guarda su propio `pathIdx`.
+  Punto de entrada único `applyGroupMove(units, ownerSide, x, y, state)`,
+  usado por `handleTap` (jugador local), `hostHandleCmd` (comandos `move`/
+  `amove` del cliente MP, aplicados en el HOST) y `amoveOrder`.
+- **Formaciones**: al mover ≥2 unidades, `formationSlots` reparte destinos en
+  una rejilla compacta alrededor del punto (filas de `FORM_COLS=6`,
+  separación `FORM_SP=26`px), asignando a cada unidad el slot libre más
+  cercano (greedy). Las filas más próximas al destino se reservan para
+  cuerpo a cuerpo/aldeanos y las de atrás para arqueros (partición de los
+  slots ordenados por fila ANTES de la asignación greedy, para que un
+  arquero nunca robe un slot delantero solo por estar más cerca).
+- **Puertas de muralla** (`BLD.gate`, `wall:true, gate:true`, sprite ya
+  existente `obj_gate`, HP 600 — menor que la Torre de Muralla 1100): al
+  trazar una muralla de ≥3 tramos con la herramienta de dos toques
+  (`wallSegmentType`), el tramo CENTRAL es una Puerta en vez de muro/torre
+  (tanto en `wallTap` como en `hostWall`, mismo criterio). `wallBlocksSide(w,
+  side)` centraliza la regla: una Puerta bloquea al rival SIEMPRE (igual que
+  una muralla normal) y al dueño SOLO si está cerrada manualmente
+  (`b.closed`); una muralla normal nunca bloquea a su propio dueño (regla ya
+  existente de PR #7, sin tocar). Botón en el panel de la Puerta ("🔒 Cerrar
+  puerta"/"🔓 Abrir puerta", ≥44px; comando MP `gate`) y un candado 🔒/🔓
+  dibujado siempre sobre ella (no solo al seleccionarla) para ver su estado
+  de un vistazo. `b.closed` viaja en el snapshot (`o.cl`).
+- **Esquinas de murallas sin atascos**: el post-procesado de `separate()` (que
+  ya evitaba colar unidades por el río/riscos) ahora también revierte el
+  empuje si acaba dentro de una muralla/puerta que bloquea a esa unidad —
+  antes solo se comprobaba `blocksUnit`, así que el apiñamiento en una
+  esquina podía "filtrar" unidades a través del muro.
+- **Multijugador**: sin cambios de protocolo salvo el flag `o.cl` de la Puerta
+  y el comando `gate`; el A* y las formaciones se calculan SOLO en el host
+  (`applyGroupMove` se llama desde `hostHandleCmd`); el cliente sigue
+  reconstruyendo entidades desde el snapshot sin ejecutar `update()` en
+  ningún caso, tal como antes.
+- **Pruebas**: Chromium headless (1024×768), `spritesReady>=32`, cero
+  `pageerror`/`console.error` en todos los escenarios (partida local
+  sintética con `dt` fijo, humo de UI real con clics/menú reales, soak test
+  en tiempo real de ~12s con IA Difícil, y multijugador real). Por
+  `page.evaluate` con `update(dt)` en bucle: (a) una muralla enemiga de 10
+  tramos cortando el paso directo → la unidad la rodea y llega al destino
+  (dist final ~22px) en 165 cuadros; (b) anillo de murallas propias con una
+  Puerta: una unidad propia entra por la puerta abierta, una unidad rival
+  queda fuera (dist final ~78-80px); para aislar el efecto de "cerrada
+  bloquea también al dueño" de la regla (ya existente) de que una muralla
+  normal nunca bloquea a su dueño, se construyó además un muro de riscos de
+  punta a punta del mapa con un único hueco tapado por una Puerta: con la
+  puerta abierta el dueño cruza; cerrada, se queda atrapado (único paso
+  posible); reabierta, vuelve a cruzar; (c) 28 unidades (20 milicia + 8
+  arqueros) mandadas a un punto: distancia media final de la milicia al
+  destino (58.9px) menor que la de los arqueros (101.4px) → van delante;
+  separación lateral final de 158.7px (varias filas, no fila india);
+  distancia mínima entre unidades 24.1px (no colapsan en el mismo punto); (d)
+  A* de una orden de 30 unidades con obstáculo real de por medio: ~0.2-0.5ms
+  (holgado bajo los 2ms de presupuesto); estrés con ~280 entidades
+  (mayoría moviéndose, varias con A* real): `update()+render()` ~3.6-4.6ms/
+  cuadro, muy por debajo de los 16.7ms de un cuadro a 60fps. **Humo de UI
+  real**: menú → "Empezar" → seleccionar aldeano → botón "🧱 Muralla" del
+  panel → dos toques reales en el canvas → 8 tramos con exactamente 1 Puerta;
+  seleccionar la Puerta muestra el botón "🔒/🔓" en el panel y tocarlo cambia
+  `b.closed`. **Soak test en tiempo real** (~12s, mapa Riscos, IA Difícil,
+  velocidad Rápida, bucle `requestAnimationFrame` real, no `update()`
+  manual): órdenes de grupo aleatorias (`move`/`amove`) y construcción de
+  murallas con la lógica real cada 2s, cero errores, partida sigue viva.
+  **Multijugador real** (`node server.js` + 2 Chromium, host «Crear partida»
+  + cliente «Unirse» a `127.0.0.1`): ambos llegan a `running=true` sin
+  errores; el cliente ve (vía snapshot) una unidad creada por el host con una
+  muralla enemiga de por medio, envía el comando `move` de red, el HOST le
+  asigna un camino A* (`u.path` no vacío) y el CLIENTE observa —solo por
+  snapshot— que su unidad llega rodeando la muralla; se confirma que
+  `net.mode==='client'` (el cliente nunca entra en la rama que llama a
+  `update()`, por tanto nunca ejecuta A* ni calcula daño).
+- **Caveats conocidos**: la rejilla de 40px puede, en teoría, dejar un hueco
+  de un único ancho de celda (~40px) topológicamente "aislado" del A* si está
+  rodeado por obstáculos en TODAS las columnas/filas vecinas (ver prueba (b):
+  el hueco de prueba se hizo de ~100px para evitarlo). En la práctica esto no
+  afecta a las Puertas reales del juego, porque los tramos de muralla se
+  colocan cada `WALL_SP=28`px y una única Puerta nunca queda aislada por
+  completo en la rejilla salvo que el jugador construya un cerco casi
+  perfectamente sellado con esa única abertura; si ocurriera, el repath por
+  atasco (`e.stuckT>0.6s`) seguiría intentándolo cada 0.6s sin quedar
+  encallado en un bucle de error, pero podría no encontrar camino mientras el
+  cerco exista.
+- **Arreglo tras validación del orquestador (misma fase)**: se detectó y
+  corrigió una **cuña al rodear el EXTREMO de una muralla larga**: la unidad
+  quedaba clavada contra el último tramo (dentro de su radio de colisión de
+  ~28px) porque el A* seguía apuntando hacia el lado bloqueado y el
+  deslizamiento por ejes no ofrecía salida; el repath no la liberaba porque la
+  geometría volvía a atraparla. Ahora, cuando ambos ejes están bloqueados por
+  una muralla/puerta, `stepToward` empuja la unidad radialmente ALEJÁNDOSE del
+  muro más cercano (`nearestBlockingWall`) hasta salir de su radio de colisión,
+  y el repath retoma el rodeo. Solo se activa en la cuña real (rarísimo en
+  juego normal), así que no afecta el paso normal. Verificado headless: una
+  unidad rodea un muro sólido de ~920px y LLEGA al destino (antes se quedaba a
+  ~490px), sin regresión del movimiento abierto, del cruce por el puente del
+  río, del combate/MP (Fases 1-3) ni de las puertas; A* ~0.35ms/orden de 30,
+  estrés ~4.2ms/cuadro con ~257 entidades.

@@ -342,3 +342,47 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     entrenados a partir de entonces vayan directos a recolectarlo; se ve una
     línea punteada + bandera 🚩 + icono del recurso desde el edificio hasta el
     punto de reunión al seleccionarlo.
+- **FASE 4 — Pathfinding y formaciones** (PR #13): ver `PLAN.md` §4 F4.
+  Cambios:
+  - **A\* en rejilla gruesa** (reaprovecha el tamaño de celda de la niebla:
+    40px, 65×38): grid de obstáculos estáticos (río sin puente, riscos,
+    murallas/puertas) cacheado **por bando** (`pathGrids.player/enemy`) y
+    recalculado solo al construir/destruir una muralla o alternar una puerta
+    (`invalidatePathGrid`), nunca por cuadro. Antes de llamar al A* se
+    comprueba línea de visión directa (`losClear`); si ya está despejada (caso
+    común en terreno abierto) no hace falta calcular nada. El camino se
+    suaviza saltando waypoints intermedios visibles (`smoothPath`).
+    `stepToward` sigue los waypoints (`e.path`/`e.pathIdx`) y, al agotarlos,
+    sigue yendo directo al destino real como siempre. Si una unidad lleva
+    >0.6s sin avanzar (`e.stuckT`), se recalcula su camino desde donde está.
+    Corre **solo en el host/partida local** (`applyGroupMove`, llamado desde
+    `handleTap`, `hostHandleCmd` y `amoveOrder`); el cliente MP nunca ejecuta
+    `update()` y por tanto tampoco A*, solo sigue las posiciones del snapshot.
+  - **Cache de camino compartido por orden de grupo**: una orden de mover
+    varias unidades calcula **un solo** A* desde el centroide del grupo
+    (`computeGroupPath`) y todas comparten el mismo array de waypoints (cada
+    una con su propio `pathIdx`); el destino final de cada unidad es su slot
+    de formación individual.
+  - **Formaciones**: al mover ≥2 unidades, se reparten en una rejilla
+    compacta alrededor del punto de destino (filas de 6, separación 26px,
+    `formationSlots`), asignando a cada unidad el slot libre más cercano
+    (greedy); las filas más próximas al destino se reservan para cuerpo a
+    cuerpo/aldeanos y las de atrás para arqueros, así el ejército llega en
+    varias filas con los arqueros protegidos detrás en vez de en fila india.
+  - **Puertas de muralla** (edificio `gate` 🚪, sprite `obj_gate`): al trazar
+    una muralla de ≥3 tramos con la herramienta de dos toques, el tramo
+    **central** es una Puerta en vez de muro/torre. Igual que una muralla
+    normal, deja pasar SIEMPRE a las unidades propias y bloquea SIEMPRE a las
+    rivales; a diferencia de una muralla normal, tiene un botón en su panel
+    ("🔒 Cerrar puerta" / "🔓 Abrir puerta", ≥44px) para cerrarla
+    manualmente, y entonces bloquea a TODOS, incluido el dueño (única forma
+    de sellar un paso también para las propias unidades en este juego, ya
+    que las murallas normales nunca bloquearon a su dueño, de antes de esta
+    fase). Un candado 🔒/🔓 se dibuja siempre sobre la puerta para ver su
+    estado de un vistazo. HP menor que la Torre de Muralla. El estado
+    (`closed`) viaja en el snapshot y tiene su propio comando de red
+    (`gate`).
+  - **Esquinas de murallas sin atascos**: la separación entre unidades
+    (`separate`) ya no puede empujar a nadie dentro de una muralla/puerta que
+    le bloquee (antes solo se protegía contra el río/riscos); esto evitaba
+    que el apiñamiento en las esquinas "colara" unidades a través del muro.
