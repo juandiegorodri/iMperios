@@ -281,3 +281,89 @@ historial. Ver normas en `CLAUDE.md`.
   (host+cliente vía `server.js`): el cliente muestra `anim>0`, reconstruye el
   objetivo del golpe y reproduce `arrow` al llegar proyectiles nuevos, con cero
   errores de consola en ambos lados.
+
+## 2026-07-15 — PR #11: FASE 2 — Niebla de guerra, minimapa y alertas
+- **Niebla de guerra de 3 estados** (oculto/explorado/visible) sobre una
+  rejilla de `FOG_CELL=40px` que cubre todo `WORLD` (65×38 celdas, exacto).
+  Visión de 180px por unidad propia y 220px por edificio propio ya construido
+  (`markVision`, recorre solo la caja delimitadora de cada fuente, no toda la
+  rejilla). Se recalcula cada ~150ms (`recomputeFog`, llamado desde `loop`,
+  no cada cuadro) sobre dos `Uint8Array` (`fogVisible`/`fogExplored`, esta
+  última persiste — una vez explorada una celda, se queda "oscurecida" para
+  siempre en vez de re-ocultarse del todo, como en un AoE real). Para pintarla
+  barato: `redrawFogCanvas` vuelca la rejilla a una textura offscreen de baja
+  resolución (`fogCanvas`, 1 celda = 1 píxel: negro opaco=oculto, semitrans-
+  parente=explorado, transparente=visible) y `drawFogOverlay` la pega sobre el
+  canvas principal con una sola llamada `drawImage` escalada (suavizado
+  bilineal automático del navegador → bordes de visión redondeados sin coste
+  por celda en cada cuadro). Filtrado de entidades por niebla (`fogRenderOk`,
+  usado en `render`, `drawProjectiles`, `drawCorpses` y también en `pickAt`
+  para que no se pueda ni tocar lo oculto): lo propio siempre se ve; edificios
+  y recursos enemigos/neutrales necesitan estar **explorados** (se ven
+  oscurecidos, sin unidades — pedido explícito de la Fase 2); unidades,
+  cadáveres y proyectiles enemigos necesitan estar en una celda **visible
+  ahora mismo** (desaparecen al salir de la visión).
+  **Es puramente de render/cliente**: no se tocó el protocolo multijugador
+  (`serEntity`/`deserEntity`/`makeSnap` sin cambios) — cada cliente (host o
+  jugador remoto) calcula su propia niebla a partir de sus propias entidades
+  (`owner==='player'`, que en el cliente MP ya vienen con los bandos
+  intercambiados por `deserEntity`), así que no simula nada nuevo. La IA
+  enemiga (`enemyAI`) sigue "viendo" el tablero completo como siempre en su
+  lógica interna (no se le oculta nada a propósito ahí); lo único que cambia
+  es lo que el JUGADOR ve dibujado y puede tocar.
+- **Minimapa** (`#minimapWrap`, esquina inferior-derecha, ~160×92px):
+  `buildMinimapTerrain` cachea el terreno del mapa activo una sola vez por
+  partida (fondo + río/puente/riscos a baja resolución); `drawMinimap` lo
+  redibuja a ~4.5Hz (no cada cuadro) superponiendo la MISMA textura de niebla
+  del mapa principal (`fogCanvas`, reutilizada tal cual), puntos de
+  unidades/edificios por bando (filtrados por `fogRenderOk`, igual que en el
+  mapa principal) y el rectángulo de la cámara. Tocar o arrastrar sobre el
+  minimapa mueve la cámara (`minimapPointerToCam`→`centerOn`). Botón
+  `#btnMiniToggle` (44×44px) para colapsarlo/expandirlo. `positionMinimap` lo
+  recoloca por encima del panel de acciones (`#actions`, cuyo alto cambia
+  según su contenido) para que nunca lo tape.
+- **Alertas de ataque**: `triggerAttackAlert(x,y)` con throttle de 8s por
+  "zona" de 200px (`alertZoneKey`), llamado desde `applyDamage` cuando algo
+  del jugador recibe daño (host/partida local) y también desde `applySnap`
+  (cliente MP: no simula daño, pero detecta que el hp de algo suyo bajó entre
+  dos instantáneas consecutivas — mismo mecanismo que ya usaba el flash blanco
+  de daño de la Fase 1). Si el punto atacado está fuera de la cámara
+  (`onScreen`): añade un pulso rojo que se desvanece en el minimapa
+  (`alertPulses`) y muestra el botón temporal "⚔️ ir al ataque" en `#util`
+  (`showAlertButton`/`hideAlertButton`, se oculta solo a los 10s o al
+  tocarlo, y centra la cámara en `lastAlert`). El SFX de alerta (ya existía
+  desde la Fase 1, `playSfx('alert')`) sigue sonando aparte, sin este
+  throttle por zona — se reutilizó tal cual, como pedía el encargo.
+- **Pruebas**: Chromium headless (1024×768) con `spritesReady>=32`, cero
+  `pageerror`/`console.error`. Ejercitado por `page.evaluate`: (a) al empezar
+  la partida solo ~4.8% de las celdas están exploradas (base propia incluida,
+  el resto oculto); (b) mover una unidad a una zona lejana y recalcular la
+  niebla la revela (pasa de oculta a visible+explorada); (c) una unidad
+  enemiga fabricada lejos de cualquier unidad propia queda filtrada
+  (`fogRenderOk`=false), se vuelve visible al acercar una unidad propia y
+  recalcular, y vuelve a ocultarse (aunque sigue "explorada") al alejarla de
+  nuevo — confirma que las unidades exigen visión ACTUAL, no solo exploración;
+  (d) dañar el Centro Urbano propio con la cámara centrada lejos dispara el
+  botón `#btnAlert` (clase `show`) y fija `lastAlert`; (e) el minimapa existe
+  y un toque/arrastre real sobre su `boundingBox` (vía `page.mouse`) cambia
+  `cam.x`/`cam.y`; el botón de colapsar mide 44×44px y colapsa/expande
+  correctamente. **Multijugador real** (`node server.js` + 2 Chromium,
+  host con «Crear partida» + cliente con «Unirse» a `127.0.0.1`): ambos llegan
+  a `running=true` con cero errores en ambos lados; el cliente calcula su
+  propia niebla (celda de su Centro Urbano ya explorada nada más conectar) y,
+  tras mover un aldeano por un comando de red real (mismo camino que un toque:
+  `netSend({t:'cmd',c:'move',...})`), la niebla del cliente se actualiza sola
+  alrededor de la nueva posición — sin que el cliente ejecute lógica de daño
+  ni de movimiento (`net.mode==='client'` nunca llama a `update()`).
+  **Estrés**: ~264 entidades (95 pares en combate cuerpo a cuerpo/a distancia
+  más las iniciales). Midiendo `update()+render()` con niebla+minimapa
+  recalculados en **todos** los cuadros (cota pesimista deliberada; en el
+  juego real se recalculan a 150/220ms, no cada cuadro) dio ~3.10ms de media
+  por cuadro (p95 3.9ms, máx 6.8ms); la misma prueba con niebla+minimapa
+  completamente anulados (no-ops) dio ~2.80ms — **coste incremental de la
+  Fase 2 de ~0.30ms de media**, muy por debajo del presupuesto de <3ms pedido
+  (y el total sigue muy por debajo de los 16.7ms de un cuadro a 60fps).
+- **Captura de pantalla**: base propia con el círculo de visión de bordes
+  suaves (bilineal) rodeado de negro, aldeanos caminando con la niebla
+  siguiéndolos, y el minimapa mostrando terreno+niebla+puntos+cámara en la
+  esquina inferior-derecha.

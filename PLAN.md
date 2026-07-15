@@ -125,7 +125,7 @@ mudas; con esto el mismo juego "se convierte" en un juego de verdad.
 
 ---
 
-### FASE 2 — Niebla de guerra, minimapa y alertas ⬜
+### FASE 2 — Niebla de guerra, minimapa y alertas ✅
 **Por qué**: exploración y mapa mental = identidad AoE.
 
 **Alcance**
@@ -330,7 +330,7 @@ F6 Guardar+tutorial ──► F7 MP web (WebRTC) ──► F8 Rendimiento final
 | Fase | Estado | PR | Notas |
 |---|---|---|---|
 | F1 Vida | ✅ | #10 | Animación procedural sin sprites nuevos, proyectiles reales con daño al impacto, cadáveres/flash/humo-fuego, 10 SFX sintetizados + ambiente, ping verde. Ver `progress.md` 2026-07-15. |
-| F2 Niebla+minimapa | ⬜ | — | |
+| F2 Niebla+minimapa | ✅ | #11 | Niebla de 3 estados (65×38 celdas, 40px), recálculo cada 150ms sobre offscreen de baja resolución escalado con suavizado bilineal; minimapa colapsable a ~4.5Hz con control táctil de cámara; alertas con throttle 8s/zona (pulso + botón ⚔️). Puramente render/cliente, protocolo MP intacto. Ver `progress.md` 2026-07-15. |
 | F3 Manos RTS | ⬜ | — | |
 | F4 Pathfinding | ⬜ | — | |
 | F5 Profundidad | ⬜ | — | |

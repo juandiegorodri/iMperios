@@ -98,6 +98,19 @@
   #hint{ position:fixed; left:50%; bottom:84px; transform:translateX(-50%); z-index:9;
     background:#000a; border:1px solid var(--line); border-radius:20px; padding:6px 14px; font-size:13px;
     color:var(--accent); pointer-events:none; max-width:90vw; text-align:center; }
+  /* Minimapa (esquina inferior-derecha, colapsable) */
+  #minimapWrap{ position:fixed; right:8px; bottom:8px; z-index:11; display:flex; flex-direction:column;
+    align-items:flex-end; gap:6px; touch-action:none; }
+  #minimap{ width:160px; height:92px; border-radius:8px; border:1px solid var(--line);
+    background:#05060a; display:block; box-shadow:0 2px 10px #0008; touch-action:none; }
+  #minimap.hidden{ display:none; }
+  #btnMiniToggle{ position:relative; width:44px; height:44px; border-radius:22px; background:#1b1e24cc;
+    border:1px solid var(--line); color:var(--txt); font-size:17px; display:flex; align-items:center;
+    justify-content:center; }
+  /* Botón temporal de alerta de ataque ("⚔️ ir al ataque") en #util */
+  #btnAlert{ display:none; }
+  #btnAlert.show{ display:flex; border-color:var(--bad); animation:alertPulse 1s infinite; }
+  @keyframes alertPulse{ 0%,100%{ box-shadow:0 0 0 0 #d05a5a88; } 50%{ box-shadow:0 0 0 6px #d05a5a00; } }
 </style>
 </head>
 <body>
@@ -114,12 +127,19 @@
 
 <div id="util">
   <div class="ub" id="btnIdle" title="Aldeanos inactivos">👷<span class="badge" id="idleBadge">0</span></div>
+  <div class="ub" id="btnAlert" title="Ir al ataque">⚔️</div>
   <div class="ub" id="btnCenter" title="Centrar">⌂</div>
   <div class="ub" id="btnPause" title="Pausa">⏸</div>
   <div class="ub" id="btnSound" title="Sonido">🔊</div>
 </div>
 
 <div id="hint" class="hidden"></div>
+
+<!-- Minimapa: terreno+niebla+unidades en miniatura; toca/arrastra para mover la cámara -->
+<div id="minimapWrap">
+  <canvas id="minimap" width="160" height="92"></canvas>
+  <div class="ub" id="btnMiniToggle" title="Minimapa">🗺️</div>
+</div>
 
 <div id="actions">
   <div id="selinfo">Toca una unidad o edificio para empezar. Arrastra con un dedo para seleccionar; usa dos dedos para mover la cámara.</div>
@@ -232,6 +252,13 @@ const POP_MAX = 200;        // tope absoluto de población
 const BONUS = 2;            // multiplicador de daño contra la presa ideal
 const AGGRO = 130;          // radio de auto-defensa de unidades militares
 const MAX_AGE = 4;
+
+// Niebla de guerra: rejilla ~40px/celda sobre todo el mundo (65×38 celdas).
+const FOG_CELL = 40;
+const FOG_COLS = Math.ceil(WORLD.w/FOG_CELL);   // 65
+const FOG_ROWS = Math.ceil(WORLD.h/FOG_CELL);   // 38
+const VISION_UNIT = 180;    // radio de visión de una unidad
+const VISION_BLD   = 220;   // radio de visión de un edificio
 
 // Ciclo de contraunidades por CATEGORÍA: clave es fuerte (×2) contra su valor.
 const STRONG_VS = { archer:'infantry', infantry:'pike', pike:'cavalry', cavalry:'archer' };
@@ -372,6 +399,24 @@ let projectiles = [];       // flechas en vuelo (arqueros, héroe arco, torres, 
 let corpses = [];           // cadáveres visuales (fade + caída), fuera de `entities`
 const unitFace = new Map(); // id → {x,y,face,walking}: animación procedural (bamboleo/volteo)
 let alertFlags = { player:false, enemy:false };  // "me atacan" pendiente de sonido/snapshot
+
+// Niebla de guerra (SOLO render/cliente: no afecta la simulación ni a la IA,
+// que "sigue sabiendo" internamente dónde está todo — ver `enemyAI`). Cada
+// cliente (host o jugador remoto en MP) calcula su PROPIA niebla a partir de
+// las posiciones de SUS entidades (owner==='player', ya con bandos
+// intercambiados si es cliente MP), sin tocar el protocolo de red.
+let fogExplored = new Uint8Array(FOG_COLS*FOG_ROWS);  // 1 = ya explorada (persiste)
+let fogVisible  = new Uint8Array(FOG_COLS*FOG_ROWS);  // 1 = visible AHORA MISMO
+let fogT = 0;             // temporizador de recálculo (~150ms)
+const fogCanvas = document.createElement('canvas');   // capa de niebla, baja resolución (FOG_COLS×FOG_ROWS)
+fogCanvas.width = FOG_COLS; fogCanvas.height = FOG_ROWS;
+const fogCtx = fogCanvas.getContext('2d', { willReadFrequently:false });
+
+// Alertas de ataque: throttle por "zona" (celda gruesa de 200px) para no saturar.
+const ALERT_ZONE = 200, ALERT_COOLDOWN = 8000, ALERT_BTN_MS = 10000;
+let alertZones = {};        // zoneKey → timestamp del último aviso
+let alertPulses = [];       // pulsos rojos activos para el minimapa {x,y,t0}
+let lastAlert = null;       // {x,y,t} última zona atacada (para el botón ⚔️ y el minimapa)
 
 function side(owner){ return owner==='player'?player:enemy; }
 
@@ -623,7 +668,13 @@ function applySnap(m){
   const nowTs = performance.now(), liveIds = new Set();
   for(const e of entities){
     liveIds.add(e.id);
-    if(e.hp!==undefined && prevHp[e.id]!==undefined && e.hp < prevHp[e.id]) e.hurtT = nowTs;
+    if(e.hp!==undefined && prevHp[e.id]!==undefined && e.hp < prevHp[e.id]){
+      e.hurtT = nowTs;
+      // El cliente MP no simula daño, pero SÍ puede detectar por el snapshot
+      // que algo suyo perdió hp: dispara la misma alerta visual (pulso +
+      // botón ⚔️) que en host/partida local.
+      if(e.owner==='player') triggerAttackAlert(e.x, e.y);
+    }
   }
   for(const id in prevUnits){
     if(!liveIds.has(+id)){
@@ -671,6 +722,7 @@ function clientStartFromInit(m){
   projectiles=[]; corpses=[]; unitFace.clear(); alertFlags={player:false,enemy:false};
   player.mods=freshMods(); enemy.mods=freshMods();
   applySnap(m.snap);
+  buildMinimapTerrain(); resetFog(); positionMinimap();   // niebla + minimapa (Fase 2, cliente MP)
   gameOver=false; paused=false; running=true;
   const t=entities.find(e=>e.kind==='building'&&e.owner==='player'&&e.btype==='town');
   cam.zoom=1; if(t) centerOn(t.x,t.y);
@@ -806,6 +858,7 @@ function startGame(cfg){
   // Generar recursos/terreno según el mapa
   generateMap(mapTheme, pBase, eBase);
   rebuildIndex();
+  buildMinimapTerrain(); resetFog(); positionMinimap();   // niebla + minimapa (Fase 2)
 
   cam.zoom = 1;
   centerOn(pBase.x, pBase.y);
@@ -927,10 +980,221 @@ function resize(){
   canvas.style.height = window.innerHeight+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
   clampCam();
+  setupMinimapCanvas();
+  positionMinimap();
 }
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', ()=>setTimeout(resize, 120));
 if(window.visualViewport){ window.visualViewport.addEventListener('resize', resize); }
+
+// ---------- Niebla de guerra ----------
+// Puramente de RENDER/CLIENTE: no toca `entities` ni la simulación. La IA
+// enemiga (`enemyAI`) sigue "viendo" todo el tablero como siempre (no hace
+// trampa activamente, pero tampoco se le oculta nada a propósito); lo único
+// que cambia es lo que el JUGADOR ve dibujado en pantalla. En multijugador
+// cada cliente calcula esto solo, a partir de sus propias entidades
+// (`owner==='player'`, ya con los bandos intercambiados por `deserEntity`),
+// así que no hace falta tocar el protocolo de red (`serEntity`/`makeSnap`).
+function fogIndex(x,y){
+  const gx=Math.floor(x/FOG_CELL), gy=Math.floor(y/FOG_CELL);
+  if(gx<0||gy<0||gx>=FOG_COLS||gy>=FOG_ROWS) return -1;
+  return gy*FOG_COLS+gx;
+}
+function fogVisibleAt(x,y){ const i=fogIndex(x,y); return i>=0 && fogVisible[i]===1; }
+function fogExploredAt(x,y){ const i=fogIndex(x,y); return i>=0 && fogExplored[i]===1; }
+// Marca en `fogVisible` las celdas dentro del radio `r` de (wx,wy), recorriendo
+// solo la caja delimitadora (no toda la rejilla): barato aunque haya muchas
+// unidades propias.
+function markVision(wx, wy, r){
+  const gx0=Math.max(0, Math.floor((wx-r)/FOG_CELL)), gx1=Math.min(FOG_COLS-1, Math.floor((wx+r)/FOG_CELL));
+  const gy0=Math.max(0, Math.floor((wy-r)/FOG_CELL)), gy1=Math.min(FOG_ROWS-1, Math.floor((wy+r)/FOG_CELL));
+  const r2=r*r;
+  for(let gy=gy0; gy<=gy1; gy++){
+    const rowBase=gy*FOG_COLS;
+    for(let gx=gx0; gx<=gx1; gx++){
+      const cx=gx*FOG_CELL+FOG_CELL/2, cy=gy*FOG_CELL+FOG_CELL/2;
+      const dx=cx-wx, dy=cy-wy;
+      if(dx*dx+dy*dy <= r2) fogVisible[rowBase+gx]=1;
+    }
+  }
+}
+// Recalcula qué celdas son visibles AHORA MISMO a partir de las unidades y
+// edificios propios construidos. Se llama cada ~150ms desde `loop` (host,
+// partida local y también el cliente MP, que solo mira las posiciones que ya
+// recibió por snapshot). Las celdas visibles quedan también como "exploradas"
+// para siempre (no se re-oscurecen del todo al perder la visión, como en AoE).
+function recomputeFog(){
+  fogVisible.fill(0);
+  for(const e of entities){
+    if(e.owner!=='player' || e.hp<=0) continue;
+    if(e.kind==='unit') markVision(e.x, e.y, VISION_UNIT);
+    else if(e.kind==='building' && e.built) markVision(e.x, e.y, VISION_BLD);
+  }
+  for(let i=0;i<fogVisible.length;i++) if(fogVisible[i]) fogExplored[i]=1;
+  redrawFogCanvas();
+}
+// Redibuja la textura de niebla de baja resolución (1 celda = 1 píxel): negro
+// opaco = oculto, negro semitransparente = explorado pero no visible ahora,
+// transparente = visible. Al pintarla escalada (con suavizado bilineal) sobre
+// el canvas principal y el minimapa, los bordes de la visión salen redondeados
+// sin gastar CPU por celda en cada cuadro (solo cuando cambia, cada ~150ms).
+function redrawFogCanvas(){
+  const img = fogCtx.createImageData(FOG_COLS, FOG_ROWS);
+  const d = img.data;
+  for(let i=0;i<FOG_COLS*FOG_ROWS;i++){
+    const a = fogVisible[i] ? 0 : (fogExplored[i] ? 150 : 255);
+    const o=i*4; d[o]=0; d[o+1]=0; d[o+2]=0; d[o+3]=a;
+  }
+  fogCtx.putImageData(img, 0, 0);
+}
+// Pinta la niebla sobre el viewport actual: una sola llamada a drawImage
+// (barata) que reescala la textura de baja resolución a pantalla completa.
+function drawFogOverlay(){
+  const sx = cam.x/FOG_CELL, sy = cam.y/FOG_CELL;
+  const sw = (viewW()/cam.zoom)/FOG_CELL, sh = (viewH()/cam.zoom)/FOG_CELL;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(fogCanvas, sx, sy, sw, sh, 0, 0, viewW(), viewH());
+}
+// ¿Debe dibujarse esta entidad según lo que el jugador ha explorado/ve ahora?
+// Lo propio (owner==='player') siempre se ve. Edificios y recursos (sin dueño
+// o enemigos) solo necesitan estar EXPLORADOS (se ven oscurecidos, como pide
+// la Fase 2: "terreno y edificios visibles, unidades no"). Unidades, cadáveres
+// y proyectiles enemigos necesitan estar en una celda VISIBLE ahora mismo:
+// desaparecen al salir de la visión, como en un AoE real.
+function fogRenderOk(e){
+  if(e.owner==='player') return true;
+  if(e.kind==='unit') return fogVisibleAt(e.x, e.y);
+  return fogExploredAt(e.x, e.y);
+}
+// Reinicia la niebla al empezar una partida (nueva o de multijugador) y hace
+// el primer cálculo para que la base propia ya se vea desde el primer cuadro.
+function resetFog(){
+  fogExplored.fill(0); fogVisible.fill(0);
+  alertZones={}; alertPulses=[]; lastAlert=null;
+  hideAlertButton();
+  recomputeFog();
+}
+
+// ---------- Alertas de ataque ----------
+// Zona gruesa (200px) para no repetir aviso del mismo combate a cada golpe.
+function alertZoneKey(x,y){ return Math.floor(x/ALERT_ZONE)+'_'+Math.floor(y/ALERT_ZONE); }
+let alertBtnTimer=null;
+function showAlertButton(){
+  const btn=document.getElementById('btnAlert'); if(!btn) return;
+  btn.classList.add('show');
+  clearTimeout(alertBtnTimer);
+  alertBtnTimer=setTimeout(hideAlertButton, ALERT_BTN_MS);
+}
+function hideAlertButton(){
+  const btn=document.getElementById('btnAlert'); if(btn) btn.classList.remove('show');
+  clearTimeout(alertBtnTimer); alertBtnTimer=null;
+}
+// Se llama cuando algo del jugador recibe daño: en host/partida local desde
+// `applyDamage` (impacto real), y en el cliente MP desde `applySnap` (que no
+// simula daño, pero compara el hp entre instantáneas para detectarlo). Si el
+// punto atacado está fuera de cámara, añade un pulso rojo al minimapa y saca
+// el botón temporal "⚔️ ir al ataque"; el SFX de alerta (Fase 1) es aparte y
+// no depende de este throttle por zona.
+function triggerAttackAlert(x, y){
+  const key=alertZoneKey(x,y), now=performance.now();
+  if(alertZones[key] && now-alertZones[key] < ALERT_COOLDOWN) return;
+  alertZones[key]=now;
+  alertPulses.push({x,y,t0:now});
+  lastAlert={x,y,t:now};
+  if(!onScreen({x,y})) showAlertButton();
+}
+
+// ---------- Minimapa ----------
+const MM_W=160, MM_H=92;    // tamaño lógico (CSS px) del minimapa
+const minimapCanvas = document.getElementById('minimap');
+const minimapCtx = minimapCanvas.getContext('2d');
+const minimapTerrain = document.createElement('canvas');   // terreno cacheado (1 vez por mapa)
+minimapTerrain.width = MM_W; minimapTerrain.height = MM_H;
+const minimapTerrainCtx = minimapTerrain.getContext('2d');
+let minimapT = 0;           // temporizador de redibujado (4-5Hz, no cada cuadro)
+let minimapCollapsed = false;
+function setupMinimapCanvas(){
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  minimapCanvas.width = Math.round(MM_W*dpr);
+  minimapCanvas.height = Math.round(MM_H*dpr);
+  minimapCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+// Pinta el terreno del mapa activo una sola vez (al empezar la partida): fondo,
+// río/puente y riscos a baja resolución (no hace falta detalle a este tamaño).
+function buildMinimapTerrain(){
+  const c=minimapTerrainCtx;
+  c.clearRect(0,0,MM_W,MM_H);
+  c.fillStyle=(MAPS[mapTheme]&&MAPS[mapTheme].ground)||'#26331f';
+  c.fillRect(0,0,MM_W,MM_H);
+  const sx=MM_W/WORLD.w, sy=MM_H/WORLD.h;
+  for(const t of terrain){
+    c.fillStyle = t.kind==='river' ? '#2f5d86' : t.kind==='bridge' ? '#8a6a44' : '#6b6356';
+    c.fillRect(t.x*sx, t.y*sy, Math.max(1,t.w*sx), Math.max(1,t.h*sy));
+  }
+}
+function minimapToWorld(px, py){
+  return { x: clamp(px/MM_W*WORLD.w, 0, WORLD.w), y: clamp(py/MM_H*WORLD.h, 0, WORLD.h) };
+}
+// Redibuja el minimapa: terreno cacheado + niebla (reutiliza `fogCanvas`, la
+// misma textura que el mapa principal) + puntos de unidades/edificios por
+// bando (filtrados por niebla) + pulsos de alerta + rectángulo de cámara.
+// Se llama a 4-5Hz desde `loop`: no aporta nada refrescarlo a 60Hz.
+function drawMinimap(){
+  if(minimapCollapsed || !running) return;
+  const c=minimapCtx;
+  c.clearRect(0,0,MM_W,MM_H);
+  c.drawImage(minimapTerrain, 0,0, MM_W, MM_H);
+  c.imageSmoothingEnabled=true;
+  c.drawImage(fogCanvas, 0,0, MM_W, MM_H);
+  const sx=MM_W/WORLD.w, sy=MM_H/WORLD.h;
+  for(const e of entities){
+    if(e.kind!=='unit' && e.kind!=='building') continue;
+    if(!fogRenderOk(e)) continue;
+    const x=e.x*sx, y=e.y*sy;
+    c.fillStyle = e.owner==='player' ? '#6fa8ff' : '#e06a6a';
+    const r = e.kind==='building' ? 2.2 : 1.4;
+    c.fillRect(x-r, y-r, r*2, r*2);
+  }
+  const now=performance.now();
+  for(let i=alertPulses.length-1;i>=0;i--){
+    const p=alertPulses[i], age=(now-p.t0)/2000;
+    if(age>=1){ alertPulses.splice(i,1); continue; }
+    const x=p.x*sx, y=p.y*sy, r=3+age*10;
+    c.beginPath(); c.arc(x,y,r,0,Math.PI*2);
+    c.strokeStyle=`rgba(224,90,90,${1-age})`; c.lineWidth=1.6; c.stroke();
+  }
+  const cx=cam.x*sx, cy=cam.y*sy, cw=(viewW()/cam.zoom)*sx, ch=(viewH()/cam.zoom)*sy;
+  c.strokeStyle='rgba(255,224,140,.9)'; c.lineWidth=1.4;
+  c.strokeRect(cx, cy, cw, ch);
+}
+// Coloca el minimapa por encima del panel de acciones (cuya altura cambia
+// según el contenido/tamaño de pantalla), para que nunca lo tape.
+function positionMinimap(){
+  const ah = document.getElementById('actions').offsetHeight || 64;
+  document.getElementById('minimapWrap').style.bottom = (ah+8)+'px';
+}
+// Tocar/arrastrar sobre el minimapa mueve la cámara al punto tocado.
+let mmDragging=false;
+function minimapPointerToCam(ev){
+  const r=minimapCanvas.getBoundingClientRect();
+  const w=minimapToWorld(ev.clientX-r.left, ev.clientY-r.top);
+  centerOn(w.x, w.y);
+}
+minimapCanvas.addEventListener('pointerdown',(ev)=>{
+  mmDragging=true; minimapCanvas.setPointerCapture(ev.pointerId);
+  minimapPointerToCam(ev);
+}, {passive:true});
+minimapCanvas.addEventListener('pointermove',(ev)=>{ if(mmDragging) minimapPointerToCam(ev); }, {passive:true});
+minimapCanvas.addEventListener('pointerup',()=>{ mmDragging=false; }, {passive:true});
+minimapCanvas.addEventListener('pointercancel',()=>{ mmDragging=false; }, {passive:true});
+document.getElementById('btnMiniToggle').addEventListener('click', ()=>{
+  minimapCollapsed=!minimapCollapsed;
+  minimapCanvas.classList.toggle('hidden', minimapCollapsed);
+});
+document.getElementById('btnAlert').addEventListener('click', ()=>{
+  if(lastAlert) centerOn(lastAlert.x, lastAlert.y);
+  hideAlertButton();
+});
 
 // ---------- Coste / recursos ----------
 function canAfford(s, cost){ for(const k in cost){ if((s.res[k]||0) < cost[k]) return false; } return true; }
@@ -1053,7 +1317,7 @@ function applyDamage(attacker, target, dmg){
   target.hurtT = performance.now();   // flash blanco al recibir daño
   if(target.kind==='unit') target.hitBy = attacker.id;   // permite retaliación
   if(target.owner && attacker.owner && target.owner!==attacker.owner){
-    if(target.owner==='player') alertFlags.player = true;
+    if(target.owner==='player'){ alertFlags.player = true; triggerAttackAlert(target.x, target.y); }
     else if(target.owner==='enemy') alertFlags.enemy = true;   // para el snapshot del cliente
   }
 }
@@ -1176,6 +1440,12 @@ function loop(now){
     } else {
       update(dt);
     }
+  }
+  // Niebla de guerra + minimapa: se recalculan a su propio ritmo (150ms / ~220ms),
+  // no cada cuadro. Corre también en el cliente MP (no simula, pero sí "ve").
+  if(running && !gameOver){
+    fogT-=dt; if(fogT<=0){ fogT=0.15; recomputeFog(); }
+    minimapT-=dt; if(minimapT<=0){ minimapT=0.22; drawMinimap(); }
   }
   render();
   requestAnimationFrame(loop);
@@ -1647,14 +1917,18 @@ function render(){
   drawTerrain();
   drawCorpses();
 
-  // Solo entidades visibles (culling), ordenadas por Y (efecto de profundidad)
+  // Solo entidades visibles (culling + niebla de guerra), ordenadas por Y
+  // (efecto de profundidad). `fogRenderOk` deja pasar siempre lo propio;
+  // filtra lo enemigo/neutral por lo explorado (edificios/recursos) o
+  // visible ahora (unidades) — ver sección «Niebla de guerra».
   const sorted = [];
-  for(let i=0;i<entities.length;i++){ if(onScreen(entities[i])) sorted.push(entities[i]); }
+  for(let i=0;i<entities.length;i++){ const e=entities[i]; if(onScreen(e) && fogRenderOk(e)) sorted.push(e); }
   sorted.sort((a,b)=>a.y-b.y);
   for(const e of sorted){ if(e.kind==='resource') drawResource(e); }
   for(const e of sorted){ if(e.kind==='building') drawBuilding(e); }
   for(const e of sorted){ if(e.kind==='unit') drawUnit(e); }
   drawProjectiles();
+  drawFogOverlay();   // capa de niebla sobre todo lo anterior (terreno+entidades)
 
   // Caja de selección
   if(input.dragSelect){
@@ -2021,6 +2295,9 @@ function drawProjectiles(){
   for(const p of projectiles){
     const frac = clamp(p.dur>0 ? p.t/p.dur : 1, 0, 1);
     const x = p.x0 + (p.x1-p.x0)*frac, y = p.y0 + (p.y1-p.y0)*frac;
+    // Niebla: las flechas propias siempre se ven; las enemigas solo si el
+    // punto en el que están ahora cae en una celda visible.
+    if(p.owner!=='player' && !fogVisibleAt(x,y)) continue;
     const s = worldToScreen(x,y);
     if(s.x<-40||s.x>viewW()+40||s.y<-40||s.y>viewH()+40) continue;
     const ang = Math.atan2(p.y1-p.y0, p.x1-p.x0);
@@ -2039,6 +2316,8 @@ function drawCorpses(){
   for(let i=corpses.length-1;i>=0;i--){
     const c=corpses[i], age=(now-c.t0)/1000;
     if(age>1.1){ corpses.splice(i,1); continue; }
+    // Niebla: los cadáveres enemigos solo se ven si la celda es visible ahora.
+    if(c.owner!=='player' && !fogVisibleAt(c.x,c.y)) continue;
     const s=worldToScreen(c.x,c.y);
     if(s.x<-40||s.x>viewW()+40||s.y<-40||s.y>viewH()+40) continue;
     const fallT = Math.min(1, age/0.4);
@@ -2191,6 +2470,7 @@ function pickAt(p){
   let best=null, bd=1e9;
   for(const e of entities){
     if(e.kind==='resource'||e.kind==='unit'||e.kind==='building'){
+      if(!fogRenderOk(e)) continue;   // no se puede tocar lo que la niebla oculta
       const r = radiusOf(e)+8;
       const dd=dist({x:w.x,y:w.y}, e);
       if(dd<r && dd<bd){ bd=dd; best=e; }
@@ -2399,6 +2679,7 @@ function clearActions(){
 
 function updateActionPanel(){
   clearActions();
+  requestAnimationFrame(positionMinimap);   // el panel puede cambiar de alto (cola, etc.)
   if(placement){
     if(placement.wall){
       selinfoEl.innerHTML = placement.start

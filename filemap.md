@@ -65,6 +65,26 @@ El archivo se organiza en estas secciones (en orden de aparición):
    (osciladores/ruido crudos), `startAmbient` (loop de viento), `playSfx`
    (espada, flecha, talar, picar, construir, unidad lista, edificio destruido,
    alerta, victoria/derrota) y `sfxAllowed` (throttle por nombre de efecto).
+2.55.5. **Niebla de guerra, minimapa y alertas** (Fase 2): constantes
+   `FOG_CELL`/`FOG_COLS`/`FOG_ROWS`/`VISION_UNIT`/`VISION_BLD`, estado
+   (`fogExplored`/`fogVisible` como `Uint8Array` de la rejilla, `fogCanvas`
+   offscreen de baja resolución). Funciones: `fogIndex`/`fogVisibleAt`/
+   `fogExploredAt` (consulta), `markVision`/`recomputeFog` (recálculo cada
+   ~150ms desde `loop`, también en el cliente MP), `redrawFogCanvas` (pinta la
+   textura de niebla), `drawFogOverlay` (la pega sobre el canvas principal con
+   suavizado bilineal), `fogRenderOk` (filtro por entidad, usado en `render`,
+   `drawProjectiles`, `drawCorpses` y `pickAt`) y `resetFog` (reinicio por
+   partida). Alertas: `alertZoneKey`/`triggerAttackAlert` (throttle 8s por
+   zona de 200px, pulso rojo + botón `#btnAlert`), `showAlertButton`/
+   `hideAlertButton`; se dispara desde `applyDamage` (host/SP) y desde
+   `applySnap` (cliente MP, comparando hp entre instantáneas). Minimapa:
+   canvas `#minimap` + botón `#btnMiniToggle` (colapsar), `buildMinimapTerrain`
+   (terreno cacheado 1 vez por mapa), `drawMinimap` (redibujado a ~4.5Hz:
+   terreno + niebla + puntos por bando + pulsos de alerta + rectángulo de
+   cámara), `minimapPointerToCam`/`minimapToWorld` (tocar/arrastrar mueve la
+   cámara) y `positionMinimap` (se recoloca sobre el panel de acciones, cuyo
+   alto varía). Puramente de render/cliente: no cambia el protocolo
+   multijugador ni la lógica de la IA (que sigue "viendo" todo internamente).
 2.6. **Multijugador P2P** (bloque `MULTIJUGADOR P2P`): estado `net`, conexión
    (`netConnect`/`netHostStart`/`netJoinStart`), serialización con bandos
    invertidos (`serEntity`/`deserEntity`/`serProjectile`/`makeSnap`/
@@ -96,19 +116,23 @@ El archivo se organiza en estas secciones (en orden de aparición):
 8. **Lógica de unidades / IA**: `nearestEnemy`, `nearestResourceOfType`,
    `nearestGatherFor`/`nearestAnyResource` (incluyen edificios de producción),
    `srcRtype`, `autoAssignIdle` (aldeano inactivo busca trabajo), `separate`.
-9. **Bucle principal**: `loop`, `update` (proyectiles, unidades con
-   retaliación y auto-trabajo, gather de nodos y edificios de producción con
-   SFX de talar/picar, edificios con torres y bosqueros, muertes con conteo de
+9. **Bucle principal**: `loop` (además de simular, dispara `recomputeFog`
+   cada ~150ms y `drawMinimap` cada ~220ms — ver 2.55.5, también en el
+   cliente MP), `update` (proyectiles, unidades con retaliación y
+   auto-trabajo, gather de nodos y edificios de producción con SFX de
+   talar/picar, edificios con torres y bosqueros, muertes con conteo de
    bajas y creación de cadáveres visuales, fin de partida), `stepToward`
    (guiado por el puente y bloqueo de obstáculos), `spawnTrained` (SFX "unidad
    lista"), `removeEntity` (limpia también `unitFace`), `enemyAI` +
    `DOCTRINE` (3 manuales) y `pickWaveTarget` (objetivo estratégico).
-10. **Render**: `render`, `drawTerrain` (río/puente/riscos), `drawGround`,
-    `drawCorpses` (cadáveres: fade + caída), `onScreen`, `drawResource`/
-    `drawBuilding` (con `drawDamageFx`: humo/fuego por hp) /`drawUnit`
-    (animación procedural — bamboleo, lunge, volteo — y flash `hurtT`; dibujan
-    **sprite** con anillo de bando y sombra, respaldo de emoji),
-    `drawProjectiles` (flechas en vuelo), `drawHpBar`, `roundRect`.
+10. **Render**: `render` (culling `onScreen` + filtro de niebla `fogRenderOk`,
+    y `drawFogOverlay` al final de la escena — ver 2.55.5), `drawTerrain`
+    (río/puente/riscos), `drawGround`, `drawCorpses` (cadáveres: fade + caída,
+    también filtrados por niebla), `onScreen`, `drawResource`/`drawBuilding`
+    (con `drawDamageFx`: humo/fuego por hp) /`drawUnit` (animación procedural
+    — bamboleo, lunge, volteo — y flash `hurtT`; dibujan **sprite** con anillo
+    de bando y sombra, respaldo de emoji), `drawProjectiles` (flechas en
+    vuelo, también filtradas por niebla), `drawHpBar`, `roundRect`.
 11. **Entrada táctil**: objeto `input`, manejadores `pointerdown/move/up/cancel`,
     `wheel`, teclado; `pickAt`, `handleTap`, `handleDoubleTap`,
     `finishBoxSelect`, `selectedUnits`, `selectedBuilding`; colocación

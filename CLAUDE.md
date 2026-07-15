@@ -282,3 +282,35 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     Safari/iOS, nada suena antes de eso).
   - **Micro-feedback**: ping verde (`addPing(...,'#7ddd7d')`) en el destino de
     una orden de movimiento, además del ping dorado ya existente de selección.
+- **FASE 2 — Niebla de guerra, minimapa y alertas** (PR #11): ver `PLAN.md`
+  §4 F2. Cambios:
+  - **Niebla de guerra de 3 estados** (oculto/explorado/visible) sobre una
+    rejilla de 40px/celda (65×38 celdas, cubre todo `WORLD`): oculto = negro
+    opaco, explorado = oscurecido (terreno/edificios visibles, unidades no),
+    visible = sin oscurecer. Visión de 180px por unidad y 220px por edificio
+    propio construido. Se recalcula cada ~150ms (`recomputeFog`, no cada
+    cuadro) sobre un array `Uint8Array` de la rejilla, y se pinta con una sola
+    llamada `drawImage` escalando una textura de baja resolución (`fogCanvas`,
+    1 celda = 1 píxel) con suavizado bilineal, así los bordes de la visión
+    salen redondeados sin coste por celda en cada cuadro. Es **puramente de
+    render/cliente**: no toca `entities` ni el protocolo multijugador
+    (`serEntity`/`makeSnap` sin cambios) — cada cliente (host o jugador
+    remoto) calcula su propia niebla a partir de sus propias entidades
+    (`owner==='player'`, ya con los bandos intercambiados en MP). La IA
+    enemiga sigue "viendo" el tablero completo como siempre (no se le oculta
+    nada a propósito en su lógica); solo cambia lo que el JUGADOR ve dibujado
+    y lo que puede tocar (`pickAt` también respeta la niebla).
+  - **Minimapa** (esquina inferior-derecha, colapsable con un botón ≥44px):
+    terreno cacheado una vez por partida, niebla (reutiliza la misma textura
+    del mapa principal), puntos de unidades/edificios por bando (filtrados por
+    niebla) y el rectángulo de la cámara. Tocar o arrastrar sobre el minimapa
+    mueve la cámara (`centerOn`). Se redibuja a ~4.5Hz (`drawMinimap`), no cada
+    cuadro.
+  - **Alertas de ataque**: cuando algo del jugador recibe daño (host/partida
+    local vía `applyDamage`, o el cliente MP comparando hp entre instantáneas
+    en `applySnap`, que no simula daño pero sí lo detecta), con throttle de
+    8s por zona de 200px (`triggerAttackAlert`). Si el punto atacado está
+    fuera de cámara: pulso rojo que se desvanece en el minimapa y aparece el
+    botón temporal "⚔️ ir al ataque" en `#util` (se oculta solo a los 10s o al
+    tocarlo, y centra la cámara en la última zona atacada). El SFX de alerta
+    (Fase 1) suena aparte, sin este throttle por zona.
