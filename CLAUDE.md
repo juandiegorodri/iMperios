@@ -250,3 +250,35 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
   acciones con scroll), config de despliegue estático en Vercel (`vercel.json`,
   `.vercelignore`) y aviso claro de que el multijugador `ws://` no funciona desde
   `https://`.
+- **PLAN.md: hoja de ruta por fases** (2026-07-06): plan maestro con principios
+  de diseño, reglas del ejecutor y 8 fases (F1 vida → F8 rendimiento) para que
+  el juego "se sienta un AoE real"; cada fase se ejecuta en su propio PR.
+- **FASE 1 — Está vivo: animación, proyectiles y sonido** (PR #10): ver
+  `PLAN.md` §4 F1. Cambios:
+  - **Animación procedural de unidades** (sin sprites nuevos): bamboleo vertical
+    y ligera inclinación al caminar, "lunge" (desplazamiento hacia el objetivo)
+    al atacar/recolectar/construir, y volteo horizontal (`e.face`) según la
+    dirección de movimiento real. Se calcula en `drawUnit` a partir del
+    desplazamiento cuadro a cuadro (funciona igual en host y en el cliente MP,
+    donde las entidades se recrean en cada instantánea). Por rendimiento, el
+    transform se aplica con `ctx.setTransform` (no `save/restore`, mucho más
+    barato con muchas unidades en pantalla).
+  - **Proyectiles reales** (`projectiles[]`): arqueros, héroe de arco, torres,
+    torres de muralla y castillo disparan una flecha visible que viaja
+    (~300px/s) y aplica el daño **al impactar** (`computeDamage`/`applyDamage`,
+    ya no al disparar). En multijugador viajan en el snapshot (`shots`) y el
+    cliente solo los interpola (no simula daño).
+  - **Muertes y daño visuales**: cadáveres (`corpses[]`, fuera de `entities`)
+    con fade + caída de 0.4s al morir una unidad; flash blanco (`e.hurtT`) al
+    recibir daño; edificios con <50% hp echan humo y <25% también fuego
+    (`drawDamageFx`, derivado del hp actual, ya sincronizado por snapshot). El
+    cliente MP reconstruye cadáveres y flashes comparando instantáneas
+    consecutivas (sin simular).
+  - **Sonido sintetizado con WebAudio** (sin archivos de audio): espada,
+    flecha, talar, picar, construir, unidad lista, edificio destruido, alerta
+    de ataque y victoria/derrota, más un loop ambiental de viento a bajo
+    volumen. Botón 🔊/🔇 en `#util` (persistido en `localStorage`); el
+    `AudioContext` se crea/reanuda en el primer toque del usuario (requisito de
+    Safari/iOS, nada suena antes de eso).
+  - **Micro-feedback**: ping verde (`addPing(...,'#7ddd7d')`) en el destino de
+    una orden de movimiento, además del ping dorado ya existente de selección.

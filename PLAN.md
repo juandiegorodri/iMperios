@@ -82,7 +82,7 @@ El plan ataca las brechas en ese orden: primero *sensación* (1-2), luego
 
 ## 4. FASES
 
-### FASE 1 — «Está vivo»: animación, proyectiles y sonido ⬜
+### FASE 1 — «Está vivo»: animación, proyectiles y sonido ✅
 **Por qué primero**: es el 80% de la sensación. Hoy las unidades se deslizan
 mudas; con esto el mismo juego "se convierte" en un juego de verdad.
 
@@ -326,7 +326,7 @@ F6 Guardar+tutorial ──► F7 MP web (WebRTC) ──► F8 Rendimiento final
 ## 6. Registro de fases
 | Fase | Estado | PR | Notas |
 |---|---|---|---|
-| F1 Vida | ⬜ | — | |
+| F1 Vida | ✅ | #10 | Animación procedural sin sprites nuevos, proyectiles reales con daño al impacto, cadáveres/flash/humo-fuego, 10 SFX sintetizados + ambiente, ping verde. Ver `progress.md` 2026-07-15. |
 | F2 Niebla+minimapa | ⬜ | — | |
 | F3 Manos RTS | ⬜ | — | |
 | F4 Pathfinding | ⬜ | — | |

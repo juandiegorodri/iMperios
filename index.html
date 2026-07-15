@@ -116,6 +116,7 @@
   <div class="ub" id="btnIdle" title="Aldeanos inactivos">👷<span class="badge" id="idleBadge">0</span></div>
   <div class="ub" id="btnCenter" title="Centrar">⌂</div>
   <div class="ub" id="btnPause" title="Pausa">⏸</div>
+  <div class="ub" id="btnSound" title="Sonido">🔊</div>
 </div>
 
 <div id="hint" class="hidden"></div>
@@ -365,6 +366,10 @@ const enemy  = { res:{food:300, wood:300, gold:200, stone:200}, age:1, mods:fres
 let bridge = null;          // {x0,x1,y0,y1} hueco transitable del río (puente)
 let frameWalls = [];        // murallas construidas (recalculado cada frame)
 let pings = [];             // efectos de selección/deselección
+let projectiles = [];       // flechas en vuelo (arqueros, héroe arco, torres, castillo)
+let corpses = [];           // cadáveres visuales (fade + caída), fuera de `entities`
+const unitFace = new Map(); // id → {x,y,face,walking}: animación procedural (bamboleo/volteo)
+let alertFlags = { player:false, enemy:false };  // "me atacan" pendiente de sonido/snapshot
 
 function side(owner){ return owner==='player'?player:enemy; }
 
@@ -401,11 +406,105 @@ function drawSprite(name, cx, cy, targetH, anchorBottom){
   ctx.drawImage(img, cx - w/2, dy, w, h);
   return true;
 }
+// Transform local barato para la animación de unidades (traslado+rotación+
+// volteo) SIN usar ctx.save()/restore(): en Canvas 2D clonar todo el estado
+// (fillStyle, clip, alpha...) en cada unidad es mucho más caro que fijar la
+// matriz directamente con setTransform y luego volver a la base (DPR). Medido
+// con Playwright: ~130 unidades con save/restore por cuadro costaba ~35% fps.
+function setUnitTransform(cx, cy, tilt, face){
+  const c = Math.cos(tilt), sn = Math.sin(tilt);
+  ctx.setTransform(DPR*face*c, DPR*face*sn, DPR*-sn, DPR*c, DPR*cx, DPR*cy);
+}
+function resetTransform(){ ctx.setTransform(DPR,0,0,DPR,0,0); }
+
 // Sombra elíptica bajo unidades/edificios para anclarlos al suelo.
 function drawShadow(cx, cy, rx){
   ctx.save(); ctx.translate(cx, cy); ctx.scale(1, 0.4);
   ctx.beginPath(); ctx.arc(0,0,rx,0,Math.PI*2);
   ctx.fillStyle='rgba(0,0,0,.28)'; ctx.fill(); ctx.restore();
+}
+
+// ---------- Sonido (WebAudio sintetizado, sin archivos) ----------
+// iOS/Safari exige crear/reanudar el AudioContext en el PRIMER gesto táctil:
+// no se reproduce nada antes de eso. El interruptor persiste en localStorage.
+let audioCtx = null, masterGain = null, ambientNode = null;
+let soundOn = localStorage.getItem('miniaoe_sound') !== 'off';
+const _sfxLast = {};
+function sfxAllowed(name, minGapMs){
+  const now = performance.now();
+  if(_sfxLast[name]!==undefined && now-_sfxLast[name] < minGapMs) return false;
+  _sfxLast[name] = now; return true;
+}
+function ensureAudio(){
+  if(audioCtx){ if(audioCtx.state==='suspended') audioCtx.resume(); return; }
+  try{
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = soundOn ? 0.5 : 0;
+    masterGain.connect(audioCtx.destination);
+    startAmbient();
+  }catch(err){ audioCtx = null; }
+}
+function setSoundOn(on){
+  soundOn = on;
+  localStorage.setItem('miniaoe_sound', on ? 'on' : 'off');
+  if(masterGain && audioCtx) masterGain.gain.setTargetAtTime(on?0.5:0, audioCtx.currentTime, 0.05);
+  const btn = document.getElementById('btnSound'); if(btn) btn.textContent = on ? '🔊' : '🔇';
+}
+function playTone(freq, dur, type, vol, when){
+  if(!audioCtx || !soundOn) return;
+  const t0 = audioCtx.currentTime + (when||0);
+  const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+  osc.type = type||'sine'; osc.frequency.setValueAtTime(freq, t0);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(Math.max(vol,0.0001), t0+0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+  osc.connect(g); g.connect(masterGain);
+  osc.start(t0); osc.stop(t0+dur+0.03);
+}
+function playNoise(dur, vol, filterFreq, type){
+  if(!audioCtx || !soundOn) return;
+  const t0 = audioCtx.currentTime;
+  const n = Math.max(1, Math.floor(audioCtx.sampleRate*dur));
+  const buf = audioCtx.createBuffer(1, n, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for(let i=0;i<n;i++) data[i] = (Math.random()*2-1) * (1-i/n);
+  const src = audioCtx.createBufferSource(); src.buffer = buf;
+  const filt = audioCtx.createBiquadFilter(); filt.type = type||'bandpass'; filt.frequency.value = filterFreq||1200;
+  const g = audioCtx.createGain(); g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.001, t0+dur);
+  src.connect(filt); filt.connect(g); g.connect(masterGain);
+  src.start(t0);
+}
+// Loop ambiental suave (viento) a bajo volumen, arranca junto al AudioContext.
+function startAmbient(){
+  if(!audioCtx || ambientNode) return;
+  const n = audioCtx.sampleRate*2;
+  const buf = audioCtx.createBuffer(1, n, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for(let i=0;i<n;i++) data[i] = Math.random()*2-1;
+  const src = audioCtx.createBufferSource(); src.buffer = buf; src.loop = true;
+  const filt = audioCtx.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=380;
+  const g = audioCtx.createGain(); g.gain.value = 0.045;
+  src.connect(filt); filt.connect(g); g.connect(masterGain);
+  src.start();
+  ambientNode = {src, g};
+}
+// Efectos sintetizados (osciladores/ruido, sin archivos): espada, flecha, talar,
+// picar, construir, unidad lista, edificio destruido, alerta y victoria/derrota.
+function playSfx(name){
+  if(!audioCtx || !soundOn) return;
+  switch(name){
+    case 'sword':     if(sfxAllowed('sword',70))  playNoise(0.08, 0.22, 2400, 'bandpass'); break;
+    case 'arrow':     if(sfxAllowed('arrow',60))  playTone(1500, 0.07, 'sine', 0.10); break;
+    case 'chop':      if(sfxAllowed('chop',420))  playNoise(0.07, 0.18, 850, 'bandpass'); break;
+    case 'mine':      if(sfxAllowed('mine',420))  playTone(300, 0.06, 'square', 0.11); break;
+    case 'build':     if(sfxAllowed('build',380)) playTone(680, 0.05, 'square', 0.10); break;
+    case 'ready':     playTone(880,0.10,'triangle',0.18); playTone(1180,0.12,'triangle',0.15,0.09); break;
+    case 'destroyed': if(sfxAllowed('destroyed',150)){ playNoise(0.45,0.26,280,'lowpass'); playTone(85,0.45,'sawtooth',0.14); } break;
+    case 'alert':     if(sfxAllowed('alert',5000)){ playTone(520,0.14,'square',0.22); playTone(520,0.14,'square',0.2,0.22); } break;
+    case 'victory':   playTone(523,0.16,'triangle',0.2); playTone(659,0.16,'triangle',0.2,0.16); playTone(784,0.3,'triangle',0.22,0.32); break;
+    case 'defeat':    playTone(392,0.22,'sawtooth',0.16); playTone(311,0.34,'sawtooth',0.15,0.2); break;
+  }
 }
 
 /* ==================== MULTIJUGADOR P2P (host autoritativo) ====================
@@ -488,15 +587,46 @@ function deserEntity(o){
   return e;
 }
 function serSide(s){ return { res:{...s.res}, age:s.age, upg:{...s.upg}, stats:{...s.stats} }; }
+// Proyectiles: campo ligero en el snapshot para que el cliente los reconstruya
+// (no simula: solo interpola la flecha entre origen y destino con t/dur).
+function serProjectile(p){
+  return { x0:Math.round(p.x0), y0:Math.round(p.y0), x1:Math.round(p.x1), y1:Math.round(p.y1),
+    t:Math.round(p.t*100)/100, dur:Math.round(p.dur*100)/100, o:flipOwner(p.owner) };
+}
 // El "yo" del cliente es el lado 'enemy' del host (por eso va flipado).
 function makeSnap(){
-  return { t:'snap', ents: entities.map(serEntity), me: serSide(enemy), foe: serSide(player) };
+  return { t:'snap', ents: entities.map(serEntity), me: serSide(enemy), foe: serSide(player),
+    shots: projectiles.map(serProjectile) };
 }
 function applySnap(m){
+  // Estado previo para reconstruir efectos puramente visuales (el cliente no
+  // simula daño ni muertes): flash al bajar hp y cadáveres de unidades que
+  // desaparecieron entre instantáneas.
+  const prevHp = {}, prevUnits = {};
+  for(const e of entities){
+    if(e.hp!==undefined) prevHp[e.id] = e.hp;
+    if(e.kind==='unit') prevUnits[e.id] = { x:e.x, y:e.y, type:e.type, owner:e.owner };
+  }
+  const prevTrained = player.stats.trained, prevLostB = player.stats.lostB + enemy.stats.lostB;
   entities = m.ents.map(deserEntity);
   rebuildIndex();
+  const nowTs = performance.now(), liveIds = new Set();
+  for(const e of entities){
+    liveIds.add(e.id);
+    if(e.hp!==undefined && prevHp[e.id]!==undefined && e.hp < prevHp[e.id]) e.hurtT = nowTs;
+  }
+  for(const id in prevUnits){
+    if(!liveIds.has(+id)){
+      const u = prevUnits[id];
+      corpses.push({ x:u.x, y:u.y, type:u.type, owner:u.owner, face:1, t0:nowTs });
+    }
+  }
+  projectiles = (m.shots||[]).map(o=>({ x0:o.x0, y0:o.y0, x1:o.x1, y1:o.y1, t:o.t, dur:o.dur, owner:o.o }));
   Object.assign(player, m.me);
   Object.assign(enemy,  m.foe);
+  if(player.stats.trained > prevTrained) playSfx('ready');
+  if(player.stats.lostB + enemy.stats.lostB > prevLostB) playSfx('destroyed');
+  if(m.al) playSfx('alert');
 }
 
 // --- Mensajería ---
@@ -520,6 +650,7 @@ function clientStartFromInit(m){
   mapTheme = m.cfg.map; gameSpeed = 1;
   terrain = m.terrain||[]; bridge = m.bridge||null;
   entities=[]; selection=[]; placement=null; pings=[]; frameWalls=[];
+  projectiles=[]; corpses=[]; unitFace.clear(); alertFlags={player:false,enemy:false};
   player.mods=freshMods(); enemy.mods=freshMods();
   applySnap(m.snap);
   gameOver=false; paused=false; running=true;
@@ -532,6 +663,7 @@ function clientStartFromInit(m){
 }
 function clientEnd(win){
   if(gameOver) return; gameOver=true; running=false;
+  playSfx(win?'victory':'defeat');
   document.getElementById('endTitle').textContent = win?'🏆 ¡Victoria!':'💀 Derrota';
   document.getElementById('endText').textContent = win
     ? 'Destruiste el Centro Urbano rival. ¡Bien jugado!'
@@ -614,7 +746,7 @@ function makeBuilding(owner, btype, x, y, built){
   const b = { id:genId(), kind:'building', owner, btype, x, y,
     hp: built? d.hp : Math.max(1, d.hp*0.05), maxHp:d.hp,
     built:!!built, progress: built? d.build : 0, queue:[], rally:null,
-    cd:0, anim:0, shotAt:null };
+    cd:0, anim:0 };
   if(d.produces){ b.maxReserve = 500; b.reserve = 500; }   // capacidad finita
   return b;
 }
@@ -629,7 +761,8 @@ function startGame(cfg){
   gameSpeed = SPEED_PRESETS[cfg.speed].mult;
   mapTheme = cfg.map;
   entities = []; selection = []; nextId = 1; placement = null; terrain = []; bridge = null;
-  frameWalls = []; pings = [];
+  frameWalls = []; pings = []; projectiles = []; corpses = []; unitFace.clear();
+  alertFlags = {player:false, enemy:false};
   gameOver = false; paused = false; running = true;
 
   // Recursos iniciales según preset
@@ -883,7 +1016,9 @@ function gatherRate(e, rtype){
 }
 
 // ---------- Combate ----------
-function damage(attacker, target){
+// Cálculo puro del daño de una unidad atacante (sin efectos secundarios), para
+// poder decidirlo en el momento del disparo pero aplicarlo recién al impacto.
+function computeDamage(attacker, target){
   let dmg = unitAtk(attacker);
   const aCat = UNIT[attacker.type].cat;
   // El arquero a distancia pega completo; en cuerpo a cuerpo (enemigo pegado)
@@ -891,10 +1026,47 @@ function damage(attacker, target){
   if(aCat==='archer' && dist(attacker,target) < 40) dmg *= 0.5;
   if(target.kind==='unit' && STRONG_VS[aCat]===UNIT[target.type].cat) dmg*=BONUS;
   if(target.kind==='unit') dmg -= unitArmor(target);
-  dmg = Math.max(1, dmg);
+  return Math.max(1, dmg);
+}
+// Aplica el daño ya calculado (al impactar, sea golpe cuerpo a cuerpo instantáneo
+// o proyectil que llega). Marca flash de daño, retaliación y alerta de ataque.
+function applyDamage(attacker, target, dmg){
   target.hp -= dmg;
-  attacker.anim = 0.25;
+  target.hurtT = performance.now();   // flash blanco al recibir daño
   if(target.kind==='unit') target.hitBy = attacker.id;   // permite retaliación
+  if(target.owner && attacker.owner && target.owner!==attacker.owner){
+    if(target.owner==='player') alertFlags.player = true;
+    else if(target.owner==='enemy') alertFlags.enemy = true;   // para el snapshot del cliente
+  }
+}
+// Golpe cuerpo a cuerpo instantáneo (infantería, piqueros, caballería, aldeanos).
+function damage(attacker, target){
+  const dmg = computeDamage(attacker, target);
+  applyDamage(attacker, target, dmg);
+  attacker.anim = 0.25;
+  playSfx('sword');
+}
+// Dispara un proyectil visible (arquero/héroe arco/torre/castillo); el daño
+// `dmg` ya viene calculado y se aplica recién al impactar (updateProjectiles).
+function fireProjectile(attacker, target, dmg){
+  const d = dist(attacker, target) || 1;
+  const dur = Math.max(0.05, d/300);   // ~300px/s
+  projectiles.push({ x0:attacker.x, y0:attacker.y, x1:target.x, y1:target.y, t:0, dur, dmg,
+    aId:attacker.id, tId:target.id, owner:attacker.owner });
+  attacker.anim = 0.25;
+  playSfx('arrow');
+}
+// Avanza los proyectiles en vuelo y aplica el daño al llegar a destino (host/SP).
+function updateProjectiles(dt){
+  for(let i=projectiles.length-1;i>=0;i--){
+    const p = projectiles[i];
+    p.t += dt;
+    if(p.t >= p.dur){
+      const t = find(p.tId), a = find(p.aId);
+      if(t && t.hp>0 && a) applyDamage(a, t, p.dmg);
+      projectiles.splice(i,1);
+    }
+  }
 }
 
 // ---------- Lógica de IA / órdenes para unidades ----------
@@ -1006,6 +1178,8 @@ function cancelQueued(b, idx){
 function update(dt){
   // Murallas construidas (para colisión de movimiento de este frame)
   frameWalls = entities.filter(e=>e.kind==='building'&&BLD[e.btype].wall&&e.built);
+  // Proyectiles en vuelo de este frame (disparados el frame anterior)
+  updateProjectiles(dt);
   // Unidades
   for(const e of entities){
     if(e.kind!=='unit') continue;
@@ -1051,6 +1225,7 @@ function update(dt){
         if(dist(e,g) > reach){ stepToward(e, g, dt); }
         else {
           e.anim = 0.3;
+          playSfx(rtype==='wood' ? 'chop' : 'mine');
           if(isBld){
             const amt = Math.min(g.reserve, gatherRate(e, rtype)*dt);   // capacidad finita
             g.reserve -= amt; side(e.owner).res[rtype] += amt;
@@ -1075,6 +1250,7 @@ function update(dt){
         else if(!b.built){
           // CONSTRUIR
           b.progress += dt; e.anim=0.3;
+          playSfx('build');
           const need = BLD[b.btype].build;
           b.hp = Math.max(b.hp, BLD[b.btype].hp * (0.05 + 0.95*Math.min(1,b.progress/need)));
           if(b.progress>=need){ b.built=true; b.hp=BLD[b.btype].hp; e.state='idle'; e.build=null;
@@ -1122,7 +1298,12 @@ function update(dt){
       else {
         const reach = unitRange(e) + radiusOf(t);
         if(dist(e,t) > reach){ stepToward(e, t, dt); }
-        else if(e.cd<=0){ damage(e,t); e.cd = UNIT[e.type].cd; }
+        else if(e.cd<=0){
+          // Arqueros (incl. héroe arco) disparan flecha real; el resto pega al instante.
+          if(UNIT[e.type].cat==='archer') fireProjectile(e, t, computeDamage(e,t));
+          else damage(e,t);
+          e.cd = UNIT[e.type].cd;
+        }
       }
     }
 
@@ -1144,8 +1325,8 @@ function update(dt){
       if(tgt && e.cd<=0){
         let dmg = bd.atk;
         if(tgt.kind==='unit') dmg = Math.max(1, dmg - unitArmor(tgt));
-        tgt.hp -= dmg; e.cd = bd.cd; e.anim=0.2; e.shotAt={x:tgt.x,y:tgt.y};
-        if(tgt.kind==='unit') tgt.hitBy = e.id;   // el atacado puede responder a la torre
+        fireProjectile(e, tgt, Math.max(1,dmg));
+        e.cd = bd.cd;
       }
     }
     // Bosquero: planta árboles cercanos cada cierto tiempo (madera renovable)
@@ -1177,8 +1358,12 @@ function update(dt){
   for(const e of entities){ if((e.kind==='unit'||e.kind==='building') && e.hp<=0) dead.push(e); }
   for(const d of dead){
     const own=side(d.owner), foe=side(d.owner==='player'?'enemy':'player');
-    if(d.kind==='unit'){ own.stats.losses++; foe.stats.kills++; }
-    else if(d.kind==='building'){ own.stats.lostB++; }
+    if(d.kind==='unit'){
+      own.stats.losses++; foe.stats.kills++;
+      const fx=unitFace.get(d.id);
+      corpses.push({ x:d.x, y:d.y, type:d.type, owner:d.owner, face:fx?fx.face:1, t0:performance.now() });
+    }
+    else if(d.kind==='building'){ own.stats.lostB++; playSfx('destroyed'); }
     removeEntity(d);
   }
 
@@ -1191,10 +1376,18 @@ function update(dt){
   if(!eTown){ endGame(true); }
   else if(!pTown){ endGame(false); }
 
+  // Alerta sonora "te atacan" para el propio bando (host o partida local)
+  if(alertFlags.player){ playSfx('alert'); alertFlags.player=false; }
+
   // Multijugador: el anfitrión difunde instantáneas de estado (~7/s)
   if(net.mode==='host' && net.ready && !gameOver){
     net.snapT -= dt;
-    if(net.snapT<=0){ net.snapT=0.15; netSend(makeSnap()); }
+    if(net.snapT<=0){
+      net.snapT=0.15;
+      const snap = makeSnap();
+      snap.al = alertFlags.enemy; alertFlags.enemy=false;   // "te atacan" para el cliente remoto
+      netSend(snap);
+    }
   }
 
   updateTopbar();
@@ -1246,6 +1439,7 @@ function spawnTrained(b, type){
   const u = makeUnit(b.owner, type, b.x+Math.cos(ang)*(sz/2+22), b.y+Math.sin(ang)*(sz/2+22));
   entities.push(u);
   side(b.owner).stats.trained++;
+  if(b.owner==='player') playSfx('ready');
   const r = b.rally;
   if(r){
     if(type==='villager'){
@@ -1260,6 +1454,7 @@ function removeEntity(ent){
   const i = entities.indexOf(ent);
   if(i>=0) entities.splice(i,1);
   _byId.delete(ent.id);
+  unitFace.delete(ent.id);   // limpia el seguimiento de animación (evita fugas de memoria)
   // limpiar referencias
   selection = selection.filter(id=>id!==ent.id);
   for(const e of entities){
@@ -1432,6 +1627,7 @@ function render(){
   ctx.fillStyle=(MAPS[mapTheme]&&MAPS[mapTheme].ground)||'#1a1d16'; ctx.fillRect(0,0,viewW(),viewH());
   drawGround();
   drawTerrain();
+  drawCorpses();
 
   // Solo entidades visibles (culling), ordenadas por Y (efecto de profundidad)
   const sorted = [];
@@ -1440,6 +1636,7 @@ function render(){
   for(const e of sorted){ if(e.kind==='resource') drawResource(e); }
   for(const e of sorted){ if(e.kind==='building') drawBuilding(e); }
   for(const e of sorted){ if(e.kind==='unit') drawUnit(e); }
+  drawProjectiles();
 
   // Caja de selección
   if(input.dragSelect){
@@ -1569,6 +1766,34 @@ function drawResource(e){
   ctx.fillStyle=d.color; ctx.fillRect(s.x-w/2, s.y+sz*0.6, w*frac, 3);
 }
 
+// Humo (hp<50%) y fuego (hp<25%) sobre un edificio dañado; puramente decorativo,
+// derivado del hp/maxHp actual (ya sincronizado por snapshot en el cliente MP).
+function drawDamageFx(e, cx, cy, sz){
+  const frac = e.maxHp ? e.hp/e.maxHp : 1;
+  if(frac >= 0.5) return;
+  const now = performance.now();
+  const n = frac < 0.25 ? 3 : 2;
+  for(let i=0;i<n;i++){
+    const ph = ((now/900 + i*0.6 + (e.id%7)*0.3) % 1);
+    const px = cx + Math.sin(e.id*1.3+i)*sz*0.22;
+    const py = cy - ph*26*cam.zoom;
+    const r = (3+ph*5)*cam.zoom;
+    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(120,120,120,${(1-ph)*0.35})`;
+    ctx.fill();
+  }
+  if(frac < 0.25){
+    const fl = 0.5+0.5*Math.sin(now/90 + e.id);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy-6*cam.zoom);
+    ctx.lineTo(cx-5*cam.zoom, cy+4*cam.zoom);
+    ctx.lineTo(cx+5*cam.zoom, cy+4*cam.zoom);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(255,${Math.floor(120+fl*60)},40,0.85)`;
+    ctx.fill();
+  }
+}
+
 function drawBuilding(e){
   if(!onScreen(e)) return;
   const s=worldToScreen(e.x,e.y); const d=BLD[e.btype];
@@ -1597,6 +1822,20 @@ function drawBuilding(e){
     ctx.fillText(d.emoji, s.x, s.y);
   }
   ctx.globalAlpha=1;
+  // flash blanco al recibir daño
+  if(e.hurtT){
+    const age = performance.now()-e.hurtT;
+    if(age<90){
+      ctx.save();
+      ctx.globalAlpha = 0.5*(1-age/90);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = '#fff';
+      roundRect(s.x-sz/2, s.y-sz/2, sz, sz, 8*cam.zoom); ctx.fill();
+      ctx.restore();
+    }
+  }
+  // humo/fuego cuando el edificio está dañado (<50% humo, <25% también fuego)
+  if(e.built) drawDamageFx(e, s.x, s.y + sz*0.12 - spriteH*0.55, sz);
   // bandera de bando al tope del edificio (no en murallas), para saber de quién es
   if(!d.wall && e.built){
     const fy = s.y + sz*0.12 - spriteH + 8*cam.zoom, fx = s.x + sz*0.32;
@@ -1618,12 +1857,7 @@ function drawBuilding(e){
   // rally
   if(sel && e.rally){ const r=worldToScreen(e.rally.x,e.rally.y);
     ctx.fillStyle='#caa46a'; ctx.font=`${16*cam.zoom}px serif`; ctx.fillText('🚩', r.x, r.y); }
-  // disparo de torre
-  if(d.atk && e.anim>0 && e.shotAt){
-    const ts=worldToScreen(e.shotAt.x, e.shotAt.y);
-    ctx.strokeStyle='#ffd97a'; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.moveTo(s.x, s.y-sz*0.2); ctx.lineTo(ts.x, ts.y); ctx.stroke();
-  }
+  // (el disparo se ve como flecha real en `projectiles[]`, ver drawProjectiles)
   // radio de alcance de la torre cuando está seleccionada
   if(sel && d.atk){
     ctx.strokeStyle='rgba(202,164,106,.35)'; ctx.lineWidth=1.5;
@@ -1635,22 +1869,66 @@ function drawUnit(e){
   if(!onScreen(e)) return;
   const s=worldToScreen(e.x,e.y); const d=UNIT[e.type];
   const sel = e.owner==='player' && selection.includes(e.id);
+
+  // --- Animación procedural (sin nuevos assets): volteo, bamboleo, lunge ---
+  // Se deriva del movimiento real cuadro a cuadro (funciona igual en host y en
+  // el cliente MP, donde las entidades se recrean en cada instantánea).
+  let fx = unitFace.get(e.id);
+  if(!fx){ fx = { x:e.x, y:e.y, face:1, walking:false }; unitFace.set(e.id, fx); }
+  const movedD = Math.hypot(e.x-fx.x, e.y-fx.y);
+  fx.walking = movedD > 0.12;
+  if(Math.abs(e.x-fx.x) > 0.15) fx.face = (e.x-fx.x) < 0 ? -1 : 1;
+  fx.x = e.x; fx.y = e.y;
+  e.face = fx.face;
+
+  let bob=0, tilt=0, lungeX=0, lungeY=0;
+  if(fx.walking){
+    const ph = performance.now()/110 + e.id*1.7;
+    bob = Math.sin(ph) * 2.2 * cam.zoom;
+    tilt = Math.sin(ph) * (4*Math.PI/180);
+  }
+  if(e.anim>0){
+    let tp=null;
+    if(e.state==='attack' && e.target){ tp=find(e.target.id); }
+    else if(e.state==='gather' && e.gather){ tp=find(e.gather.id); }
+    else if(e.state==='build' && e.build){ tp=find(e.build); }
+    if(tp){
+      const ldx=tp.x-e.x, ldy=tp.y-e.y, ld=Math.hypot(ldx,ldy)||1;
+      const amt = 4*cam.zoom*Math.min(1, e.anim/0.12);
+      lungeX = ldx/ld*amt; lungeY = ldy/ld*amt;
+    }
+  }
+
   const sz=22*cam.zoom * (e.anim>0?1.15:1);
+  setUnitTransform(s.x+lungeX, s.y+lungeY+bob, tilt, fx.face);
   // anillo de bando
-  ctx.beginPath(); ctx.arc(s.x, s.y+sz*0.35, sz*0.5, 0, Math.PI*2);
+  ctx.beginPath(); ctx.arc(0, sz*0.35, sz*0.5, 0, Math.PI*2);
   ctx.fillStyle = e.owner==='player' ? 'rgba(91,134,196,.55)' : 'rgba(196,106,106,.55)';
   ctx.fill();
   const uH = 40*cam.zoom * (e.anim>0?1.12:1);
-  if(!drawSprite('unit_'+e.type, s.x, s.y+sz*0.35, uH, true)){
+  if(!drawSprite('unit_'+e.type, 0, sz*0.35, uH, true)){
     // respaldo: aura + emoji + estrella de héroe
     if(d.hero){
-      ctx.beginPath(); ctx.arc(s.x, s.y+sz*0.1, sz*0.7, 0, Math.PI*2);
+      ctx.beginPath(); ctx.arc(0, sz*0.1, sz*0.7, 0, Math.PI*2);
       ctx.fillStyle='rgba(230,190,90,.28)'; ctx.fill();
     }
     ctx.font=`${sz}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(d.emoji, s.x, s.y);
-    if(d.hero){ ctx.font=`${12*cam.zoom}px serif`; ctx.fillText('⭐', s.x+sz*0.45, s.y-sz*0.45); }
+    ctx.fillText(d.emoji, 0, 0);
+    if(d.hero){ ctx.font=`${12*cam.zoom}px serif`; ctx.fillText('⭐', sz*0.45, -sz*0.45); }
   }
+  // flash blanco al recibir daño
+  if(e.hurtT){
+    const age = performance.now()-e.hurtT;
+    if(age<90){
+      ctx.save();
+      ctx.globalAlpha = 0.6*(1-age/90);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.beginPath(); ctx.arc(0, sz*0.1, sz*0.75, 0, Math.PI*2);
+      ctx.fillStyle = '#fff'; ctx.fill();
+      ctx.restore();
+    }
+  }
+  resetTransform();
   // símbolo del recurso que recolecta el aldeano (insignia)
   if(e.type==='villager' && e.state==='gather' && e.gather){
     const g=find(e.gather.id);
@@ -1677,11 +1955,7 @@ function drawUnit(e){
   if(e.hp<e.maxHp) drawHpBar(s.x, s.y-30*cam.zoom, 24*cam.zoom, e.hp/e.maxHp, e.owner);
   // selección (anillo pulsante a los pies)
   if(sel) drawSelRing(s.x, s.y+sz*0.35, sz*0.66);
-  // flecha de arquero atacando
-  if(e.type==='archer' && e.anim>0 && e.target){
-    const t=find(e.target.id); if(t){ const ts=worldToScreen(t.x,t.y);
-      ctx.strokeStyle='#eee'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(ts.x,ts.y); ctx.stroke(); }
-  }
+  // (el disparo del arquero se ve como flecha real en `projectiles[]`)
 }
 
 // --- Selección animada ---
@@ -1717,6 +1991,48 @@ function drawPings(){
     ctx.save(); ctx.translate(s.x, s.y+6*cam.zoom); ctx.scale(1,0.5);
     ctx.strokeStyle=pg.color; ctx.globalAlpha=1-age; ctx.lineWidth=2.5;
     ctx.beginPath(); ctx.arc(0,0,Math.max(2,r),0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.globalAlpha=1;
+}
+
+// --- Proyectiles: flechas visibles en vuelo (arqueros/héroe arco/torres/castillo) ---
+function drawProjectiles(){
+  for(const p of projectiles){
+    const frac = clamp(p.dur>0 ? p.t/p.dur : 1, 0, 1);
+    const x = p.x0 + (p.x1-p.x0)*frac, y = p.y0 + (p.y1-p.y0)*frac;
+    const s = worldToScreen(x,y);
+    if(s.x<-40||s.x>viewW()+40||s.y<-40||s.y>viewH()+40) continue;
+    const ang = Math.atan2(p.y1-p.y0, p.x1-p.x0);
+    ctx.save(); ctx.translate(s.x,s.y); ctx.rotate(ang);
+    ctx.strokeStyle = p.owner==='player' ? '#bcd6ff' : '#ffd0d0';
+    ctx.lineWidth = 2*cam.zoom;
+    ctx.beginPath(); ctx.moveTo(-8*cam.zoom,0); ctx.lineTo(8*cam.zoom,0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(8*cam.zoom,0); ctx.lineTo(4*cam.zoom,-2.5*cam.zoom); ctx.lineTo(4*cam.zoom,2.5*cam.zoom); ctx.closePath();
+    ctx.fillStyle = ctx.strokeStyle; ctx.fill();
+    ctx.restore();
+  }
+}
+// --- Cadáveres: fade + caída de 0.4s, puramente visual (fuera de `entities`) ---
+function drawCorpses(){
+  const now=performance.now();
+  for(let i=corpses.length-1;i>=0;i--){
+    const c=corpses[i], age=(now-c.t0)/1000;
+    if(age>1.1){ corpses.splice(i,1); continue; }
+    const s=worldToScreen(c.x,c.y);
+    if(s.x<-40||s.x>viewW()+40||s.y<-40||s.y>viewH()+40) continue;
+    const fallT = Math.min(1, age/0.4);
+    const alpha = age<0.7 ? 1 : clamp(1-(age-0.7)/0.4, 0, 1);
+    const rot = fallT * (Math.PI/2) * (c.face||1);
+    ctx.save();
+    ctx.globalAlpha = alpha*0.8;
+    ctx.translate(s.x, s.y + 8*cam.zoom);
+    ctx.rotate(rot);
+    const dd = UNIT[c.type];
+    if(!drawSprite('unit_'+c.type, 0, 0, 26*cam.zoom, true)){
+      ctx.font=`${18*cam.zoom}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(dd?dd.emoji:'💀', 0, 0);
+    }
     ctx.restore();
   }
   ctx.globalAlpha=1;
@@ -1920,6 +2236,7 @@ function handleTap(p){
     }
     // Si tocaste una unidad propia → seleccionarla (cae abajo). Si no, mover.
     if(!(ent && ent.owner==='player')){
+      addPing(world.x, world.y, true, '#7ddd7d');   // micro-feedback verde en el destino
       if(isCli){ netSend({t:'cmd', c:'move', ids:ids(selUnits), x:world.x, y:world.y}); return; }
       for(const u of selUnits){ u.state='move'; u.move={x:world.x,y:world.y}; u.target=null; u.gather=null; u.build=null; u.halt=false; }
       return;
@@ -2248,6 +2565,7 @@ function showHint(msg){
 // ---------- Fin de partida ----------
 function endGame(win){
   if(gameOver) return; gameOver=true; running=false;
+  playSfx(win?'victory':'defeat');
   if(net.mode==='host'){ netSend(makeSnap()); netSend({t:'end', win:!win}); }
   document.getElementById('endTitle').textContent = win?'🏆 ¡Victoria!':'💀 Derrota';
   document.getElementById('endText').textContent = win
@@ -2350,6 +2668,12 @@ document.getElementById('btnPause').addEventListener('click',function(){
   if(inMP()){ showHint('La pausa no está disponible en multijugador.'); return; }
   paused=!paused; this.textContent=paused?'▶':'⏸'; if(paused) showHint('Pausa');
 });
+
+// ---------- Sonido: botón e inicialización en el primer gesto (Safari/iOS) ----------
+document.getElementById('btnSound').textContent = soundOn ? '🔊' : '🔇';
+document.getElementById('btnSound').addEventListener('click', ()=>{ ensureAudio(); setSoundOn(!soundOn); });
+document.addEventListener('pointerdown', ensureAudio, {once:true, passive:true});
+document.addEventListener('pointerdown', ()=>{ if(audioCtx && audioCtx.state==='suspended') audioCtx.resume(); }, {passive:true});
 
 // Evitar gestos del navegador (zoom de Safari, etc.)
 document.addEventListener('gesturestart', e=>e.preventDefault());

@@ -209,3 +209,58 @@ historial. Ver normas en `CLAUDE.md`.
 - Enlazado desde `CLAUDE.md`, `README.md` y `filemap.md`.
 - El trabajo de WebRTC iniciado en la sesión anterior queda formalizado como
   Fase 7 (el protocolo host-autoritativo actual no cambia; solo el transporte).
+
+## 2026-07-15 — PR #10: FASE 1 — «Está vivo»: animación, proyectiles y sonido
+- **Animación procedural de unidades** (sin sprites nuevos): bamboleo vertical
+  e inclinación ±4° al caminar, "lunge" (~4px) hacia el objetivo al
+  atacar/recolectar/construir, y volteo horizontal por dirección real de
+  movimiento (`e.face`), todo calculado en `drawUnit` a partir del
+  desplazamiento cuadro a cuadro (funciona igual en host y en el cliente MP).
+  Por rendimiento, el transform de cada unidad usa `ctx.setTransform` directo
+  (`setUnitTransform`/`resetTransform`) en vez de `ctx.save/restore`: con ~130
+  unidades en pantalla, clonar el estado completo del canvas por unidad costaba
+  bastante más que fijar la matriz y devolverla a la base (`DPR,0,0,DPR,0,0`).
+- **Proyectiles reales** (`projectiles[]`): arqueros, héroe de arco, torres,
+  torres de muralla y castillo disparan una flecha visible (~300px/s); el daño
+  se calcula al disparar (`computeDamage`) pero se **aplica al impactar**
+  (`applyDamage`, vía `updateProjectiles`), moviendo la llamada de daño que
+  antes era instantánea. Se eliminó el antiguo "beam" instantáneo de torres y
+  la línea estática de flecha de arquero (ambos redundantes ahora).
+- **Muertes y daño visuales**: `corpses[]` (fuera de `entities`) con fade +
+  caída de 0.4s al morir una unidad; flash blanco `e.hurtT` (timestamp, no
+  contador) al recibir daño; edificios con hp<50% humean y hp<25% también
+  arden (`drawDamageFx`, puramente derivado de `hp/maxHp`, por lo que funciona
+  igual en el cliente MP sin lógica extra).
+- **Sonido con WebAudio sintetizado** (sin archivos): 10 SFX distintos —
+  espada, flecha, talar, picar, construir, unidad lista, edificio destruido,
+  alerta de ataque, victoria y derrota — más un loop ambiental de viento a bajo
+  volumen, todo generado con osciladores/ruido. Throttle por nombre de efecto
+  (`sfxAllowed`) para no saturar en batallas grandes. Botón 🔊/🔇 nuevo en
+  `#util`, estado en `localStorage`; el `AudioContext` se crea/reanuda en el
+  **primer gesto táctil** (requisito de Safari/iOS), nunca antes.
+- **Micro-feedback**: variante verde de `addPing` en el destino de una orden de
+  movimiento (antes solo existía el ping dorado de selección).
+- **Compatibilidad multijugador**: el host es quien simula proyectiles y daño;
+  el snapshot (`makeSnap`) incluye un campo ligero `shots` con los proyectiles
+  en vuelo (posición, progreso, bando) y un flag `al` de "te atacan". El
+  cliente (`applySnap`) **no simula**: solo interpola las flechas recibidas,
+  y reconstruye cadáveres y flashes de daño comparando la instantánea anterior
+  con la nueva (unidades que desaparecen → cadáver; hp que baja → `hurtT`), y
+  dispara los SFX de "unidad lista"/"edificio destruido"/"alerta" comparando
+  `stats.trained`/`stats.lostB` entre instantáneas.
+- **Pruebas**: Chromium headless (1024×768@2x) con `spritesReady>=32`, cero
+  `pageerror`/`console.error`; ejercitada la lógica nueva por `page.evaluate`
+  (arquero genera proyectil y el daño no se aplica hasta el impacto, muerte
+  crea cadáver, flash de daño y alerta se disparan, toggle de sonido persiste
+  en `localStorage`, `AudioContext` se crea tras un toque simulado). Prueba de
+  multijugador real con `node server.js` + 2 Chromium (anfitrión/cliente):
+  ambos llegan a `running=true` sin errores y el **cliente reconstruye el
+  proyectil del arquero a partir del snapshot** (`shots`), combate consistente
+  en ambos lados. Estrés con ~195 entidades (130 unidades en combate + 2
+  edificios dañados): el coste real de CPU en `update()+render()` pasó de
+  ~1.8ms/frame a ~2.6ms/frame (bien dentro del presupuesto de 16.7ms para
+  60fps); el fps bruto medido por `requestAnimationFrame` en este entorno
+  headless compartido es ruidoso (gran parte del tiempo por cuadro no proviene
+  de `update`/`render` sino del scheduling del propio navegador headless), así
+  que se recomienda una medición adicional en un iPad real antes de dar la
+  fase por cerrada de cara a rendimiento.
