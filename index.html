@@ -117,6 +117,26 @@
   #btnAlert{ display:none; }
   #btnAlert.show{ display:flex; border-color:var(--bad); animation:alertPulse 1s infinite; }
   @keyframes alertPulse{ 0%,100%{ box-shadow:0 0 0 0 #d05a5a88; } 50%{ box-shadow:0 0 0 6px #d05a5a00; } }
+  /* FASE 6: tutorial guiado, ajustes y guardado local */
+  #tutBox{ position:fixed; left:50%; top:54px; transform:translateX(-50%); z-index:12;
+    background:#14161bee; border:1px solid var(--accent); border-radius:14px; padding:10px 12px;
+    max-width:min(420px,92vw); text-align:center; box-shadow:0 4px 16px #0008; }
+  #tutBox.hidden{ display:none; }
+  #tutBox p{ margin:0 0 8px; font-size:13px; line-height:1.4; color:var(--txt); }
+  #tutBox .row{ display:flex; gap:8px; justify-content:center; }
+  #tutBox .btn{ min-height:40px; padding:6px 12px; font-size:13px; }
+  .tut-ring{ pointer-events:none; }
+  .tut-highlight{ box-shadow:0 0 0 3px #caa46a, 0 0 14px 4px #caa46aaa !important; animation:alertPulse 1.2s infinite; }
+  .slotRow{ display:flex; align-items:center; gap:8px; margin:6px 0; }
+  .slotRow .slotInfo{ flex:1; font-size:12px; color:var(--muted); text-align:left; }
+  .slotRow .btn{ min-height:44px; padding:6px 10px; font-size:13px; }
+  .setRow{ display:flex; align-items:center; gap:10px; margin:10px 0; }
+  .setRow label{ flex:0 0 auto; font-size:13px; color:var(--txt); min-width:120px; }
+  .setRow input[type=range]{ flex:1; min-height:44px; }
+  .setRow span.val{ min-width:34px; text-align:right; font-size:12px; color:var(--muted); }
+  #fpsHud{ position:fixed; left:8px; top:52px; z-index:9; font-size:11px; color:#8fdc8f; background:#000a;
+    padding:2px 6px; border-radius:6px; pointer-events:none; font-family:monospace; }
+  #fpsHud.hidden{ display:none; }
 </style>
 </head>
 <body>
@@ -141,9 +161,18 @@
   <div class="ub" id="btnCenter" title="Centrar (doble toque: última alerta)">⌂</div>
   <div class="ub" id="btnPause" title="Pausa">⏸</div>
   <div class="ub" id="btnSound" title="Sonido">🔊</div>
+  <div class="ub" id="btnSave" title="Guardar / cargar">💾</div>
+  <div class="ub" id="btnSettings" title="Ajustes">⚙️</div>
 </div>
 
 <div id="hint" class="hidden"></div>
+<div id="fpsHud" class="hidden">fps: --</div>
+
+<!-- Tutorial guiado (Fase 6): paso actual + botón de saltar; solo 1 jugador -->
+<div id="tutBox" class="hidden">
+  <p id="tutText"></p>
+  <div class="row"><button class="btn" id="btnTutSkip">Saltar tutorial</button></div>
+</div>
 
 <!-- Minimapa: terreno+niebla+unidades en miniatura; toca/arrastra para mover la cámara -->
 <div id="minimapWrap">
@@ -222,9 +251,67 @@
       <div class="opt-desc" id="mpStatus"></div>
     </div>
 
+    <div class="opt hidden" id="continueRow">
+      <div class="row"><button class="btn big" id="btnContinue">▶ Continuar (autoguardado)</button></div>
+    </div>
+
+    <div class="opt">
+      <div class="opt-title">💾 Partidas guardadas (un jugador)</div>
+      <div id="menuSlots"></div>
+    </div>
+
     <div class="row">
       <button class="btn big" id="btnStart">▶ Empezar partida</button>
       <button class="btn big" id="btnGfx">🎨 Prueba gráfica</button>
+      <button class="btn big" id="btnSettingsMenu">⚙️ Ajustes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Guardado local (Fase 6): 3 ranuras, solo un jugador (deshabilitado en MP) -->
+<div id="saveScreen" class="overlay hidden">
+  <div class="card" style="width:min(460px,94vw)">
+    <h1>💾 Guardar / cargar</h1>
+    <p>Partida completa en 3 ranuras locales. No disponible en multijugador.</p>
+    <div id="saveSlots"></div>
+    <div class="row"><button class="btn big" id="btnSaveClose">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Ajustes (Fase 6): volumen, velocidad de cámara, fps, reiniciar tutorial -->
+<div id="settingsScreen" class="overlay hidden">
+  <div class="card" style="width:min(460px,94vw)">
+    <h1>⚙️ Ajustes</h1>
+    <div class="setRow">
+      <label for="setSfxVol">🔊 Volumen SFX</label>
+      <input type="range" id="setSfxVol" min="0" max="100" step="5">
+      <span class="val" id="setSfxVolVal">70</span>
+    </div>
+    <div class="setRow">
+      <label for="setAmbVol">🌬️ Volumen ambiente</label>
+      <input type="range" id="setAmbVol" min="0" max="100" step="5">
+      <span class="val" id="setAmbVolVal">45</span>
+    </div>
+    <div class="opt" data-opt="camspeed">
+      <div class="opt-title">🎥 Velocidad de cámara</div>
+      <div class="opt-row">
+        <button class="opt-b" data-val="0.6">Lenta</button>
+        <button class="opt-b" data-val="1">Normal</button>
+        <button class="opt-b" data-val="1.6">Rápida</button>
+      </div>
+    </div>
+    <div class="opt" data-opt="fps">
+      <div class="opt-title">📈 Mostrar FPS</div>
+      <div class="opt-row">
+        <button class="opt-b" data-val="0">No</button>
+        <button class="opt-b" data-val="1">Sí</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn big" id="btnTutReset">🔄 Reiniciar tutorial</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn big" id="btnSettingsClose">Cerrar</button>
     </div>
   </div>
 </div>
@@ -241,11 +328,18 @@
 
 <!-- Pantalla de fin -->
 <div id="endScreen" class="overlay hidden">
-  <div class="card">
+  <div class="card" style="width:min(460px,94vw)">
     <h1 id="endTitle">Victoria</h1>
     <p id="endText"></p>
     <table id="endStats"></table>
-    <div class="row"><button class="btn big" id="btnRestart">Jugar de nuevo</button></div>
+    <h1 style="font-size:14px;color:var(--accent);margin:10px 0 4px;text-align:left">📈 Línea de tiempo</h1>
+    <p style="font-size:11px;margin:0 0 6px;text-align:left">
+      <span style="color:#6fa8ff">■</span> Recursos tú &nbsp;
+      <span style="color:#e06a6a">■</span> Recursos rival &nbsp;
+      <span style="color:#caa46a">┅</span> Ejército tú &nbsp;
+      <span style="color:#d6b24a">┅</span> Ejército rival</p>
+    <canvas id="tlChart" width="380" height="120" style="width:100%;height:auto;background:#0c0d10;border:1px solid var(--line);border-radius:8px"></canvas>
+    <div class="row" style="margin-top:14px"><button class="btn big" id="btnRestart">Jugar de nuevo</button></div>
   </div>
 </div>
 
@@ -540,9 +634,41 @@ function drawShadow(cx, cy, rx){
   ctx.fillStyle='rgba(0,0,0,.28)'; ctx.fill(); ctx.restore();
 }
 
+// ---------- Ajustes (Fase 6): volumen, velocidad de cámara, fps, tutorial ----------
+// Persisten en localStorage como un único objeto JSON compacto. Los valores
+// de volumen son 0-100 (porcentaje); `camSpeed` es un multiplicador aplicado
+// al paneo táctil/teclado; `showFps` activa el contador de fps en pantalla.
+const SETTINGS_KEY = 'miniaoe_settings';
+function loadSettings(){
+  const def = { sfxVol:70, ambVol:45, camSpeed:1, showFps:false };
+  try{
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if(!raw) return def;
+    return { ...def, ...JSON.parse(raw) };
+  }catch(err){ return def; }
+}
+let settings = loadSettings();
+function saveSettings(){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
+function applySettingsToUI(){
+  const sfx=document.getElementById('setSfxVol'), amb=document.getElementById('setAmbVol');
+  if(sfx){ sfx.value = settings.sfxVol; document.getElementById('setSfxVolVal').textContent = settings.sfxVol; }
+  if(amb){ amb.value = settings.ambVol; document.getElementById('setAmbVolVal').textContent = settings.ambVol; }
+  document.querySelectorAll('#settingsScreen .opt[data-opt="camspeed"] .opt-b').forEach(b=>{
+    b.classList.toggle('sel', Number(b.getAttribute('data-val'))===settings.camSpeed);
+  });
+  document.querySelectorAll('#settingsScreen .opt[data-opt="fps"] .opt-b').forEach(b=>{
+    b.classList.toggle('sel', (b.getAttribute('data-val')==='1')===settings.showFps);
+  });
+  const fh=document.getElementById('fpsHud'); if(fh) fh.classList.toggle('hidden', !settings.showFps);
+}
+function setAmbientVolumeLive(){
+  if(ambientNode && audioCtx) ambientNode.g.gain.setTargetAtTime(0.09*(settings.ambVol/100), audioCtx.currentTime, 0.1);
+}
+
 // ---------- Sonido (WebAudio sintetizado, sin archivos) ----------
 // iOS/Safari exige crear/reanudar el AudioContext en el PRIMER gesto táctil:
-// no se reproduce nada antes de eso. El interruptor persiste en localStorage.
+// no se reproduce nada antes de eso. El interruptor de silencio persiste en
+// localStorage aparte; el volumen fino (SFX/ambiente) vive en `settings`.
 let audioCtx = null, masterGain = null, ambientNode = null;
 let soundOn = localStorage.getItem('miniaoe_sound') !== 'off';
 const _sfxLast = {};
@@ -556,7 +682,7 @@ function ensureAudio(){
   try{
     audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     masterGain = audioCtx.createGain();
-    masterGain.gain.value = soundOn ? 0.5 : 0;
+    masterGain.gain.value = soundOn ? 1 : 0;   // interruptor general (silencio); el volumen fino va por `settings`
     masterGain.connect(audioCtx.destination);
     startAmbient();
   }catch(err){ audioCtx = null; }
@@ -564,11 +690,12 @@ function ensureAudio(){
 function setSoundOn(on){
   soundOn = on;
   localStorage.setItem('miniaoe_sound', on ? 'on' : 'off');
-  if(masterGain && audioCtx) masterGain.gain.setTargetAtTime(on?0.5:0, audioCtx.currentTime, 0.05);
+  if(masterGain && audioCtx) masterGain.gain.setTargetAtTime(on?1:0, audioCtx.currentTime, 0.05);
   const btn = document.getElementById('btnSound'); if(btn) btn.textContent = on ? '🔊' : '🔇';
 }
 function playTone(freq, dur, type, vol, when){
   if(!audioCtx || !soundOn) return;
+  vol = vol * (settings.sfxVol/100);
   const t0 = audioCtx.currentTime + (when||0);
   const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
   osc.type = type||'sine'; osc.frequency.setValueAtTime(freq, t0);
@@ -580,6 +707,7 @@ function playTone(freq, dur, type, vol, when){
 }
 function playNoise(dur, vol, filterFreq, type){
   if(!audioCtx || !soundOn) return;
+  vol = vol * (settings.sfxVol/100);
   const t0 = audioCtx.currentTime;
   const n = Math.max(1, Math.floor(audioCtx.sampleRate*dur));
   const buf = audioCtx.createBuffer(1, n, audioCtx.sampleRate);
@@ -600,7 +728,7 @@ function startAmbient(){
   for(let i=0;i<n;i++) data[i] = Math.random()*2-1;
   const src = audioCtx.createBufferSource(); src.buffer = buf; src.loop = true;
   const filt = audioCtx.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=380;
-  const g = audioCtx.createGain(); g.gain.value = 0.045;
+  const g = audioCtx.createGain(); g.gain.value = 0.09*(settings.ambVol/100);
   src.connect(filt); filt.connect(g); g.connect(masterGain);
   src.start();
   ambientNode = {src, g};
@@ -679,9 +807,13 @@ function netJoinStart(ip){
 
 // --- Serialización de estado (host → cliente, con bandos intercambiados) ---
 function flipOwner(o){ return o==='player' ? 'enemy' : o==='enemy' ? 'player' : o; }
-function serEntity(e){
+// `flip`=true (por defecto) intercambia bandos para el protocolo MP (el
+// cliente siempre "se ve" como 'player'). El guardado LOCAL (Fase 6) llama a
+// serEntity(e,false): es UN SOLO jugador, no hay a quién voltear los bandos.
+function serEntity(e, flip){
+  if(flip===undefined) flip=true;
   const o={ id:e.id, kind:e.kind, x:Math.round(e.x*10)/10, y:Math.round(e.y*10)/10 };
-  if(e.owner) o.o=flipOwner(e.owner);
+  if(e.owner) o.o = flip ? flipOwner(e.owner) : e.owner;
   if(e.kind==='unit'){ o.u=e.type; o.hp=Math.round(e.hp); o.mhp=e.maxHp; o.st=e.state;
     if(e.gather && e.gather.id) o.g=e.gather.id;
     // Datos para reconstruir la animación de "lunge" en el cliente (que no simula):
@@ -808,6 +940,10 @@ function clientStartFromInit(m){
   document.getElementById('startScreen').classList.add('hidden');
   document.getElementById('endScreen').classList.add('hidden');
   updateActionPanel();
+  // Fase 6: guardado/tutorial son de UN jugador; se apagan limpiamente en MP
+  // (tanto para el anfitrión como para el cliente) para no interferir con la
+  // partida en red. `refreshSaveUI` también oculta "Continuar" mientras dure.
+  tutorial.active=false; hideTutBox(); refreshSaveUI();
   showHint('¡Multijugador! Destruye el Centro Urbano rival.');
 }
 function clientEnd(win){
@@ -873,6 +1009,188 @@ function hostWall(m){
     const b=makeBuilding('enemy', bt, pt.x,pt.y,false);
     b.dir=dir; if(bt==='gate') b.closed=false;
     entities.push(b); });
+}
+
+/* ==================== GUARDADO LOCAL (Fase 6, un solo jugador) ====================
+   Reutiliza `serEntity`/`deserEntity`/`serSide` (del bloque MP de arriba) pero
+   SIN el flip de bandos: el guardado local es siempre de un único jugador (no
+   hay a quién "voltearle" el bando), a diferencia del snapshot de red. Todas
+   las funciones empiezan con una guarda `if(inMP()) return`: guardar/cargar
+   es una función de un jugador y se deshabilita limpiamente en multijugador
+   para no interferir con el protocolo de red ni el estado autoritativo. */
+const SAVE_VERSION = 1;
+const SAVE_SLOT_KEY = i => 'miniaoe_save_'+i;
+const AUTOSAVE_KEY = 'miniaoe_autosave';
+const AUTOSAVE_INTERVAL_MS = 120000;   // autoguardado cada 2 minutos
+
+// `fogExplored` es un Uint8Array de 0/1 (~2.470 celdas): se guarda como una
+// cadena de dígitos ("010011...") en vez de un array JSON de números, mucho
+// más compacto (~2.5KB en vez de ~7KB) y de sobra frente al límite típico de
+// ~5MB de localStorage (tamaño real medido y reportado en `progress.md`).
+function fogToString(){ return Array.from(fogExplored).join(''); }
+function fogFromString(str){
+  fogExplored.fill(0);
+  if(!str) return;
+  for(let i=0;i<str.length && i<fogExplored.length;i++) fogExplored[i] = str.charCodeAt(i)===49 ? 1 : 0; // '1'==49
+}
+// `side.mods` es una caché DERIVADA de `side.upg` (no se serializa): la
+// reconstruye igual que `buyUpgrade`/`buyEcon` al comprar cada tecnología,
+// aplicado de una vez sobre los flags ya guardados.
+function rebuildModsFromUpg(s){
+  s.mods = freshMods();
+  if(s.upg.arrows){ s.mods.archerAtk+=1; s.mods.archerRange+=20; }
+  if(s.upg.swords){ s.mods.meleeAtk+=1; }
+  if(s.upg.shields){ s.mods.armor+=1; }
+  if(s.upg.axes){ s.mods.gather=1.25; }
+  for(const r in ECON){ for(const t of ECON[r]){ if(s.upg[t.key]) s.mods.resMult[r]+=t.add; } }
+}
+function buildSaveObject(){
+  return {
+    ver: SAVE_VERSION, savedAt: Date.now(),
+    cfg: {...gameConfig}, mapTheme, gameSpeed, difficulty, nextId,
+    terrain, bridge,
+    entities: entities.map(e=>serEntity(e,false)),   // SIN flip: guardado de un jugador
+    player: serSide(player), enemy: serSide(enemy),
+    fog: fogToString(),
+    groups: controlGroups,
+    timeline: gameTimeline,   // línea de tiempo del resumen (Fase 6.4), se sigue completando al continuar
+    // `serEntity` (pensado para el snapshot MP) solo lleva el CONTEO de
+    // guarnición por edificio (`o.gr`) y un booleano en la unidad (`o.gi`):
+    // le basta al cliente MP, que no simula. El guardado local sí necesita
+    // el mapeo EXACTO id-a-edificio para poder expulsar/ver correctamente
+    // tras cargar, así que aquí se guarda aparte con los ids reales (estables
+    // en una partida de un jugador, a diferencia del snapshot con bandos
+    // volteados).
+    garrisons: entities.filter(e=>e.kind==='building'&&e.garrison&&e.garrison.length)
+      .map(b=>({ id:b.id, units:[...b.garrison] })),
+  };
+}
+// Texto corto para las listas de ranuras (menú y panel de guardado).
+function saveSummary(save){
+  const d = new Date(save.savedAt);
+  const fecha = d.toLocaleDateString()+' '+d.toLocaleTimeString().slice(0,5);
+  const mapName = (MAPS[save.mapTheme]&&MAPS[save.mapTheme].name) || save.mapTheme;
+  const ageName = (AGES[save.player.age]&&AGES[save.player.age].name) || '';
+  return fecha+' · '+mapName+' · '+ageName;
+}
+function applySaveObject(save){
+  Object.assign(gameConfig, save.cfg||{});
+  mapTheme = save.mapTheme; gameSpeed = save.gameSpeed; difficulty = save.difficulty;
+  nextId = save.nextId||1;
+  terrain = save.terrain||[]; bridge = save.bridge||null;
+  entities = (save.entities||[]).map(deserEntity);
+  rebuildIndex();
+  // Repara la guarnición con el mapeo EXACTO id-a-edificio guardado aparte
+  // (`save.garrisons`): `deserEntity` deja `u.garrisonedIn=true` (booleano) y
+  // `b.garrison` con placeholders (formato del snapshot MP, que solo lleva el
+  // conteo), así que aquí se reconstruye con los ids reales.
+  for(const e of entities) if(e.kind==='unit') e.garrisonedIn = null;
+  for(const g of (save.garrisons||[])){
+    const b = find(g.id); if(!b) continue;
+    b.garrison = [];
+    for(const uid of g.units){
+      const u = find(uid); if(!u) continue;
+      b.garrison.push(u.id); u.garrisonedIn = b.id; u.state = 'garrison'; u.x = b.x; u.y = b.y;
+    }
+  }
+  selection=[]; placement=null; pings=[]; frameWalls=[];
+  projectiles=[]; corpses=[]; unitFace.clear(); alertFlags={player:false,enemy:false};
+  orderMode=null;
+  controlGroups = save.groups || [[],[],[]];
+  for(let gi=0;gi<3;gi++) cleanControlGroup(gi);
+  cam.vx=0; cam.vy=0;
+
+  Object.assign(player, save.player); rebuildModsFromUpg(player);
+  Object.assign(enemy,  save.enemy);  rebuildModsFromUpg(enemy);
+  enemy.ai = enemy.ai || { timer:3, attackTimer:55, ageTimer:40, houseTimer:0 };
+
+  gameTimeline = save.timeline || []; timelineT = 0;
+
+  invalidatePathGrid();
+  // Niebla: restaura lo YA explorado (no usa `resetFog`, que lo pondría a
+  // cero) y recalcula lo visible ahora mismo con las entidades ya cargadas.
+  fogFromString(save.fog);
+  fogVisible.fill(0);
+  alertZones={}; alertPulses=[]; lastAlert=null; hideAlertButton();
+  buildMinimapTerrain(); recomputeFog(); positionMinimap();
+
+  gameOver=false; paused=false; running=true;
+  const t = entities.find(e=>e.kind==='building'&&e.owner==='player'&&e.btype==='town');
+  cam.zoom=1; if(t) centerOn(t.x,t.y);
+
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('endScreen').classList.add('hidden');
+  document.getElementById('saveScreen').classList.add('hidden');
+  updateActionPanel();
+  tutorialArm();   // una partida cargada puede cumplir pasos ya: la máquina los salta sola
+  showHint('Partida cargada.');
+}
+function saveToSlot(slot){
+  if(inMP()){ showHint('Guardar no está disponible en multijugador.'); return; }
+  if(!running || gameOver){ showHint('No hay partida en curso para guardar.'); return; }
+  try{
+    const json = JSON.stringify(buildSaveObject());
+    localStorage.setItem(SAVE_SLOT_KEY(slot), json);
+    showHint('Partida guardada en la ranura '+slot+' ('+(json.length/1024).toFixed(1)+' KB).');
+  }catch(err){ showHint('No se pudo guardar: '+err.message); }
+  refreshSaveUI();
+}
+function loadFromSlot(slot){
+  if(inMP()){ showHint('Cargar no está disponible en multijugador.'); return; }
+  const raw = localStorage.getItem(SAVE_SLOT_KEY(slot));
+  if(!raw){ showHint('Ranura '+slot+' vacía.'); return; }
+  try{ applySaveObject(JSON.parse(raw)); }
+  catch(err){ showHint('No se pudo cargar la ranura '+slot+': '+err.message); }
+}
+// Autoguardado silencioso: cada 2 minutos (temporizador propio, fuera del
+// bucle de render) y al ocultar la pestaña (`visibilitychange`, ver listener
+// al final del archivo). Nunca corre en multijugador ni sin partida en curso.
+function autosave(){
+  if(inMP()) return;
+  if(!running || gameOver) return;
+  try{ localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(buildSaveObject())); }
+  catch(err){ /* localStorage lleno u otro error: se ignora, no debe interrumpir la partida */ }
+}
+function loadAutosave(){
+  if(inMP()) return;
+  const raw = localStorage.getItem(AUTOSAVE_KEY);
+  if(!raw){ showHint('No hay autoguardado.'); return; }
+  try{ applySaveObject(JSON.parse(raw)); }
+  catch(err){ showHint('No se pudo continuar: '+err.message); }
+}
+// ---------- UI: "Continuar" del menú + listas de ranuras (menú y panel #util) ----------
+function refreshSaveUI(){
+  const cont = document.getElementById('continueRow');
+  const hasAuto = !!localStorage.getItem(AUTOSAVE_KEY);
+  if(cont) cont.classList.toggle('hidden', !hasAuto || inMP());
+
+  const menuSlots = document.getElementById('menuSlots');
+  const saveSlots = document.getElementById('saveSlots');
+  if(menuSlots) menuSlots.innerHTML='';
+  if(saveSlots) saveSlots.innerHTML='';
+  for(let i=1;i<=3;i++){
+    const raw = localStorage.getItem(SAVE_SLOT_KEY(i));
+    let info = 'Ranura '+i+': vacía', save = null;
+    if(raw){ try{ save=JSON.parse(raw); info='Ranura '+i+': '+saveSummary(save); }catch(err){ info='Ranura '+i+': (dañada)'; } }
+    if(menuSlots){
+      const row=document.createElement('div'); row.className='slotRow';
+      const span=document.createElement('div'); span.className='slotInfo'; span.textContent=info;
+      const btn=document.createElement('button'); btn.className='btn'; btn.textContent='Cargar';
+      btn.disabled = !save;
+      btn.addEventListener('click', ()=>{ if(inMP()){ netStatus('No disponible en multijugador.'); return; } if(save) loadFromSlot(i); });
+      row.appendChild(span); row.appendChild(btn); menuSlots.appendChild(row);
+    }
+    if(saveSlots){
+      const row=document.createElement('div'); row.className='slotRow';
+      const span=document.createElement('div'); span.className='slotInfo'; span.textContent=info;
+      const bSave=document.createElement('button'); bSave.className='btn'; bSave.textContent='Guardar';
+      bSave.addEventListener('click', ()=>saveToSlot(i));
+      const bLoad=document.createElement('button'); bLoad.className='btn'; bLoad.textContent='Cargar';
+      bLoad.disabled = !save;
+      bLoad.addEventListener('click', ()=>{ if(save) loadFromSlot(i); });
+      row.appendChild(span); row.appendChild(bSave); row.appendChild(bLoad); saveSlots.appendChild(row);
+    }
+  }
 }
 
 // ---------- Utilidades ----------
@@ -1015,6 +1333,7 @@ function startGame(cfg){
   orderMode = null; controlGroups = [[],[],[]]; for(let gi=0;gi<3;gi++) updateGroupBadge(gi);
   cam.vx = 0; cam.vy = 0;
   gameOver = false; paused = false; running = true;
+  gameTimeline = []; timelineT = 0; tutT = 0;   // Fase 6: línea de tiempo y sondeo del tutorial
 
   // Recursos iniciales según preset
   const start = RES_PRESETS[cfg.res].res;
@@ -1047,8 +1366,9 @@ function startGame(cfg){
   document.getElementById('startScreen').classList.add('hidden');
   document.getElementById('endScreen').classList.add('hidden');
   updateActionPanel();
+  tutorialArm();   // Fase 6: arranca el tutorial en la primera partida de un jugador (no en MP)
   if(net.mode==='host'){ netSendInit(); showHint('¡Multijugador! Destruye el Centro Urbano rival.'); }
-  else showHint('Mapa: '+MAPS[mapTheme].name+'. Manda tus aldeanos a recolectar.');
+  else if(!tutorial.active) showHint('Mapa: '+MAPS[mapTheme].name+'. Manda tus aldeanos a recolectar.');
 }
 
 // Cluster de recursos estándar alrededor de un punto (con pesos opcionales)
@@ -1655,10 +1975,203 @@ function separate(e, dt){
   if(n){ e.x += sx*14*dt; e.y += sy*14*dt; }
 }
 
+/* ==================== TUTORIAL GUIADO (Fase 6, un solo jugador) ====================
+   Máquina de estados de 10 pasos sobre HOOKS EXISTENTES: cada paso define un
+   `check()` que consulta el estado real del juego (selección, entidades,
+   niebla explorada, era…) y se llama por sondeo (~3/s desde `loop`, barato).
+   No depende de temporizadores: si el jugador ya cumplió la condición de un
+   paso (p.ej. al cargar una partida guardada a medias), la máquina avanza
+   sola sin bloquear. Saltable en cualquier momento; recuerda en localStorage
+   (`miniaoe_tutorial_done`) que ya se completó o se saltó, para no repetirlo.
+   Deshabilitado por completo en multijugador (ver `tutorialArm`). */
+const TUTORIAL_DONE_KEY = 'miniaoe_tutorial_done';
+let tutorial = { active:false, step:0, baseline:{}, flags:{} };
+function firstPlayerVillager(){ return entities.find(e=>e.kind==='unit'&&e.owner==='player'&&e.type==='villager'); }
+function playerTown(){ return entities.find(e=>e.kind==='building'&&e.owner==='player'&&e.btype==='town'); }
+function nearestResourceToTown(rtype){
+  const t=playerTown(); if(!t) return null;
+  let best=null, bd=1e9;
+  for(const e of entities){ if(e.kind==='resource'&&e.rtype===rtype){ const d=dist(e,t); if(d<bd){ bd=d; best=e; } } }
+  return best;
+}
+function playerGathering(rtype){
+  return entities.some(e=>{
+    if(!(e.kind==='unit'&&e.owner==='player'&&e.type==='villager'&&e.state==='gather'&&e.gather)) return false;
+    const g=find(e.gather.id); if(!g) return false;
+    const rt = g.kind==='resource' ? g.rtype : (g.kind==='building' ? BLD[g.btype].produces : null);
+    return rt===rtype;
+  });
+}
+function countPlayerVillagers(){ return entities.filter(e=>e.kind==='unit'&&e.owner==='player'&&e.type==='villager').length; }
+function fogExploredCount(){ let n=0; for(let i=0;i<fogExplored.length;i++) n+=fogExplored[i]; return n; }
+// Cada paso: `msg` (texto del aviso), `target()` (punto de MUNDO a resaltar
+// con un anillo pulsante, o null si no aplica) y `check()` (condición real de
+// avance). `onEnter` opcional captura una "línea base" al empezar el paso
+// (p.ej. cuántos aldeanos hay ya, para detectar "uno MÁS").
+const TUTORIAL_STEPS = [
+  { msg:'👋 ¡Bienvenido a Mini-AoE! Toca uno de tus aldeanos 👷 para seleccionarlo.',
+    target(){ const v=firstPlayerVillager(); return v?{x:v.x,y:v.y}:null; },
+    check(){ return selectedUnits().some(u=>u.type==='villager'); } },
+  { msg:'Con el aldeano seleccionado, toca un árbol 🌳 para que recolecte madera.',
+    target(){ const r=nearestResourceToTown('wood'); return r?{x:r.x,y:r.y}:null; },
+    check(){ return playerGathering('wood'); } },
+  { msg:'Bien. Manda ahora a otro aldeano a recolectar comida 🍒 (arrástralo con una caja de selección o tócalo).',
+    target(){ const r=nearestResourceToTown('food'); return r?{x:r.x,y:r.y}:null; },
+    check(){ return playerGathering('food'); } },
+  { msg:'Con algo de madera reunida: toca un aldeano, pulsa 🏠 Casa en el panel inferior y coloca los cimientos cerca de tu base.',
+    target(){ const t=playerTown(); return t?{x:t.x+90,y:t.y+70}:null; },
+    check(){ return entities.some(e=>e.kind==='building'&&e.owner==='player'&&e.btype==='house'&&e.built); } },
+  { msg:'Toca tu Centro Urbano 🏛️ y entrena un aldeano nuevo desde su cola de producción.',
+    target(){ const t=playerTown(); return t?{x:t.x,y:t.y}:null; },
+    onEnter(){ tutorial.baseline.villagers = countPlayerVillagers(); },
+    check(){ return countPlayerVillagers() > tutorial.baseline.villagers; } },
+  { msg:'Manda una unidad hacia una zona oscura y desconocida del mapa para explorarla.',
+    target(){ return null; },
+    onEnter(){ tutorial.baseline.fog = fogExploredCount(); },
+    check(){ return fogExploredCount() - tutorial.baseline.fog > 50; } },
+  { msg:'Toca un aldeano, pulsa 🛡️ Cuartel en el panel y coloca sus cimientos cerca de tu base.',
+    target(){ const t=playerTown(); return t?{x:t.x-90,y:t.y-70}:null; },
+    check(){ return entities.some(e=>e.kind==='building'&&e.owner==='player'&&e.btype==='barracks'&&e.built); } },
+  { msg:'Toca tu Cuartel y entrena una Milicia ⚔️.',
+    target(){ const b=entities.find(e=>e.kind==='building'&&e.owner==='player'&&e.btype==='barracks'); return b?{x:b.x,y:b.y}:null; },
+    check(){ return entities.some(e=>e.kind==='unit'&&e.owner==='player'&&e.type==='infantry'); } },
+  { msg:'Toca el Centro Urbano y avanza a la Edad de las Herramientas ⚒️.',
+    target(){ const t=playerTown(); return t?{x:t.x,y:t.y}:null; },
+    check(){ return player.age>=2; } },
+  { msg:'Por último, pulsa 🪖 «Todo el ejército» (arriba a la derecha) para seleccionar todas tus tropas de un toque.',
+    target(){ return null; },
+    check(){ return tutorial.flags.army===true; } },
+];
+function tutorialShouldStart(){ return !inMP() && localStorage.getItem(TUTORIAL_DONE_KEY)!=='1'; }
+// Se llama al empezar/cargar una partida de un jugador: arma la máquina si
+// procede (primera partida, o tutorial reiniciado desde Ajustes) y la apaga
+// limpiamente en cualquier otro caso (partida ya vista, o multijugador).
+function tutorialArm(){
+  if(tutorialShouldStart()){ tutorial.active=true; tutorial.step=0; tutorial.baseline={}; tutorial.flags={}; tutorialEnterStep(); }
+  else { tutorial.active=false; hideTutBox(); }
+}
+function tutorialEnterStep(){
+  const st=TUTORIAL_STEPS[tutorial.step];
+  if(st.onEnter) st.onEnter();
+  updateTutUI();
+}
+// Sondeo periódico (llamado desde `loop`, no cada cuadro): si la condición
+// real del paso actual ya se cumple, avanza (o termina si era el último).
+function tutorialCheck(){
+  if(!tutorial.active) return;
+  const st=TUTORIAL_STEPS[tutorial.step];
+  if(st.check()){
+    tutorial.step++;
+    if(tutorial.step>=TUTORIAL_STEPS.length){ tutorialFinish(true); return; }
+    tutorialEnterStep();
+  }
+}
+function tutorialFinish(completed){
+  tutorial.active=false;
+  localStorage.setItem(TUTORIAL_DONE_KEY,'1');
+  hideTutBox();
+  if(completed) showHint('🎓 ¡Tutorial completado! Ya conoces lo básico.');
+}
+function tutorialSkip(){
+  if(!tutorial.active) return;
+  tutorial.active=false;
+  localStorage.setItem(TUTORIAL_DONE_KEY,'1');
+  hideTutBox();
+  showHint('Tutorial saltado.');
+}
+// Reiniciar tutorial (botón en Ajustes): olvida el flag y, si hay una
+// partida de un jugador en curso, lo arranca ya mismo desde el paso 1.
+function tutorialReset(){
+  localStorage.removeItem(TUTORIAL_DONE_KEY);
+  if(running && !gameOver && !inMP()) tutorialArm();
+  showHint('Tutorial reiniciado.');
+}
+function updateTutUI(){
+  const box=document.getElementById('tutBox'); if(!box) return;
+  if(!tutorial.active){ box.classList.add('hidden'); document.getElementById('btnArmy').classList.remove('tut-highlight'); return; }
+  box.classList.remove('hidden');
+  document.getElementById('tutText').textContent = '('+(tutorial.step+1)+'/'+TUTORIAL_STEPS.length+') '+TUTORIAL_STEPS[tutorial.step].msg;
+  document.getElementById('btnArmy').classList.toggle('tut-highlight', tutorial.step===TUTORIAL_STEPS.length-1);
+}
+function hideTutBox(){ const box=document.getElementById('tutBox'); if(box) box.classList.add('hidden'); const a=document.getElementById('btnArmy'); if(a) a.classList.remove('tut-highlight'); }
+// Anillo pulsante sobre el punto de mundo señalado por el paso actual (si lo
+// tiene); se llama desde `render()`, después de dibujar la escena.
+function drawTutorialTarget(){
+  if(!tutorial.active) return;
+  const st=TUTORIAL_STEPS[tutorial.step]; const w=st.target(); if(!w) return;
+  const s=worldToScreen(w.x,w.y);
+  if(s.x<-30||s.x>viewW()+30||s.y<-30||s.y>viewH()+30) return;
+  const t=(performance.now()%1200)/1200;
+  const r=16+t*14;
+  ctx.save(); ctx.globalAlpha=1-t;
+  ctx.beginPath(); ctx.arc(s.x,s.y,r,0,Math.PI*2);
+  ctx.strokeStyle='#caa46a'; ctx.lineWidth=3; ctx.stroke();
+  ctx.restore();
+  ctx.beginPath(); ctx.arc(s.x,s.y,6,0,Math.PI*2);
+  ctx.fillStyle='#caa46a'; ctx.fill();
+}
+
+/* ==================== LÍNEA DE TIEMPO (Fase 6.4) ====================
+   Muestrea cada ~30s de juego (afectado por `gameSpeed`, igual que el resto
+   de la simulación) los recursos totales y el "valor militar" (coste total
+   invertido en tropas vivas) de cada bando, para dibujar una comparativa en
+   el resumen final (`renderSummary`). Corre en host/partida local (no en el
+   cliente MP, que no simula) y se guarda/restaura con la partida (Fase 6.1)
+   para que "Continuar" no pierda el histórico. */
+let gameTimeline = [];
+let timelineT = 0;
+const TIMELINE_INTERVAL = 30;   // segundos de JUEGO entre muestras
+const TIMELINE_MAX_SAMPLES = 80;
+function totalRes(s){ return (s.res.food||0)+(s.res.wood||0)+(s.res.gold||0)+(s.res.stone||0); }
+function costTotal(cost){ let s=0; for(const k in cost) s+=cost[k]; return s; }
+function militaryValue(owner){
+  let v=0;
+  for(const e of entities){ if(e.kind==='unit'&&e.owner===owner&&e.type!=='villager'&&e.hp>0) v+=costTotal(UNIT[e.type].cost); }
+  return v;
+}
+function sampleTimeline(){
+  const prevT = gameTimeline.length ? gameTimeline[gameTimeline.length-1].t : 0;
+  gameTimeline.push({ t: prevT+TIMELINE_INTERVAL,
+    pr: Math.round(totalRes(player)), er: Math.round(totalRes(enemy)),
+    pm: Math.round(militaryValue('player')), em: Math.round(militaryValue('enemy')) });
+  if(gameTimeline.length>TIMELINE_MAX_SAMPLES) gameTimeline.shift();
+}
+// Dibuja la línea de tiempo en el resumen final (`#tlChart`, dentro de
+// `#endScreen`): dos líneas sólidas (recursos totales tú/rival) y dos
+// discontinuas (valor militar tú/rival). Si la partida fue muy corta (menos
+// de 2 muestras) muestra un aviso en vez de un gráfico vacío.
+function drawTimelineChart(){
+  const cv=document.getElementById('tlChart'); if(!cv) return;
+  const tctx=cv.getContext('2d');
+  const W=cv.width, H=cv.height;
+  tctx.clearRect(0,0,W,H);
+  if(gameTimeline.length<2){
+    tctx.fillStyle='#9aa3b2'; tctx.font='12px sans-serif'; tctx.textAlign='center'; tctx.textBaseline='middle';
+    tctx.fillText('Partida demasiado corta para línea de tiempo.', W/2, H/2);
+    return;
+  }
+  let maxV=1; for(const s of gameTimeline) maxV=Math.max(maxV, s.pr, s.er, s.pm, s.em);
+  const pad=6;
+  function plot(key,color,dash){
+    tctx.beginPath();
+    gameTimeline.forEach((s,i)=>{
+      const x=pad+(W-2*pad)*i/(gameTimeline.length-1);
+      const y=H-pad-(H-2*pad)*(s[key]/maxV);
+      if(i===0) tctx.moveTo(x,y); else tctx.lineTo(x,y);
+    });
+    tctx.strokeStyle=color; tctx.lineWidth=1.6; tctx.setLineDash(dash||[]); tctx.stroke();
+  }
+  plot('pr','#6fa8ff'); plot('er','#e06a6a');
+  plot('pm','#caa46a',[4,3]); plot('em','#d6b24a',[4,3]);
+  tctx.setLineDash([]);
+}
+
 // ---------- Actualización ----------
 let last = performance.now();
+let fpsEMA = 60, fpsHudT = 0, tutT = 0;
 function loop(now){
-  let dt = (now-last)/1000; last = now;
+  const realDt = (now-last)/1000;
+  let dt = realDt; last = now;
   dt = Math.min(dt, 0.05) * gameSpeed;   // escalado por velocidad de la partida
   dt = Math.min(dt, 0.09);
   rebuildIndex();   // índice id→entidad fresco para este frame
@@ -1676,8 +2189,19 @@ function loop(now){
     fogT-=dt; if(fogT<=0){ fogT=0.15; recomputeFog(); }
     minimapT-=dt; if(minimapT<=0){ minimapT=0.22; drawMinimap(); }
     updateCameraInertia(dt);   // inercia del paneo de 2 dedos (puramente de cliente/cámara)
+    // Fase 6: sondeo del tutorial (~3/s, un solo jugador) y muestreo de la
+    // línea de tiempo (solo host/partida local: el cliente MP no simula).
+    if(!paused && !inMP()){ tutT-=dt; if(tutT<=0){ tutT=0.33; tutorialCheck(); } }
+    if(!paused && net.mode!=='client'){ timelineT-=dt; if(timelineT<=0){ timelineT=TIMELINE_INTERVAL; sampleTimeline(); } }
   }
   render();
+  // Contador de fps (Ajustes → Mostrar FPS): EMA barata sobre el delta REAL
+  // (sin escalar por velocidad de partida), actualizado en pantalla a ~2.5Hz.
+  if(realDt>0) fpsEMA = fpsEMA*0.9 + (1/realDt)*0.1;
+  if(settings.showFps){
+    fpsHudT-=realDt;
+    if(fpsHudT<=0){ fpsHudT=0.4; const el=document.getElementById('fpsHud'); if(el) el.textContent='fps: '+Math.round(fpsEMA); }
+  }
   requestAnimationFrame(loop);
 }
 
@@ -2506,6 +3030,7 @@ function render(){
   for(const e of sorted){ if(e.kind==='unit') drawUnit(e); }
   drawProjectiles();
   drawFogOverlay();   // capa de niebla sobre todo lo anterior (terreno+entidades)
+  drawTutorialTarget();   // Fase 6: anillo pulsante sobre el objetivo del paso actual del tutorial
 
   // Caja de selección
   if(input.dragSelect){
@@ -3010,7 +3535,9 @@ canvas.addEventListener('pointermove', (ev)=>{
     const mid={ x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 };
     const d = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
     if(input.panMid){
-      const ddx = (mid.x - input.panMid.x)/cam.zoom, ddy = (mid.y - input.panMid.y)/cam.zoom;
+      // Ajustes → velocidad de cámara: multiplicador aplicado al paneo táctil
+      // (y heredado por la inercia, que se calcula a partir del mismo ddx/ddy).
+      const ddx = (mid.x - input.panMid.x)/cam.zoom*settings.camSpeed, ddy = (mid.y - input.panMid.y)/cam.zoom*settings.camSpeed;
       cam.x -= ddx; cam.y -= ddy;
       // Velocidad reciente (para la inercia al soltar), suavizada (EMA) para no
       // heredar un pico de jitter del último evento táctil.
@@ -3091,7 +3618,7 @@ canvas.addEventListener('wheel', (ev)=>{
 
 // Flechas = paneo (escritorio)
 window.addEventListener('keydown',(e)=>{
-  const s=40/cam.zoom;
+  const s=40/cam.zoom*settings.camSpeed;   // Ajustes → velocidad de cámara
   if(e.key==='ArrowLeft') cam.x-=s; if(e.key==='ArrowRight') cam.x+=s;
   if(e.key==='ArrowUp') cam.y-=s; if(e.key==='ArrowDown') cam.y+=s;
   clampCam();
@@ -3658,6 +4185,7 @@ function renderSummary(){
   }
   html+='</tbody>';
   document.getElementById('endStats').innerHTML=html;
+  drawTimelineChart();   // Fase 6.4: línea de tiempo de recursos/valor militar muestreada durante la partida
 }
 
 // ---------- Menú principal: selección de opciones ----------
@@ -3739,6 +4267,7 @@ document.getElementById('btnPause').addEventListener('click',function(){
 
 // ---------- «Todo el ejército»: selecciona todos los militares vivos propios ----------
 document.getElementById('btnArmy').addEventListener('click', ()=>{
+  tutorial.flags.army = true;   // Fase 6: paso final del tutorial ("Todo el ejército")
   const mil = entities.filter(e=>e.kind==='unit'&&e.owner==='player'&&e.type!=='villager'&&!e.garrisonedIn);
   if(!mil.length){ showHint('No tienes unidades militares.'); return; }
   selection = mil.map(e=>e.id);
@@ -3826,6 +4355,42 @@ document.addEventListener('touchmove', e=>{ if(e.target===canvas) e.preventDefau
 
 // Refresco periódico del panel (para habilitar botones según recursos)
 setInterval(()=>{ if(running && !gameOver) updateActionPanel(); }, 900);
+
+// ---------- Fase 6: guardado local (menú «Continuar» + panel #util) ----------
+document.getElementById('btnSave').addEventListener('click', ()=>{
+  if(inMP()){ showHint('Guardar no está disponible en multijugador.'); return; }
+  refreshSaveUI();
+  document.getElementById('saveScreen').classList.remove('hidden');
+});
+document.getElementById('btnSaveClose').addEventListener('click', ()=>document.getElementById('saveScreen').classList.add('hidden'));
+document.getElementById('btnContinue').addEventListener('click', ()=>{ if(!inMP()) loadAutosave(); });
+setInterval(autosave, AUTOSAVE_INTERVAL_MS);
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden) autosave(); });
+refreshSaveUI();
+
+// ---------- Fase 6: ajustes (volumen, velocidad de cámara, fps, tutorial) ----------
+document.getElementById('btnSettings').addEventListener('click', ()=>{ applySettingsToUI(); document.getElementById('settingsScreen').classList.remove('hidden'); });
+document.getElementById('btnSettingsMenu').addEventListener('click', ()=>{ applySettingsToUI(); document.getElementById('settingsScreen').classList.remove('hidden'); });
+document.getElementById('btnSettingsClose').addEventListener('click', ()=>document.getElementById('settingsScreen').classList.add('hidden'));
+document.getElementById('setSfxVol').addEventListener('input', function(){
+  settings.sfxVol = Number(this.value); document.getElementById('setSfxVolVal').textContent = settings.sfxVol; saveSettings();
+});
+document.getElementById('setAmbVol').addEventListener('input', function(){
+  settings.ambVol = Number(this.value); document.getElementById('setAmbVolVal').textContent = settings.ambVol; saveSettings();
+  setAmbientVolumeLive();
+});
+document.querySelectorAll('#settingsScreen .opt[data-opt="camspeed"] .opt-b').forEach(b=>{
+  b.addEventListener('click', ()=>{ settings.camSpeed = Number(b.getAttribute('data-val')); saveSettings(); applySettingsToUI(); });
+});
+document.querySelectorAll('#settingsScreen .opt[data-opt="fps"] .opt-b').forEach(b=>{
+  b.addEventListener('click', ()=>{ settings.showFps = b.getAttribute('data-val')==='1'; saveSettings(); applySettingsToUI();
+    if(!settings.showFps){ const el=document.getElementById('fpsHud'); if(el) el.classList.add('hidden'); } });
+});
+document.getElementById('btnTutReset').addEventListener('click', tutorialReset);
+applySettingsToUI();
+
+// ---------- Fase 6: tutorial guiado (botón «Saltar») ----------
+document.getElementById('btnTutSkip').addEventListener('click', tutorialSkip);
 
 // ---------- Arranque ----------
 loadSprites();
