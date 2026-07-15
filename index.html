@@ -958,6 +958,12 @@ function garrisonUnits(units, b){
   let entered=0;
   for(const u of units){
     if(b.garrison.length>=cap) break;
+    // Ya guarnecida (aquí o en otro edificio): no volver a meterla. Protege el
+    // caso del cliente MP, cuya `selection` puede seguir conteniendo unidades ya
+    // guarnecidas si se vuelve a tocar el edificio sin reseleccionar (evita
+    // duplicados en `b.garrison` que inflaban el bono de flechas y llenaban el
+    // cupo con fantasmas).
+    if(u.garrisonedIn || b.garrison.includes(u.id)) continue;
     b.garrison.push(u.id);
     u.garrisonedIn = b.id;
     u.state='garrison'; u.target=null; u.move=null; u.gather=null; u.build=null; u.path=null; u.pathIdx=0;

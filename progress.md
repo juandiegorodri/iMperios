@@ -647,6 +647,28 @@ funcionalidad. Resumen de cambios en `index.html`:
     aplasta fuera de su contra; los 2 matchups neutrales están prácticamente
     empatados) aunque no se garantiza matemáticamente que CUALQUIER semilla
     aleatoria quede siempre ≤55%.
+  - **Caveat de chokepoint (verificación del orquestador)**: el equilibrio
+    "neutral ~50/50" solo se sostiene con los ejércitos separados. En un
+    **cuello de botella** (puente del río, puerta de muralla) donde el cuerpo a
+    cuerpo se traba de inmediato, los matchups neutrales se vuelven aplastantes
+    (Arquero vs Piquetero ≈ 0/100; Milicia vs Caballo ≈ 100/0), porque el
+    arquero no puede kitear y la unidad de línea traba primero. Es un efecto de
+    **geometría de combate**, no solo de semilla, y afecta a este juego en
+    particular porque los chokepoints son una mecánica central. No se corrige
+    por ajuste de stats (es inherente al melee-lock sin kiting); se documenta.
+    Se confirmó además que el `hp` bajo del Caballo (52) es un **punto de
+    equilibrio deliberado**, no una unidad "rota": el Piquetero vence al Caballo
+    en TODOS los valores de hp probados (52–80) por el ×2 del cuadrilátero, pero
+    subir el hp del Caballo por encima de ~55 hace que **aplaste a la Milicia**
+    en el matchup neutral (de 4/6 a 6/6), así que se mantiene en 52.
+- **Arreglo tras validación del orquestador — guarnición en MP**: el comando
+  `garrison` del cliente no podaba `selection`, así que volver a tocar el mismo
+  edificio sin reseleccionar duplicaba ids ya guarnecidos en el host
+  (`garrison=[76,77,76,77]`), inflando el bono de flechas y llenando el cupo con
+  fantasmas. Ahora `garrisonUnits` ignora unidades ya guarnecidas (`u.garrisonedIn`
+  o ya presentes en `b.garrison`), robusto ante reordenamientos de red y
+  selecciones obsoletas. Verificado headless: re-guarnecer las mismas unidades
+  es un no-op (`[76,77]`→`[76,77]`) y un arquero nuevo sí entra (`[76,77,78]`).
 - **Sprites pendientes**: catapulta, Taller de Asedio y Mercado usan el
   respaldo de emoji esta sesión (sin acceso a Ideogram); sus nombres NO se
   añadieron a `SPRITE_FILES` a propósito (para no generar peticiones 404 que
