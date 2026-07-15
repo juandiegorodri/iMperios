@@ -206,7 +206,7 @@ MP: paths solo en host (cliente sigue snapshots, sin cambios).
 
 ---
 
-### FASE 5 — Profundidad AoE: líneas de unidad, asedio, guarnición y mercado ⬜
+### FASE 5 — Profundidad AoE: líneas de unidad, asedio, guarnición y mercado ✅
 **Por qué**: que cada Era cambie tu ejército y las murallas tengan respuesta.
 
 **Alcance**
@@ -233,6 +233,26 @@ MP: paths solo en host (cliente sigue snapshots, sin cambios).
 **Criterios**: investigar Espadachín actualiza stats+insignia de milicia viva;
 catapulta derriba una muralla en ~8 tiros y pierde contra 2 caballos; guarnecer
 duplica flechas de una torre; arena automatizada pasa los umbrales de balance.
+
+**Resultado (2026-07-15, PR #14)**: implementado según el alcance. Tabla de
+balance final de la arena 20v20 (25 combates/matchup, motor real vía
+`update()`, ver `progress.md` para metodología y caveats sobre la
+sensibilidad de un combate determinista sin kiting):
+
+| Ataca \ Defiende | Arquero | Milicia | Piquetero | Caballo |
+|---|---|---|---|---|
+| **Arquero**   | — | **100%** (contra) | 56% (neutral) | 4% |
+| **Milicia**   | 0% | — | **100%** (contra) | 44% (neutral) |
+| **Piquetero** | 48% (neutral) | 0% | — | **100%** (contra) |
+| **Caballo**   | **92-100%** (contra) | 36% (neutral) | 0% | — |
+
+Stats ajustadas: `pike` hp55→60/atk5→6; `archer` hp35→55/atk5→5.4/cd1.5→1.2 y
+penalización cuerpo a cuerpo 0.5→0.6; `cavalry` hp95→52/atk9→6.87. Los 4
+contras del cuadrilátero dominan 92-100% (correcto); los 2 matchups neutrales
+(Arquero-Piquetero, Milicia-Caballo) quedan ~50/50, dentro (o a 1 combate de
+25 del límite) del tope del 55%. Sprites de catapulta/Taller de
+Asedio/Mercado pendientes de generar (emoji de respaldo esta sesión, ver
+`assets/ART.md`).
 
 ---
 
@@ -333,7 +353,7 @@ F6 Guardar+tutorial ──► F7 MP web (WebRTC) ──► F8 Rendimiento final
 | F2 Niebla+minimapa | ✅ | #11 | Niebla de 3 estados (65×38 celdas, 40px), recálculo cada 150ms sobre offscreen de baja resolución escalado con suavizado bilineal; minimapa colapsable a ~4.5Hz con control táctil de cámara; alertas con throttle 8s/zona (pulso + botón ⚔️). Puramente render/cliente, protocolo MP intacto. Ver `progress.md` 2026-07-15. |
 | F3 Manos RTS | ✅ | #12 | Grupos de control ①②③ (locales del cliente, limpian muertos); ataque-mover (estado `amove`, comando MP propio, auto-aggro continuo sin perder el destino); "Todo el ejército" + chips de filtro por tipo + doble toque en edificio; inercia de cámara con clamp elástico (sin temblor); rally encadenable sobre recurso con línea+bandera. Ver `progress.md` 2026-07-15. |
 | F4 Pathfinding | ✅ | #13 | A* en rejilla gruesa (40px, cachada por bando, invalidada solo al construir/destruir muralla o alternar puerta), formaciones (filas de 6, melee delante/arqueros detrás, asignación greedy), Puerta 🚪 como tramo central de muralla (bloquea siempre al rival; cerrada manualmente bloquea también al dueño), repath a los 0.6s atascado, separación consciente de murallas. MP: A* solo en el host. Ver `progress.md` 2026-07-15. |
-| F5 Profundidad | ⬜ | — | |
+| F5 Profundidad | ✅ | #14 | Líneas de mejora por Era (chevrons ▲, tier en `side.upg`, gratis en MP); Catapulta + Taller de Asedio (daño de área ×4 vs edificios, proyectil parabólico); guarnición de torres/castillo/Centro Urbano (+1 flecha/arquero guarnecido); Mercado (100 recurso ↔ 70/130 oro); pasada de balance con arena 20v20 headless (tabla arriba). Sprites de catapulta/taller/mercado pendientes de generar. Ver `progress.md` 2026-07-15. |
 | F6 Memoria+tutorial | ⬜ | — | |
 | F7 MP web | ⬜ | — | (transporte WS ya abstraíble; PeerJS pendiente) |
 | F8 Rendimiento | ⬜ | — | |

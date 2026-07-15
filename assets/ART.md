@@ -125,6 +125,19 @@ reglas y se guardan en `assets/sprites/`.
 | Aura de héroe | `fx_hero_aura.png` | brillo dorado | ⬜ |
 | Bandera de reunión | `fx_rally.png` | punto de rally | ⬜ |
 
+### Pendientes de la Fase 5 (PR #14) — sin generar esta sesión
+Ideogram no estaba disponible (requiere re-autenticación); las 3 entidades
+nuevas de la Fase 5 usan el **respaldo de emoji** del motor y sus nombres
+**NO** se registraron en `SPRITE_FILES` a propósito (para no generar
+peticiones 404 que Chromium reporta como `console.error` y violan la regla
+de "cero errores de consola" de `CLAUDE.md` §4). Cuando se generen, añadir el
+nombre correspondiente a `SPRITE_FILES` en `index.html`:
+| Sprite | Archivo (a crear) | Emoji de respaldo actual | Notas |
+|---|---|---|---|
+| Catapulta | `unit_siege.png` | 🎯 | vista cenital, muy grande/pesada, ruedas de madera, brazo de lanzamiento visible |
+| Taller de Asedio | `bld_siegeworkshop.png` | 🏭 | cobertizo abierto con vigas de madera, similar tamaño a Cuartel |
+| Mercado | `bld_market.png` | 🏪 | toldo/puesto con mercancías apiladas, distinto de Casa/Granja |
+
 ### Murallas y Puerta (PR #7 / Fase 4)
 Sprites ya integrados fuera de la tabla anterior: `bld_wall.png`/
 `bld_wall_h.png`/`bld_wall_v.png` (muro, con variantes horizontal/vertical

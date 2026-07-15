@@ -386,3 +386,51 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     (`separate`) ya no puede empujar a nadie dentro de una muralla/puerta que
     le bloquee (antes solo se protegía contra el río/riscos); esto evitaba
     que el apiñamiento en las esquinas "colara" unidades a través del muro.
+- **FASE 5 — Profundidad AoE: líneas de unidad, asedio, guarnición y mercado**
+  (PR #14): ver `PLAN.md` §4 F5. Cambios:
+  - **Líneas de mejora por Era** (`UNIT_LINES`, investigables en el edificio de
+    entrenamiento — Cuartel/Galería/Establo): Milicia → Espadachín (Era II) →
+    Campeón (Era IV); Piquetero → Alabardero (Era III); Arquero → Arquero de
+    Tiro Largo (Era III); Caballo → Caballero (Era III) → Paladín (Era IV).
+    Cada tier sube ~+35% hp/atq (compuesto) de TODAS las unidades vivas y
+    futuras de esa categoría del bando (`lineTierCount`/`lineTierMult`,
+    `buyLineTier` aplica el hp a las unidades vivas al instante; el atq se
+    deriva dinámicamente en `unitAtk`); los héroes no la reciben. Insignia
+    visual: chevrons ▲/▲▲ dibujados sobre la unidad en `drawUnit` (sin sprites
+    nuevos). El tier investigado se guarda como flag en `side.upg` (mismo
+    mecanismo que `UPG`/`ECON`), así que viaja gratis por `serSide` en
+    multijugador; el hp/maxHp de las unidades ya mejoradas viaja por la
+    serialización normal de entidades.
+  - **Asedio — Catapulta** 🎯 (unidad `siege`, entrenada en el nuevo edificio
+    **Taller de Asedio** 🏭 `BLD.siegeworkshop`, requiere Cuartel + Edad
+    Feudal): muy lenta (velocidad 22), hp bajo, daño de área ×4 contra
+    edificios/murallas (`SIEGE_BLD_MULT` en `computeDamage`) y solo mitad de
+    daño contra unidades — pierde en cuerpo a cuerpo y 1 contra 2 caballos.
+    Proyectil parabólico (`fireProjectile(...,'siege')`, arco visual en
+    `drawProjectiles`, ~170px/s) que además hace daño de área reducido a
+    otros edificios/murallas cercanos al impactar (`updateProjectiles`). La IA
+    Difícil (`DOCTRINE.hard.siege`) construye un Taller y hasta 2 catapultas
+    cuando el jugador tiene murallas en pie.
+  - **Guarnición**: tocar una Torre/Torre de Muralla/Castillo propio (máx.
+    4/4/8) con arqueros seleccionados los mete dentro (`garrisonUnits`): +1
+    flecha por arquero guarnecido en cada volea del edificio, y quedan
+    protegidos (no se pueden atacar ni seleccionar mientras estén dentro,
+    `e.garrisonedIn`). El Centro Urbano (máx. 10) acepta aldeanos como
+    refugio (no disparan). Botón "🚪 Expulsar" en el panel del edificio los
+    devuelve fuera; si el edificio es destruido, las unidades salen ilesas.
+    El estado viaja en MP: el conteo de guarnecidos por edificio (`o.gr` en
+    `serEntity`) y el flag de unidad guarnecida (`o.gi`), así el cliente ve el
+    número correcto y no dibuja/puede tocar esas unidades sin simular nada.
+  - **Mercado** 🏪 (nuevo edificio `BLD.market`, Era de las Herramientas):
+    vende 100 de comida/madera/piedra por 70 de oro, o compra 100 de esos
+    recursos por 130 de oro (`marketTrade`, tasas fijas). Botones en el panel
+    del Mercado; respeta los recursos disponibles.
+  - **Pasada de balance**: arena headless 20v20 (`arena.cjs` en el scratchpad
+    de la sesión) reutilizando el motor real (`update()`) por cada matchup del
+    cuadrilátero. Se detectó que, en combate masivo forzado (sin kiting
+    manual), Caballo vencía a su propio contra (Piquetero) y Arquero perdía
+    contra su presa (Milicia) por pura ventaja de stats — se ajustaron
+    `UNIT.pike`, `UNIT.archer` y `UNIT.cavalry` (hp/atq) para que los 4
+    contras del cuadrilátero dominen claramente (~92-100%) y los 2 matchups
+    neutrales (Arquero-Piquetero, Milicia-Caballo) queden por debajo del 55%
+    de dominancia. Detalle y tabla resultante en `PLAN.md` §4 F5 y §6.

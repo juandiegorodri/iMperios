@@ -47,7 +47,10 @@ El archivo se organiza en estas secciones (en orden de aparición):
    `BLD` (edificios: Casa, Castillo, Torre con `atk`, y de producción —Granja,
    Mina de Oro, Mina de Piedra, Bosquero— con `produces`/`plants`; murallas con
    `wall:true` —`wall`, `wall_tower`— y la Puerta `gate` con `wall:true,
-   gate:true`, Fase 4), `AGES`, `ECON`, `UPG`, `RES`, presets (`RES_PRESETS`,
+   gate:true`, Fase 4; Fase 5: `siegeworkshop` —Taller de Asedio, entrena
+   Catapulta, req. Cuartel + Era Feudal— y `market` —Mercado, req. Era de las
+   Herramientas—), `UNIT_LINES`/`GARRISON_MAX`/`MARKET_QTY` y demás constantes
+   de la Fase 5 (ver 4.5), `AGES`, `ECON`, `UPG`, `RES`, presets (`RES_PRESETS`,
    `SPEED_PRESETS`, `MAPS`) y `gameConfig`.
 2. **Estado global**: `cam`, `entities`, `selection`, `player`, `enemy`
    (con `mods.resMult` y `stats`), `gameSpeed`, `mapTheme`, `terrain`, `bridge`,
@@ -102,7 +105,12 @@ El archivo se organiza en estas secciones (en orden de aparición):
    el mismo patrón que `move`; los comandos `move`/`amove` calculan el A* y la
    formación **en el host** vía `applyGroupMove` (Fase 4, ver 8.5). El estado
    abierto/cerrado de una Puerta viaja como `o.cl` en `serEntity`/`deserEntity`
-   y tiene su propio comando `gate` (Fase 4).
+   y tiene su propio comando `gate` (Fase 4). Fase 5: el tier de línea de
+   mejora investigado viaja gratis en `side.upg` (sin cambios en el protocolo,
+   ver 4.5); el conteo de guarnición de un edificio viaja como `o.gr` y si una
+   unidad está guarnecida como `o.gi` (ambos en `serEntity`/`deserEntity`); el
+   proyectil de catapulta lleva `o.k:'siege'` en `serProjectile`; comandos
+   nuevos en `hostHandleCmd`: `lineupg`, `garrison`, `expel`, `market`.
 2.7. **Grupos de control tácticos** (Fase 3, LOCALES del cliente — no viajan
    por red): `controlGroups` (3 arrays de ids), `saveControlGroup`/
    `cleanControlGroup`/`selectControlGroup` y `updateGroupBadge`; listeners
@@ -113,7 +121,22 @@ El archivo se organiza en estas secciones (en orden de aparición):
 3. **Utilidades**: `dist`, `clamp`, `find`, `radiusOf`, recursos/coste
    (`canAfford`, `pay`, `costStr`, `popCount`, `popCap`), `hasBuilding`,
    `countBuildings`, `prodSpeed` (bono de producción por nº de edificios).
-4. **Creación de entidades**: `makeUnit`, `makeBuilding`, `makeResource`.
+4. **Creación de entidades**: `makeUnit` (aplica el hp del tier de línea de
+   mejora vigente del bando, Fase 5, vía `lineTierMult`), `makeBuilding`
+   (inicializa `garrison:[]` en los edificios de `GARRISON_MAX`, Fase 5),
+   `makeResource`.
+4.5. **Líneas de mejora, asedio, guarnición y mercado** (Fase 5): `UNIT_LINES`
+   (tiers por categoría con coste/`reqAge`), `LINE_TIER_MULT` (×1.35 por
+   tier), `lineTierCount`/`lineTierMult` (consulta dinámica, usada por
+   `unitAtk` y por el chevron en `drawUnit`), `nextLineTier`/`buyLineTier`
+   (compra: sube hp de las unidades vivas de la categoría al instante, el atq
+   se deriva solo; tier guardado en `side.upg`, gratis en `serSide`).
+   `GARRISON_MAX`/`canGarrison`/`garrisonUnits`/`expelGarrison` (guarnición de
+   torres/castillo/Centro Urbano; unidades guarnecidas llevan `e.garrisonedIn`
+   y se saltan en `update`, `nearestEnemy`, `pickAt`, `separate` y el filtro de
+   `render`). `MARKET_QTY`/`MARKET_SELL_GOLD`/`MARKET_BUY_GOLD`/`marketTrade`
+   (Mercado). `SIEGE_BLD_MULT` (daño de área ×4 de la catapulta contra
+   edificios/murallas, en `computeDamage`).
 5. **Inicialización y mapas**: `startGame` (usa `gameConfig`, reinicia `stats`),
    `spawnResourceCluster`, `generateMap` (recursos/terreno por tema; río vertical
    con puente), `onObstacle` (bloqueo de construcción) y `blocksUnit` (bloqueo de
@@ -129,10 +152,14 @@ El archivo se organiza en estas secciones (en orden de aparición):
    (multi-era), `buyUpgrade`, `buyEcon`/`nextEcon` (tecnologías de recursos),
    `cancelQueued` (cancela y reembolsa), stats efectivas (`unitAtk`, `unitRange`,
    `unitArmor` por categoría, `gatherRate` por recurso), combate: `computeDamage`
-   (cálculo puro), `applyDamage` (aplica hp, `hurtT`, `hitBy` y `alertFlags` al
-   impactar), `damage` (golpe cuerpo a cuerpo instantáneo), `fireProjectile`/
-   `updateProjectiles` (proyectiles reales — arqueros, héroe arco, torres,
-   torres de muralla, castillo — el daño se aplica al llegar, no al disparar).
+   (cálculo puro; Fase 5: ×`SIEGE_BLD_MULT` el daño de la catapulta contra
+   edificios/murallas, ×0.5 contra unidades), `applyDamage` (aplica hp,
+   `hurtT`, `hitBy` y `alertFlags` al impactar), `damage` (golpe cuerpo a
+   cuerpo instantáneo), `fireProjectile`/`updateProjectiles` (proyectiles
+   reales — arqueros, héroe arco, torres, torres de muralla, castillo,
+   catapultas — el daño se aplica al llegar, no al disparar; el proyectil
+   `kind:'siege'` además hace daño de área reducido a otros edificios/
+   murallas cercanos al punto de impacto, Fase 5).
 8. **Lógica de unidades / IA**: `nearestEnemy`, `nearestResourceOfType`,
    `nearestGatherFor`/`nearestAnyResource` (incluyen edificios de producción),
    `srcRtype`, `autoAssignIdle` (aldeano inactivo busca trabajo), `separate`
@@ -188,8 +215,12 @@ El archivo se organiza en estas secciones (en orden de aparición):
     (con `drawDamageFx`: humo/fuego por hp) /`drawUnit` (animación procedural
     — bamboleo, lunge, volteo — y flash `hurtT`; dibujan **sprite** con anillo
     de bando y sombra, respaldo de emoji; el lunge también cubre el estado
-    `amove` — Fase 3), `drawProjectiles` (flechas en vuelo, también
-    filtradas por niebla), `drawHpBar`, `roundRect`. `drawBuilding` dibuja el
+    `amove` — Fase 3; Fase 5: chevrons ▲ por tier de línea investigado sobre
+    la unidad, y las unidades guarnecidas —`e.garrisonedIn`— se excluyen del
+    listado a dibujar antes de llegar aquí), `drawProjectiles` (flechas/rocas
+    en vuelo, también filtradas por niebla; Fase 5: el proyectil `kind:'siege'`
+    de la catapulta se dibuja como roca con arco parabólico en vez de flecha),
+    `drawHpBar`, `roundRect`. `drawBuilding` dibuja el
     rally con línea punteada + bandera 🚩 + icono del recurso si es
     encadenado (Fase 3); la Puerta (Fase 4) usa el sprite `obj_gate` (no
     `bld_wall_h/v`) y siempre dibuja un candado 🔒/🔒→🔓 sobre ella según
@@ -199,21 +230,30 @@ El archivo se organiza en estas secciones (en orden de aparición):
     `pointerdown/move/up/cancel`, `wheel`, teclado; `pickAt`, `handleTap`
     (primero consume `orderMode==='amove'` pendiente — ver `amoveOrder` — y
     también acepta fijar el rally sobre un recurso/edificio de producción; la
-    orden de mover unidades propias delega en `applyGroupMove` — Fase 4),
-    `handleDoubleTap` (unidades del mismo tipo visibles; Fase 3: también
-    edificios del mismo tipo), `finishBoxSelect`, `selectedUnits`,
-    `selectedBuilding`; colocación (`placementValid`, `tryPlaceBuilding`).
+    orden de mover unidades propias delega en `applyGroupMove` — Fase 4; Fase
+    5: tocar una torre/castillo/Centro Urbano propio con unidades
+    guarnecibles seleccionadas —`canGarrison`— las mete dentro vía
+    `garrisonUnits`, antes de la rama de "mover"), `handleDoubleTap` (unidades
+    del mismo tipo visibles, excluye guarnecidas — Fase 5; Fase 3: también
+    edificios del mismo tipo), `finishBoxSelect` (excluye guarnecidas — Fase
+    5), `selectedUnits`, `selectedBuilding`; colocación (`placementValid`,
+    `tryPlaceBuilding`).
 12. **UI: panel de acciones**: `btnEl`, `clearActions` (limpia botones y filas de
     cola), `updateActionPanel` (multiplicador de producción, fila de cola
     cancelable, chips de filtro por tipo en selecciones mixtas — Fase 3 —,
-    estado abierta/cerrada de una Puerta seleccionada — Fase 4 — y botón
-    Deseleccionar), `buildingButtons` (incluye avance de era, tecnologías
-    económicas, construcción de Casa/Castillo y, para una Puerta, el botón
-    "🔒 Cerrar puerta"/"🔓 Abrir puerta" que alterna `b.closed` — Fase 4, ≥44px,
-    envía comando `gate` si es cliente MP), `deselectAll`. Botón "⚔️→
-    Ataque-mover" (Fase 3, con militares seleccionados) fija `orderMode='amove'`;
-    botón "🪖 Todo el ejército" (`#btnArmy`) selecciona todos los militares
-    vivos propios.
+    estado abierta/cerrada de una Puerta seleccionada — Fase 4 —, conteo de
+    guarnición — Fase 5 — y botón Deseleccionar), `appendLineTierButtons`
+    (Fase 5: botón de investigación del próximo tier de línea para las
+    categorías entrenables en Cuartel/Galería/Establo), `buildingButtons`
+    (incluye avance de era, tecnologías económicas, construcción de
+    Casa/Castillo, entrenamiento de Catapulta en el Taller de Asedio, botones
+    de compra/venta del Mercado, y para una Puerta, el botón "🔒 Cerrar
+    puerta"/"🔓 Abrir puerta" que alterna `b.closed` — Fase 4, ≥44px, envía
+    comando `gate` si es cliente MP; al final, para cualquier edificio con
+    guarnición, info "🛡️ N/max" + botón "🚪 Expulsar" — Fase 5), `deselectAll`.
+    Botón "⚔️→ Ataque-mover" (Fase 3, con militares seleccionados) fija
+    `orderMode='amove'`; botón "🪖 Todo el ejército" (`#btnArmy`) selecciona
+    todos los militares vivos propios (excluye guarnecidos — Fase 5).
 13. **Barra superior y utilidades de UI**: `updateTopbar` (contador de inactivos
     y tasa de producción por recurso), `idleVillagers`, `selectNextIdle`,
     `showHint`, `endGame` y `renderSummary` (tabla del resumen final).

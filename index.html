@@ -281,11 +281,11 @@ const UNIT = {
               cost:{food:50}, train:11 },
   infantry: { name:'Milicia',   emoji:'⚔️', cat:'infantry', hp:55, atk:6, speed:56, range:16, cd:1.1, pop:1,
               cost:{food:60}, train:14 },
-  pike:     { name:'Piquetero', emoji:'🔱', cat:'pike',     hp:55, atk:5, speed:52, range:18, cd:1.2, pop:1,
+  pike:     { name:'Piquetero', emoji:'🔱', cat:'pike',     hp:60, atk:6, speed:52, range:18, cd:1.2, pop:1,
               cost:{food:35,wood:25}, train:15 },
-  archer:   { name:'Arquero',   emoji:'🏹', cat:'archer',   hp:35, atk:5, speed:55, range:92, cd:1.5, pop:1,
+  archer:   { name:'Arquero',   emoji:'🏹', cat:'archer',   hp:55, atk:5.42, speed:55, range:92, cd:1.2, pop:1,
               cost:{wood:40,gold:25}, train:17 },
-  cavalry:  { name:'Caballo',   emoji:'🐎', cat:'cavalry',  hp:95, atk:9, speed:96, range:18, cd:1.4, pop:1,
+  cavalry:  { name:'Caballo',   emoji:'🐎', cat:'cavalry',  hp:52, atk:6.87, speed:96, range:18, cd:1.4, pop:1,
               cost:{food:70,gold:40}, train:21 },
   // Héroes (Castillo): versiones potentes de cada categoría.
   hero_sword:  { name:'Héroe Espada', emoji:'🦸', cat:'infantry', hero:true, hp:200, atk:18, speed:60, range:18, cd:1.0, pop:2,
@@ -294,6 +294,34 @@ const UNIT = {
                  cost:{wood:100,gold:140}, train:30 },
   hero_cav:    { name:'Héroe Jinete', emoji:'🐎', cat:'cavalry',  hero:true, hp:280, atk:22, speed:100, range:18, cd:1.2, pop:2,
                  cost:{food:150,gold:160}, train:34 },
+  // Asedio (Fase 5): muy lenta, débil cuerpo a cuerpo, daño de área ×4 contra
+  // edificios/murallas (ver `computeDamage`). Requiere Taller de Asedio.
+  siege:    { name:'Catapulta', emoji:'🎯', cat:'siege', hp:55, atk:22, speed:22, range:130, cd:2.6, pop:3,
+              cost:{wood:200,gold:100}, train:35 },
+};
+
+// Líneas de mejora por Era (Fase 5): cada tier sube ~+35% hp/atk de TODAS las
+// unidades vivas y futuras de esa categoría (aplica a `unitAtk` dinámicamente
+// y a `e.hp`/`e.maxHp` directamente al comprar, ver `buyLineTier`). Los héroes
+// NO reciben esta mejora (van en su propia curva de poder). El tier investigado
+// se guarda como flag en `side.upg[key]` (mismo mecanismo que `UPG`/`ECON`), así
+// que viaja gratis por `serSide` en multijugador sin tocar el protocolo.
+const LINE_TIER_MULT = 1.35;
+const UNIT_LINES = {
+  infantry: { tiers: [
+    { key:'tier_infantry_1', name:'Espadachín', emoji:'⚔️', cost:{food:150,gold:60},  reqAge:2 },
+    { key:'tier_infantry_2', name:'Campeón',    emoji:'🗡️', cost:{food:300,gold:150}, reqAge:4 },
+  ]},
+  pike: { tiers: [
+    { key:'tier_pike_1', name:'Alabardero', emoji:'🔱', cost:{food:150,wood:100}, reqAge:3 },
+  ]},
+  archer: { tiers: [
+    { key:'tier_archer_1', name:'Arquero de Tiro Largo', emoji:'🏹', cost:{wood:120,gold:100}, reqAge:3 },
+  ]},
+  cavalry: { tiers: [
+    { key:'tier_cavalry_1', name:'Caballero', emoji:'🐴', cost:{food:180,gold:120}, reqAge:3 },
+    { key:'tier_cavalry_2', name:'Paladín',   emoji:'🛡️', cost:{food:350,gold:250}, reqAge:4 },
+  ]},
 };
 
 // Definición de edificios. `pop` = población que aporta; `reqAge` = era mínima.
@@ -322,7 +350,24 @@ const BLD = {
   // muralla normal); si se cierra manualmente (`b.closed`), bloquea a todos,
   // incluido el dueño. HP menor que la Torre de Muralla.
   gate:       { name:'Puerta',        emoji:'🚪', hp:600,  size:34, cost:{stone:12}, build:7, req:[], wall:true, gate:true },
+  // Fase 5: Taller de Asedio (entrena Catapultas, req. Cuartel + Era Feudal) y
+  // Mercado (intercambia recursos por oro, req. Era de las Herramientas).
+  siegeworkshop: { name:'Taller de Asedio', emoji:'🏭', hp:650, size:56, cost:{wood:200,stone:50}, build:26, req:['barracks'], reqAge:3 },
+  market:        { name:'Mercado',          emoji:'🏪', hp:500, size:50, cost:{wood:150}, build:20, req:[], reqAge:2 },
 };
+
+// Guarnición (Fase 5): torres/castillo aceptan arqueros (más flechas por
+// volea); el Centro Urbano acepta aldeanos como refugio (no disparan). Máximo
+// de unidades guarnecidas por tipo de edificio.
+const GARRISON_MAX = { tower:4, wall_tower:4, castle:8, town:10 };
+function canGarrison(btype, utype){
+  if(GARRISON_MAX[btype]===undefined) return false;
+  if(btype==='town') return utype==='villager';
+  return !!UNIT[utype] && UNIT[utype].cat==='archer';
+}
+
+// Mercado (Fase 5): tasas fijas simples.
+const MARKET_QTY = 100, MARKET_SELL_GOLD = 70, MARKET_BUY_GOLD = 130;
 
 // Edades (índice = nº de era). `cost` = coste para AVANZAR a esa era.
 const AGES = [
@@ -451,6 +496,10 @@ const SPRITE_FILES = [
   'bld_tower','bld_castle','bld_farm','bld_goldmine','bld_quarry','bld_lumbercamp',
   'bld_wall','bld_wall_h','bld_wall_v','bld_wall_tower',
   'tile_grass','tile_water','tile_mountain','tile_dirt','obj_mountain','obj_gate',
+  // Fase 5: catapulta, taller de asedio y mercado usan emoji de respaldo esta
+  // sesión (Ideogram no disponible) — NO se registran aquí a propósito para
+  // evitar peticiones 404 (que Chromium reporta como console.error); cuando
+  // se generen los PNG, añadir 'unit_siege','bld_siegeworkshop','bld_market'.
 ];
 const sprites = {};
 let spritesReady = 0;
@@ -639,13 +688,15 @@ function serEntity(e){
     // el pulso `anim` del host y el id del objetivo/obra para orientar el golpe.
     if(e.anim>0) o.an=Math.round(e.anim*100)/100;
     if((e.state==='attack'||e.state==='amove') && e.target && e.target.id!=null) o.tg=e.target.id;
-    if(e.state==='build' && e.build!=null) o.bd=e.build; }
+    if(e.state==='build' && e.build!=null) o.bd=e.build;
+    if(e.garrisonedIn) o.gi=1; }   // guarnecida (Fase 5): el cliente no la dibuja ni la puede tocar
   else if(e.kind==='building'){ o.b=e.btype; o.hp=Math.round(e.hp); o.mhp=e.maxHp; o.bt=e.built?1:0;
     o.pg=Math.round(e.progress*10)/10; if(e.dir) o.dir=e.dir;
     if(e.queue.length) o.q=e.queue.map(j=>({type:j.type,time:Math.round(j.time*10)/10,total:j.total}));
     if(e.reserve!==undefined){ o.rv=Math.round(e.reserve); o.mrv=e.maxReserve; }
     if(e.rally){ o.ry={x:Math.round(e.rally.x),y:Math.round(e.rally.y)}; if(e.rally.rtype) o.ry.rt=e.rally.rtype; }
-    if(e.btype==='gate') o.cl=e.closed?1:0; }
+    if(e.btype==='gate') o.cl=e.closed?1:0;
+    if(e.garrison && e.garrison.length) o.gr=e.garrison.length; }   // guarnición (Fase 5): solo el conteo
   else if(e.kind==='resource'){ o.r=e.rtype; o.am=Math.round(e.amount); o.mam=e.maxAmount; }
   return o;
 }
@@ -654,12 +705,14 @@ function deserEntity(o){
   if(o.kind==='unit'){ e.type=o.u; e.state=o.st||'idle'; if(o.g) e.gather={id:o.g};
     e.anim=o.an||0;                          // pulso de animación del host (para el lunge)
     if(o.tg!=null) e.target={id:o.tg};       // objetivo de ataque → dirección del lunge
-    if(o.bd!=null) e.build=o.bd; }            // obra en construcción → dirección del lunge
+    if(o.bd!=null) e.build=o.bd;              // obra en construcción → dirección del lunge
+    if(o.gi) e.garrisonedIn = true; }         // guarnecida (Fase 5): no se dibuja/toca en el cliente
   else if(o.kind==='building'){ e.btype=o.b; e.built=!!o.bt; e.progress=o.pg||0; if(o.dir) e.dir=o.dir;
     e.queue=(o.q||[]).map(j=>({type:j.type,time:j.time,total:j.total}));
     if(o.rv!==undefined){ e.reserve=o.rv; e.maxReserve=o.mrv; }
     if(o.ry) e.rally = o.ry.rt ? {x:o.ry.x,y:o.ry.y,rtype:o.ry.rt} : {x:o.ry.x,y:o.ry.y};
-    if(o.b==='gate') e.closed = !!o.cl; }
+    if(o.b==='gate') e.closed = !!o.cl;
+    e.garrison = o.gr ? new Array(o.gr).fill(0) : []; }   // guarnición (Fase 5): solo el conteo en el cliente
   else if(o.kind==='resource'){ e.rtype=o.r; e.amount=o.am; e.maxAmount=o.mam; }
   return e;
 }
@@ -667,8 +720,10 @@ function serSide(s){ return { res:{...s.res}, age:s.age, upg:{...s.upg}, stats:{
 // Proyectiles: campo ligero en el snapshot para que el cliente los reconstruya
 // (no simula: solo interpola la flecha entre origen y destino con t/dur).
 function serProjectile(p){
-  return { i:p.id, x0:Math.round(p.x0), y0:Math.round(p.y0), x1:Math.round(p.x1), y1:Math.round(p.y1),
+  const o={ i:p.id, x0:Math.round(p.x0), y0:Math.round(p.y0), x1:Math.round(p.x1), y1:Math.round(p.y1),
     t:Math.round(p.t*100)/100, dur:Math.round(p.dur*100)/100, o:flipOwner(p.owner) };
+  if(p.kind && p.kind!=='arrow') o.k=p.kind;   // 'siege' (Fase 5): arco parabólico en el cliente
+  return o;
 }
 // El "yo" del cliente es el lado 'enemy' del host (por eso va flipado).
 function makeSnap(){
@@ -704,7 +759,7 @@ function applySnap(m){
       corpses.push({ x:u.x, y:u.y, type:u.type, owner:u.owner, face:1, t0:nowTs });
     }
   }
-  projectiles = (m.shots||[]).map(o=>({ id:o.i, x0:o.x0, y0:o.y0, x1:o.x1, y1:o.y1, t:o.t, dur:o.dur, owner:o.o }));
+  projectiles = (m.shots||[]).map(o=>({ id:o.i, x0:o.x0, y0:o.y0, x1:o.x1, y1:o.y1, t:o.t, dur:o.dur, owner:o.o, kind:o.k||'arrow' }));
   // SFX de flecha: suena cuando aparece un proyectil NUEVO respecto a la
   // instantánea anterior (el cliente no ejecuta fireProjectile). El throttle de
   // playSfx evita saturación si llegan varias flechas en la misma instantánea.
@@ -786,6 +841,11 @@ function hostHandleCmd(m){
     case 'age': tryAdvanceAge(own); break;
     case 'upg': if(UPG[m.k]) buyUpgrade(own, m.k); break;
     case 'econ': if(ECON[m.r]) buyEcon(own, m.r, m.i); break;
+    case 'lineupg': if(UNIT_LINES[m.cat]) buyLineTier(own, m.cat, m.i); break;
+    case 'garrison': { const gb=find(m.b); if(gb && gb.owner===own && GARRISON_MAX[gb.btype]!==undefined){
+      garrisonUnits(units.filter(u=>canGarrison(gb.btype,u.type)), gb); } break; }
+    case 'expel': { const eb=find(m.b); if(eb && eb.owner===own) expelGarrison(eb); break; }
+    case 'market': if(RES[m.r]) marketTrade(own, m.dir, m.r); break;
     case 'gate': { const g=find(m.b); if(g && g.owner===own && g.btype==='gate'){ g.closed=!!m.closed; invalidatePathGrid(); } break; }
     case 'rally': { const b=find(m.b); if(b && b.owner===own) b.rally = m.rtype ? {x:m.x,y:m.y,rtype:m.rtype} : {x:m.x,y:m.y}; break; }
     case 'place': hostPlace(m, units); break;
@@ -835,8 +895,12 @@ function radiusOf(e){
 // ---------- Creación de entidades ----------
 function makeUnit(owner, type, x, y){
   const d = UNIT[type];
+  // Línea de mejora por Era (Fase 5): las unidades NUEVAS nacen ya con el hp
+  // del tier investigado por su bando (los héroes no reciben esta mejora).
+  const mult = d.hero ? 1 : lineTierMult(owner, d.cat);
+  const hp = Math.round(d.hp*mult);
   return { id:genId(), kind:'unit', owner, type, x, y,
-    hp:d.hp, maxHp:d.hp, state:'idle', target:null, move:null,
+    hp, maxHp:hp, state:'idle', target:null, move:null,
     gather:null, build:null, cd:0, anim:0, rally:null };
 }
 function makeBuilding(owner, btype, x, y, built){
@@ -846,7 +910,94 @@ function makeBuilding(owner, btype, x, y, built){
     built:!!built, progress: built? d.build : 0, queue:[], rally:null,
     cd:0, anim:0 };
   if(d.produces){ b.maxReserve = 500; b.reserve = 500; }   // capacidad finita
+  if(GARRISON_MAX[btype]!==undefined) b.garrison = [];     // guarnición (Fase 5)
   return b;
+}
+// Nº de tiers de línea investigados por `owner` para la categoría `cat` (0 si
+// ninguno). Recorre en orden: un tier requiere el anterior ya investigado.
+function lineTierCount(owner, cat){
+  const line = UNIT_LINES[cat]; if(!line) return 0;
+  const s = side(owner); let n=0;
+  for(const t of line.tiers){ if(s.upg[t.key]) n++; else break; }
+  return n;
+}
+function lineTierMult(owner, cat){ return Math.pow(LINE_TIER_MULT, lineTierCount(owner, cat)); }
+// Próximo tier no investigado de una línea (o null si no hay línea o ya está completa).
+function nextLineTier(owner, cat){
+  const line = UNIT_LINES[cat]; if(!line) return null;
+  const s = side(owner);
+  for(let i=0;i<line.tiers.length;i++) if(!s.upg[line.tiers[i].key]) return {tier:line.tiers[i], idx:i};
+  return null;
+}
+// Compra un tier de línea: sube el atq (dinámico, vía `unitAtk`) y el hp (se
+// aplica AHORA a las unidades vivas de esa categoría, y de fábrica a las
+// futuras vía `makeUnit`). MP: el flag viaja gratis en `side.upg` (`serSide`);
+// el hp/maxHp de las unidades vivas ya cambiadas viaja por `serEntity` normal.
+function buyLineTier(owner, cat, idx){
+  if(net.mode==='client'){ netSend({t:'cmd', c:'lineupg', cat, i:idx}); return; }
+  const line = UNIT_LINES[cat]; if(!line) return;
+  const t = line.tiers[idx]; if(!t) return;
+  const s = side(owner);
+  if(s.upg[t.key]) return;
+  if(idx>0 && !s.upg[line.tiers[idx-1].key]) return;   // hay que investigar en orden
+  if(s.age < t.reqAge){ if(owner==='player') showHint('Requiere '+AGES[t.reqAge].name+'.'); return; }
+  if(!canAfford(s, t.cost)){ if(owner==='player') showHint('Recursos insuficientes.'); return; }
+  pay(s, t.cost); s.upg[t.key] = true;
+  for(const e of entities){
+    if(e.kind==='unit' && e.owner===owner && !UNIT[e.type].hero && UNIT[e.type].cat===cat){
+      e.maxHp = Math.round(e.maxHp*LINE_TIER_MULT);
+      e.hp = Math.round(e.hp*LINE_TIER_MULT);
+    }
+  }
+  if(owner==='player'){ showHint(t.name+' investigado: unidades mejoradas (+'+Math.round((LINE_TIER_MULT-1)*100)+'% hp/atq).'); updateActionPanel(); }
+}
+// ---------- Guarnición (Fase 5) ----------
+function garrisonUnits(units, b){
+  const cap = GARRISON_MAX[b.btype]; if(cap===undefined || !units.length) return;
+  if(!b.garrison) b.garrison=[];
+  let entered=0;
+  for(const u of units){
+    if(b.garrison.length>=cap) break;
+    // Ya guarnecida (aquí o en otro edificio): no volver a meterla. Protege el
+    // caso del cliente MP, cuya `selection` puede seguir conteniendo unidades ya
+    // guarnecidas si se vuelve a tocar el edificio sin reseleccionar (evita
+    // duplicados en `b.garrison` que inflaban el bono de flechas y llenaban el
+    // cupo con fantasmas).
+    if(u.garrisonedIn || b.garrison.includes(u.id)) continue;
+    b.garrison.push(u.id);
+    u.garrisonedIn = b.id;
+    u.state='garrison'; u.target=null; u.move=null; u.gather=null; u.build=null; u.path=null; u.pathIdx=0;
+    u.x=b.x; u.y=b.y;
+    entered++;
+  }
+  if(entered){
+    selection = selection.filter(id=>{ const uu=find(id); return !(uu && uu.garrisonedIn===b.id); });
+    if(b.owner==='player'){ showHint(entered+' unidad(es) guarnecidas en '+BLD[b.btype].name+'.'); updateActionPanel(); }
+  }
+}
+function expelGarrison(b){
+  const ids=[...(b.garrison||[])]; if(!ids.length) return;
+  b.garrison=[];
+  for(const id of ids){
+    const u=find(id); if(!u) continue;
+    u.garrisonedIn=null; u.state='idle';
+    const ang=Math.random()*Math.PI*2, r=BLD[b.btype].size/2+22;
+    u.x=clamp(b.x+Math.cos(ang)*r,8,WORLD.w-8); u.y=clamp(b.y+Math.sin(ang)*r,8,WORLD.h-8);
+  }
+  if(b.owner==='player') updateActionPanel();
+}
+// ---------- Mercado (Fase 5): tasas fijas simples ----------
+function marketTrade(owner, dir, r){
+  if(net.mode==='client'){ netSend({t:'cmd', c:'market', dir, r}); return; }
+  const s = side(owner);
+  if(dir==='sell'){
+    if((s.res[r]||0) < MARKET_QTY){ if(owner==='player') showHint('No tienes suficiente '+r+'.'); return; }
+    s.res[r] -= MARKET_QTY; s.res.gold = (s.res.gold||0)+MARKET_SELL_GOLD;
+  } else {
+    if((s.res.gold||0) < MARKET_BUY_GOLD){ if(owner==='player') showHint('Oro insuficiente.'); return; }
+    s.res.gold -= MARKET_BUY_GOLD; s.res[r] = (s.res[r]||0)+MARKET_QTY;
+  }
+  if(owner==='player') updateActionPanel();
 }
 function makeResource(rtype, x, y){
   const d = RES[rtype];
@@ -1339,6 +1490,7 @@ function unitAtk(e){
   const s=side(e.owner), d=UNIT[e.type]; let a=d.atk;
   if(d.cat==='archer') a+=s.mods.archerAtk;
   if(d.cat==='infantry'||d.cat==='cavalry') a+=s.mods.meleeAtk;
+  if(!d.hero) a *= lineTierMult(e.owner, d.cat);   // línea de mejora por Era (Fase 5)
   return a;
 }
 function unitRange(e){
@@ -1355,12 +1507,19 @@ function gatherRate(e, rtype){
 // ---------- Combate ----------
 // Cálculo puro del daño de una unidad atacante (sin efectos secundarios), para
 // poder decidirlo en el momento del disparo pero aplicarlo recién al impacto.
+const SIEGE_BLD_MULT = 4;    // catapulta: daño de área ×4 contra edificios/murallas
 function computeDamage(attacker, target){
   let dmg = unitAtk(attacker);
   const aCat = UNIT[attacker.type].cat;
   // El arquero a distancia pega completo; en cuerpo a cuerpo (enemigo pegado)
-  // su daño baja a la mitad: no es especialista del combate cercano.
-  if(aCat==='archer' && dist(attacker,target) < 40) dmg *= 0.5;
+  // su daño se reduce: no es especialista del combate cercano (pero, tras la
+  // pasada de balance de la Fase 5, no queda tan indefenso como para perder
+  // SIEMPRE la línea neutral contra el piquetero — ver `arena.cjs`).
+  if(aCat==='archer' && dist(attacker,target) < 40) dmg *= 0.6;
+  // Catapulta (Fase 5): devastadora contra edificios/murallas, mediocre contra
+  // unidades (además de su hp bajo y su ritmo de tiro lento, ya la hace perder
+  // en cuerpo a cuerpo o 1 vs 2 contra caballería).
+  if(aCat==='siege'){ dmg *= (target.kind==='building') ? SIEGE_BLD_MULT : 0.5; }
   if(target.kind==='unit' && STRONG_VS[aCat]===UNIT[target.type].cat) dmg*=BONUS;
   if(target.kind==='unit') dmg -= unitArmor(target);
   return Math.max(1, dmg);
@@ -1385,22 +1544,36 @@ function damage(attacker, target){
 }
 // Dispara un proyectil visible (arquero/héroe arco/torre/castillo); el daño
 // `dmg` ya viene calculado y se aplica recién al impactar (updateProjectiles).
-function fireProjectile(attacker, target, dmg){
+// `kind`: 'arrow' (por defecto) o 'siege' (catapulta: proyectil parabólico más
+// lento, dibujado con arco en `drawProjectiles`, con daño de área al impactar).
+function fireProjectile(attacker, target, dmg, kind){
   const d = dist(attacker, target) || 1;
-  const dur = Math.max(0.05, d/300);   // ~300px/s
+  const spd = kind==='siege' ? 170 : 300;
+  const dur = Math.max(0.05, d/spd);
   projectiles.push({ id:nextShotId++, x0:attacker.x, y0:attacker.y, x1:target.x, y1:target.y, t:0, dur, dmg,
-    aId:attacker.id, tId:target.id, owner:attacker.owner });
+    aId:attacker.id, tId:target.id, owner:attacker.owner, kind:kind||'arrow' });
   attacker.anim = 0.25;
-  playSfx('arrow');
+  playSfx(kind==='siege' ? 'mine' : 'arrow');
 }
 // Avanza los proyectiles en vuelo y aplica el daño al llegar a destino (host/SP).
+// Los proyectiles de catapulta ('siege') hacen además daño de área reducido a
+// otros edificios/murallas cercanos al punto de impacto.
 function updateProjectiles(dt){
   for(let i=projectiles.length-1;i>=0;i--){
     const p = projectiles[i];
     p.t += dt;
     if(p.t >= p.dur){
       const t = find(p.tId), a = find(p.aId);
-      if(t && t.hp>0 && a) applyDamage(a, t, p.dmg);
+      if(t && t.hp>0 && a){
+        applyDamage(a, t, p.dmg);
+        if(p.kind==='siege' && t.kind==='building'){
+          for(const o of entities){
+            if(o!==t && o.kind==='building' && o.owner===t.owner && o.hp>0 && dist(o,t)<60){
+              applyDamage(a, o, Math.max(1, Math.round(p.dmg*0.5)));
+            }
+          }
+        }
+      }
       projectiles.splice(i,1);
     }
   }
@@ -1410,6 +1583,7 @@ function updateProjectiles(dt){
 function nearestEnemy(e, range){
   let best=null, bd=range;
   for(const o of entities){
+    if(o.garrisonedIn) continue;   // unidad guarnecida (Fase 5): no es un blanco válido
     if((o.kind==='unit'||o.kind==='building') && o.owner && o.owner!==e.owner && o.owner!=='gaia'){
       const dd=dist(e,o);
       if(dd<bd){ bd=dd; best=o; }
@@ -1474,7 +1648,7 @@ function autoAssignIdle(e){
 function separate(e, dt){
   let sx=0, sy=0, n=0;
   for(const o of entities){
-    if(o===e || o.kind!=='unit') continue;
+    if(o===e || o.kind!=='unit' || o.garrisonedIn) continue;
     const dd=dist(e,o);
     if(dd>0 && dd<24){ sx+=(e.x-o.x)/dd; sy+=(e.y-o.y)/dd; n++; }
   }
@@ -1527,6 +1701,7 @@ function update(dt){
   // Unidades
   for(const e of entities){
     if(e.kind!=='unit') continue;
+    if(e.garrisonedIn){ continue; }   // guarnecida (Fase 5): sin IA/movimiento, no se le puede atacar
     if(e.cd>0) e.cd-=dt;
     if(e.anim>0) e.anim-=dt;
 
@@ -1587,7 +1762,9 @@ function update(dt){
         const reach = unitRange(e) + radiusOf(t);
         if(dist(e,t) > reach){ stepToward(e, t, dt); }
         else if(e.cd<=0){
-          if(UNIT[e.type].cat==='archer') fireProjectile(e, t, computeDamage(e,t));
+          const ecat=UNIT[e.type].cat;
+          if(ecat==='archer') fireProjectile(e, t, computeDamage(e,t));
+          else if(ecat==='siege') fireProjectile(e, t, computeDamage(e,t), 'siege');
           else damage(e,t);
           e.cd = UNIT[e.type].cd;
         }
@@ -1685,8 +1862,11 @@ function update(dt){
         const reach = unitRange(e) + radiusOf(t);
         if(dist(e,t) > reach){ stepToward(e, t, dt); }
         else if(e.cd<=0){
-          // Arqueros (incl. héroe arco) disparan flecha real; el resto pega al instante.
-          if(UNIT[e.type].cat==='archer') fireProjectile(e, t, computeDamage(e,t));
+          // Arqueros (incl. héroe arco) disparan flecha real; catapultas lanzan
+          // un proyectil parabólico de área; el resto pega al instante.
+          const ecat=UNIT[e.type].cat;
+          if(ecat==='archer') fireProjectile(e, t, computeDamage(e,t));
+          else if(ecat==='siege') fireProjectile(e, t, computeDamage(e,t), 'siege');
           else damage(e,t);
           e.cd = UNIT[e.type].cd;
         }
@@ -1715,6 +1895,9 @@ function update(dt){
         let dmg = bd.atk;
         if(tgt.kind==='unit') dmg = Math.max(1, dmg - unitArmor(tgt));
         fireProjectile(e, tgt, Math.max(1,dmg));
+        // Guarnición (Fase 5): +1 flecha por arquero guarnecido en esta volea.
+        const gArchers = (e.garrison||[]).length;
+        for(let gi=0; gi<gArchers; gi++) fireProjectile(e, tgt, Math.max(1,dmg));
         e.cd = bd.cd;
       }
     }
@@ -1752,7 +1935,14 @@ function update(dt){
       const fx=unitFace.get(d.id);
       corpses.push({ x:d.x, y:d.y, type:d.type, owner:d.owner, face:fx?fx.face:1, t0:performance.now() });
     }
-    else if(d.kind==='building'){ own.stats.lostB++; playSfx('destroyed'); }
+    else if(d.kind==='building'){
+      own.stats.lostB++; playSfx('destroyed');
+      // Guarnición (Fase 5): al caer el edificio, las unidades dentro salen ilesas.
+      if(d.garrison && d.garrison.length){
+        for(const gid of d.garrison){ const gu=find(gid); if(gu){ gu.garrisonedIn=null; gu.state='idle'; } }
+        d.garrison=[];
+      }
+    }
     removeEntity(d);
   }
 
@@ -2198,6 +2388,7 @@ function enemyAI(dt){
     else if(D.econ && !hasBuilding('enemy','goldmine',false) && buildNew('goldmine',true)) {}
     else if(D.tower && countBuildings('enemy','tower')<(difficulty==='hard'?3:1) && buildNew('tower',true)) {}
     else if(D.castle && enemy.age>=3 && buildNew('castle')) {}
+    else if(D.siege && enemy.age>=3 && buildNew('siegeworkshop')) {}
   }
 
   // --- PRODUCCIÓN MILITAR ---
@@ -2213,6 +2404,15 @@ function enemyAI(dt){
       const heroes=['hero_sword','hero_archer','hero_cav'];
       const h=heroes[Math.floor(Math.random()*heroes.length)];
       if(canAfford(enemy, UNIT[h].cost)) queueUnit(castle,h);
+    }
+    // Asedio (Fase 5, solo Difícil): 1-2 catapultas cuando el jugador tiene murallas.
+    if(D.siege){
+      const siegeWs = entities.find(e=>e.kind==='building'&&e.owner==='enemy'&&e.btype==='siegeworkshop'&&e.built);
+      const playerHasWalls = entities.some(e=>e.kind==='building'&&e.owner==='player'&&BLD[e.btype].wall);
+      if(siegeWs && playerHasWalls){
+        const siegeCount = entities.filter(e=>e.kind==='unit'&&e.owner==='enemy'&&e.type==='siege').length;
+        if(siegeCount<2 && countQueued('enemy')<6 && canAfford(enemy, UNIT.siege.cost)) queueUnit(siegeWs,'siege');
+      }
     }
   }
 
@@ -2233,16 +2433,17 @@ function enemyAI(dt){
 const DOCTRINE = {
   // FÁCIL: economía mínima, solo Milicia, ataca SIEMPRE el Centro Urbano, oleadas
   // grandes y lentas. Sin economía avanzada, torres ni castillos.
-  easy:   { tick:7, ageTarget:2, maxVills:8,  econ:false, tower:false, castle:false, heroes:false,
+  easy:   { tick:7, ageTarget:2, maxVills:8,  econ:false, tower:false, castle:false, heroes:false, siege:false,
             minArmy:9, waveCd:75, target:'town' },
   // NORMAL: avanza a Era III, construye granjas/minas y torres, ejército variado,
   // ataca el edificio o la unidad MÁS CERCANA (presiona el frente) y se defiende.
-  normal: { tick:5, ageTarget:3, maxVills:12, econ:true,  tower:true,  castle:false, heroes:false,
+  normal: { tick:5, ageTarget:3, maxVills:12, econ:true,  tower:true,  castle:false, heroes:false, siege:false,
             minArmy:7, waveCd:55, target:'nearest' },
-  // DIFÍCIL: llega a Era Imperial, economía completa, torres, castillo y HÉROES.
-  // Objetivos ESTRATÉGICOS: primero neutraliza defensas (torres/castillo), luego
-  // arrasa la economía (aldeanos y edificios de producción) y por último el Centro.
-  hard:   { tick:3, ageTarget:4, maxVills:16, econ:true,  tower:true,  castle:true,  heroes:true,
+  // DIFÍCIL: llega a Era Imperial, economía completa, torres, castillo, HÉROES y
+  // ASEDIO (Fase 5: 1-2 catapultas cuando el jugador levanta murallas). Objetivos
+  // ESTRATÉGICOS: primero neutraliza defensas (torres/castillo), luego arrasa la
+  // economía (aldeanos y edificios de producción) y por último el Centro.
+  hard:   { tick:3, ageTarget:4, maxVills:16, econ:true,  tower:true,  castle:true,  heroes:true,  siege:true,
             minArmy:5, waveCd:38, target:'strategic' },
 };
 
@@ -2298,7 +2499,7 @@ function render(){
   // filtra lo enemigo/neutral por lo explorado (edificios/recursos) o
   // visible ahora (unidades) — ver sección «Niebla de guerra».
   const sorted = [];
-  for(let i=0;i<entities.length;i++){ const e=entities[i]; if(onScreen(e) && fogRenderOk(e)) sorted.push(e); }
+  for(let i=0;i<entities.length;i++){ const e=entities[i]; if(e.garrisonedIn) continue; if(onScreen(e) && fogRenderOk(e)) sorted.push(e); }
   sorted.sort((a,b)=>a.y-b.y);
   for(const e of sorted){ if(e.kind==='resource') drawResource(e); }
   for(const e of sorted){ if(e.kind==='building') drawBuilding(e); }
@@ -2641,6 +2842,16 @@ function drawUnit(e){
     ctx.font=`${11*cam.zoom}px serif`; ctx.fillStyle='#d6b24a'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('💤', bx, by);
   }
+  // insignia de línea de mejora (Fase 5): chevrons ▲ por cada tier investigado
+  // por el bando (sin sprites nuevos); los héroes no llevan chevron.
+  if(!d.hero){
+    const tier = lineTierCount(e.owner, d.cat);
+    if(tier>0){
+      ctx.font=`${9*cam.zoom}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle='#ffe08c';
+      ctx.fillText('▲'.repeat(tier), s.x, s.y-36*cam.zoom);
+    }
+  }
   // barra de vida (si dañado)
   if(e.hp<e.maxHp) drawHpBar(s.x, s.y-30*cam.zoom, 24*cam.zoom, e.hp/e.maxHp, e.owner);
   // selección (anillo pulsante a los pies)
@@ -2694,8 +2905,17 @@ function drawProjectiles(){
     // Niebla: las flechas propias siempre se ven; las enemigas solo si el
     // punto en el que están ahora cae en una celda visible.
     if(p.owner!=='player' && !fogVisibleAt(x,y)) continue;
-    const s = worldToScreen(x,y);
+    // Catapulta (Fase 5): trayectoria parabólica (arco visual hacia arriba).
+    const arc = p.kind==='siege' ? Math.sin(frac*Math.PI)*36*cam.zoom : 0;
+    const s = worldToScreen(x,y); s.y -= arc;
     if(s.x<-40||s.x>viewW()+40||s.y<-40||s.y>viewH()+40) continue;
+    if(p.kind==='siege'){
+      ctx.beginPath(); ctx.arc(s.x, s.y, 4.5*cam.zoom, 0, Math.PI*2);
+      ctx.fillStyle = p.owner==='player' ? '#bcd6ff' : '#ffd0d0';
+      ctx.fill();
+      ctx.strokeStyle='#0006'; ctx.lineWidth=1; ctx.stroke();
+      continue;
+    }
     const ang = Math.atan2(p.y1-p.y0, p.x1-p.x0);
     ctx.save(); ctx.translate(s.x,s.y); ctx.rotate(ang);
     ctx.strokeStyle = p.owner==='player' ? '#bcd6ff' : '#ffd0d0';
@@ -2883,6 +3103,7 @@ function pickAt(p){
   let best=null, bd=1e9;
   for(const e of entities){
     if(e.kind==='resource'||e.kind==='unit'||e.kind==='building'){
+      if(e.garrisonedIn) continue;    // unidad guarnecida (Fase 5): no se puede tocar
       if(!fogRenderOk(e)) continue;   // no se puede tocar lo que la niebla oculta
       const r = radiusOf(e)+8;
       const dd=dist({x:w.x,y:w.y}, e);
@@ -2930,6 +3151,17 @@ function handleTap(p){
         if(isCli){ netSend({t:'cmd', c:'gather', ids:ids(vills), g:ent.id}); showHint('Trabajando en '+BLD[ent.btype].name+'.'); return; }
         for(const u of vills){ u.state='gather'; u.gather=ent; u.resumeGather=null; u.lastRtype=BLD[ent.btype].produces; u.halt=false; }
         showHint('Trabajando en '+BLD[ent.btype].name+'.'); return;
+      }
+    }
+    // Guarnición (Fase 5): tocar una torre/castillo propio con arqueros
+    // seleccionados los mete dentro (máx. según `GARRISON_MAX`); tocar el
+    // Centro Urbano con aldeanos seleccionados los refugia.
+    if(ent && ent.owner==='player' && ent.kind==='building' && ent.built && GARRISON_MAX[ent.btype]!==undefined){
+      const eligible = selUnits.filter(u=>canGarrison(ent.btype, u.type));
+      if(eligible.length){
+        if(isCli){ netSend({t:'cmd', c:'garrison', ids:ids(eligible), b:ent.id}); return; }
+        garrisonUnits(eligible, ent);
+        return;
       }
     }
     if(ent && (ent.owner==='enemy')){
@@ -2989,7 +3221,7 @@ function handleDoubleTap(p){
   const {ent}=pickAt(p);
   if(ent && ent.owner==='player' && ent.kind==='unit'){
     // seleccionar todas las del mismo tipo visibles en pantalla
-    selection = entities.filter(e=>e.kind==='unit'&&e.owner==='player'&&e.type===ent.type&&onScreen(e)).map(e=>e.id);
+    selection = entities.filter(e=>e.kind==='unit'&&e.owner==='player'&&e.type===ent.type&&!e.garrisonedIn&&onScreen(e)).map(e=>e.id);
     pingEntities(selection, true);
     updateActionPanel();
     showHint('Seleccionados todos los '+UNIT[ent.type].name+'.');
@@ -3005,7 +3237,7 @@ function handleDoubleTap(p){
 function finishBoxSelect(){
   const a=screenToWorld(Math.min(input.startScreen.x,input.curScreen.x), Math.min(input.startScreen.y,input.curScreen.y));
   const b=screenToWorld(Math.max(input.startScreen.x,input.curScreen.x), Math.max(input.startScreen.y,input.curScreen.y));
-  let picked = entities.filter(e=>e.kind==='unit'&&e.owner==='player'&&e.x>=a.x&&e.x<=b.x&&e.y>=a.y&&e.y<=b.y);
+  let picked = entities.filter(e=>e.kind==='unit'&&e.owner==='player'&&!e.garrisonedIn&&e.x>=a.x&&e.x<=b.x&&e.y>=a.y&&e.y<=b.y);
   // Preferir militares; si no hay, incluir aldeanos
   const mil = picked.filter(u=>u.type!=='villager');
   if(mil.length) picked=mil;
@@ -3168,6 +3400,9 @@ function updateActionPanel(){
         ? ` · <b style="color:#d05a5a">🔒 cerrada</b> (bloquea a todos)`
         : ` · <b style="color:#5fb15f">🔓 abierta</b> (pasas tú, no el rival)`;
     }
+    if(b.built && GARRISON_MAX[b.btype]!==undefined && (b.garrison||[]).length){
+      info += ` · 🛡️ ${b.garrison.length}/${GARRISON_MAX[b.btype]}`;
+    }
     selinfoEl.innerHTML=info;
     if(b.built){
       // Fila de cola: cada unidad es un botón que la cancela (reembolsa)
@@ -3215,7 +3450,7 @@ function updateActionPanel(){
   const hasVill = units.some(u=>u.type==='villager');
   const hasMil = units.some(u=>u.type!=='villager');
   if(hasVill){
-    for(const bt of ['house','farm','lumbercamp','goldmine','quarry','barracks','range','stable','blacksmith','tower','castle']){
+    for(const bt of ['house','farm','lumbercamp','goldmine','quarry','barracks','range','stable','blacksmith','siegeworkshop','market','tower','castle']){
       const d=BLD[bt];
       const reqOk=(d.req||[]).every(r=>hasBuilding('player',r));
       const ageOk=!d.reqAge || player.age>=d.reqAge;
@@ -3243,6 +3478,17 @@ function updateActionPanel(){
 
 function deselectAll(){ if(selection.length) pingEntities(selection, false); selection=[]; orderMode=null; updateActionPanel(); }
 
+// Botones de investigación de línea de mejora (Fase 5) para las categorías
+// entrenables en el edificio seleccionado (Cuartel/Galería/Establo).
+function appendLineTierButtons(cats){
+  for(const cat of cats){
+    const nx = nextLineTier('player', cat);
+    if(!nx) continue;
+    const t = nx.tier, ageOk = player.age>=t.reqAge;
+    const sub = ageOk ? costStr(t.cost) : AGES[t.reqAge].name;
+    actionsEl.appendChild(btnEl(t.emoji+' '+t.name, sub, '', ageOk&&canAfford(player,t.cost), ()=>buyLineTier('player',cat,nx.idx)));
+  }
+}
 function buildingButtons(b){
   const pop = popCount('player')+countQueued('player');
   const cap = popCap('player');
@@ -3268,11 +3514,25 @@ function buildingButtons(b){
   else if(b.btype==='barracks'){
     for(const t of ['infantry','pike']){ const d=UNIT[t];
       actionsEl.appendChild(btnEl(d.emoji+' '+d.name, costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,t))); }
+    appendLineTierButtons(['infantry','pike']);
   }
   else if(b.btype==='range'){ const d=UNIT.archer;
-    actionsEl.appendChild(btnEl(d.emoji+' Arquero', costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'archer'))); }
+    actionsEl.appendChild(btnEl(d.emoji+' Arquero', costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'archer')));
+    appendLineTierButtons(['archer']);
+  }
   else if(b.btype==='stable'){ const d=UNIT.cavalry;
-    actionsEl.appendChild(btnEl(d.emoji+' Caballo', costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'cavalry'))); }
+    actionsEl.appendChild(btnEl(d.emoji+' Caballo', costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'cavalry')));
+    appendLineTierButtons(['cavalry']);
+  }
+  else if(b.btype==='siegeworkshop'){ const d=UNIT.siege;
+    actionsEl.appendChild(btnEl(d.emoji+' '+d.name, costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'siege'))); }
+  else if(b.btype==='market'){
+    const ico={food:'🍖',wood:'🪵',stone:'🪨'};
+    for(const r of ['food','wood','stone']){
+      actionsEl.appendChild(btnEl('Vender '+ico[r]+MARKET_QTY, '+🪙'+MARKET_SELL_GOLD, '', (player.res[r]||0)>=MARKET_QTY, ()=>marketTrade('player','sell',r)));
+      actionsEl.appendChild(btnEl('Comprar '+ico[r]+MARKET_QTY, '-🪙'+MARKET_BUY_GOLD, '', (player.res.gold||0)>=MARKET_BUY_GOLD, ()=>marketTrade('player','buy',r)));
+    }
+  }
   else if(b.btype==='blacksmith'){
     for(const k of Object.keys(UPG)){ const u=UPG[k];
       const done=player.upg[k];
@@ -3296,6 +3556,18 @@ function buildingButtons(b){
       b.closed = !b.closed; invalidatePathGrid();
       if(b.owner==='player') updateActionPanel();
     }));
+  }
+  // Guarnición (Fase 5): info + botón «Expulsar», para cualquier edificio que
+  // la admita (torre/torre de muralla/castillo/Centro Urbano).
+  if(GARRISON_MAX[b.btype]!==undefined){
+    const g=(b.garrison||[]).length, cap2=GARRISON_MAX[b.btype];
+    actionsEl.appendChild(btnEl('🛡️ Guarnición '+g+'/'+cap2, '', '', false, ()=>{}));
+    if(g>0){
+      actionsEl.appendChild(btnEl('🚪 Expulsar','','danger',true, ()=>{
+        if(net.mode==='client'){ netSend({t:'cmd', c:'expel', b:b.id}); return; }
+        expelGarrison(b);
+      }));
+    }
   }
 }
 
@@ -3467,7 +3739,7 @@ document.getElementById('btnPause').addEventListener('click',function(){
 
 // ---------- «Todo el ejército»: selecciona todos los militares vivos propios ----------
 document.getElementById('btnArmy').addEventListener('click', ()=>{
-  const mil = entities.filter(e=>e.kind==='unit'&&e.owner==='player'&&e.type!=='villager');
+  const mil = entities.filter(e=>e.kind==='unit'&&e.owner==='player'&&e.type!=='villager'&&!e.garrisonedIn);
   if(!mil.length){ showHint('No tienes unidades militares.'); return; }
   selection = mil.map(e=>e.id);
   pingEntities(selection, true);
@@ -3486,7 +3758,7 @@ function updateGroupBadge(idx){
   const btn = document.getElementById('btnGrp'+(idx+1)); if(btn) btn.classList.toggle('has', n>0);
 }
 function cleanControlGroup(idx){
-  controlGroups[idx] = controlGroups[idx].filter(id=>{ const e=find(id); return e && e.kind==='unit' && e.owner==='player'; });
+  controlGroups[idx] = controlGroups[idx].filter(id=>{ const e=find(id); return e && e.kind==='unit' && e.owner==='player' && !e.garrisonedIn; });
   updateGroupBadge(idx);
 }
 function saveControlGroup(idx){

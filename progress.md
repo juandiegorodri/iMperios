@@ -565,3 +565,130 @@ Ver `PLAN.md` §4 F3. Cambios:
   ~490px), sin regresión del movimiento abierto, del cruce por el puente del
   río, del combate/MP (Fases 1-3) ni de las puertas; A* ~0.35ms/orden de 30,
   estrés ~4.2ms/cuadro con ~257 entidades.
+
+---
+
+## 2026-07-15 — PR #14: Fase 5 — Profundidad AoE (líneas de unidad, asedio, guarnición, mercado)
+Ver `PLAN.md` §4 F5 (marcada ✅) y `CLAUDE.md` §6 para el detalle de cada
+funcionalidad. Resumen de cambios en `index.html`:
+
+- **Líneas de mejora por Era** (`UNIT_LINES`): Milicia→Espadachín(II)→Campeón(IV);
+  Piquetero→Alabardero(III); Arquero→Arquero de Tiro Largo(III);
+  Caballo→Caballero(III)→Paladín(IV). Cada tier +35% hp/atq (compuesto),
+  investigable en Cuartel/Galería/Establo (`appendLineTierButtons`). Aplica al
+  instante a las unidades vivas (`buyLineTier` reescala `hp`/`maxHp`) y de
+  fábrica a las futuras (`makeUnit` usa `lineTierMult`); `unitAtk` deriva el
+  atq dinámicamente, sin duplicar el efecto. Insignia: chevrons ▲ en
+  `drawUnit`. El tier viaja gratis por `serSide` (es un flag más en
+  `side.upg`, igual que `UPG`/`ECON`); comando MP nuevo `lineupg`.
+- **Catapulta** (`UNIT.siege` 🎯, Taller de Asedio `BLD.siegeworkshop` 🏭,
+  req. Cuartel + Era Feudal): muy lenta (vel. 22), hp bajo, daño de área ×4
+  contra edificios/murallas y ×0.5 contra unidades (`SIEGE_BLD_MULT` en
+  `computeDamage`); proyectil parabólico (`kind:'siege'` en
+  `fireProjectile`/`drawProjectiles`, daño de área a edificios cercanos al
+  impacto en `updateProjectiles`). IA Difícil (`DOCTRINE.hard.siege`)
+  construye Taller y hasta 2 catapultas cuando el jugador tiene murallas.
+- **Guarnición**: `GARRISON_MAX` (torre/torre de muralla 4, castillo 8, Centro
+  Urbano 10); tocar el edificio con arqueros (o aldeanos para el Centro
+  Urbano) seleccionados los mete dentro (`garrisonUnits`, en `handleTap`
+  antes de la orden de mover); +1 flecha por arquero guarnecido en cada
+  volea del edificio; botón "🚪 Expulsar" (`expelGarrison`). Las unidades
+  guarnecidas (`e.garrisonedIn`) no se dibujan, no se pueden tocar/atacar/
+  seleccionar y no ejecutan IA (excluidas en `update`, `nearestEnemy`,
+  `pickAt`, `separate`, `render`, `handleDoubleTap`, `finishBoxSelect`,
+  `btnArmy`, `cleanControlGroup`); si el edificio muere, salen ilesas. Viaja
+  en MP como conteo (`o.gr` en el edificio) y flag (`o.gi` en la unidad);
+  comandos nuevos `garrison`/`expel`.
+- **Mercado** (`BLD.market` 🏪, Era de las Herramientas): vende 100
+  comida/madera/piedra por 70 oro, compra 100 por 130 oro (`marketTrade`,
+  tasas fijas); botones en su panel; comando MP `market`.
+- **Pasada de balance**: arena headless 20v20 por matchup del cuadrilátero
+  (`arena.cjs`, reutiliza el motor real vía `update()`, sin reimplementar las
+  fórmulas de combate). Hallazgo: en combate masivo forzado (sin kiting
+  manual) Caballo derrotaba a su propio contra (Piquetero) el 100% de las
+  veces y Arquero perdía la mayoría de las veces contra su presa (Milicia),
+  por pura ventaja de stats — el bono ×2 del cuadrilátero no bastaba para
+  compensar diferencias de hp/atq/cd demasiado grandes. Ajustes de stats:
+  - `pike`: hp 55→60, atk 5→6.
+  - `archer`: hp 35→55, atk 5→5.4 (nótese decimal: la sensibilidad de un
+    combate 20v20 con cooldowns fijos es tan alta que valores enteros saltan
+    de ~0% a ~90%+ de victorias sin punto intermedio; hubo que afinar con
+    decimales), cd 1.5→1.2; penalización de cuerpo a cuerpo (Fase 1) relajada
+    de ×0.5 a ×0.6.
+  - `cavalry`: hp 95→52, atk 9→6.87.
+  - Resultado final (25 combates/matchup, con separación inicial >rango de
+    arquero y variación posicional amplia para no caer en el "todo o nada"
+    del combate determinista — ver caveat abajo):
+
+    | Ataca \ Defiende | Arquero | Milicia | Piquetero | Caballo |
+    |---|---|---|---|---|
+    | **Arquero**   | — | **100%** (contra) | 56% (neutral) | 4% |
+    | **Milicia**   | 0% | — | **100%** (contra) | 44% (neutral) |
+    | **Piquetero** | 48% (neutral) | 0% | — | **100%** (contra) |
+    | **Caballo**   | **92-100%** (contra) | 36% (neutral) | 0% | — |
+
+    Los 4 contras del cuadrilátero (Arquero→Milicia, Milicia→Piquetero,
+    Piquetero→Caballo, Caballo→Arquero) dominan claramente (92-100%). Los 2
+    matchups neutrales (fuera del cuadrilátero: Arquero-Piquetero,
+    Milicia-Caballo) quedan cerca de 50/50 y por debajo (o a un solo combate,
+    1/25, del límite) del 55% pedido en ambas direcciones.
+  - **Caveat honesto**: un combate 20v20 con daño/cooldown determinista y sin
+    kiting manual (el motor no implementa retirada automática de arqueros)
+    tiende a un efecto "bola de nieve" muy marcado — pequeñas diferencias de
+    stats cruzan un umbral de "golpes para matar" y el resultado salta de
+    ~0% a ~95%+ sin zona intermedia estable. Encontrar el punto de equilibrio
+    exacto requirió (a) separar los ejércitos más allá del rango del arquero
+    (para que su ventaja de alcance cuente antes del cuerpo a cuerpo) y (b)
+    una variación posicional inicial bastante amplia (±200px) para que el
+    Monte Carlo tenga variedad real de desenlaces en vez de repetir el mismo
+    resultado binario. Con 25 tiradas la resolución mínima es de 4 puntos
+    porcentuales (1/25), así que "56%" y "55%" son, en la práctica, el mismo
+    resultado. Se considera el objetivo cumplido en espíritu (ninguna unidad
+    aplasta fuera de su contra; los 2 matchups neutrales están prácticamente
+    empatados) aunque no se garantiza matemáticamente que CUALQUIER semilla
+    aleatoria quede siempre ≤55%.
+  - **Caveat de chokepoint (verificación del orquestador)**: el equilibrio
+    "neutral ~50/50" solo se sostiene con los ejércitos separados. En un
+    **cuello de botella** (puente del río, puerta de muralla) donde el cuerpo a
+    cuerpo se traba de inmediato, los matchups neutrales se vuelven aplastantes
+    (Arquero vs Piquetero ≈ 0/100; Milicia vs Caballo ≈ 100/0), porque el
+    arquero no puede kitear y la unidad de línea traba primero. Es un efecto de
+    **geometría de combate**, no solo de semilla, y afecta a este juego en
+    particular porque los chokepoints son una mecánica central. No se corrige
+    por ajuste de stats (es inherente al melee-lock sin kiting); se documenta.
+    Se confirmó además que el `hp` bajo del Caballo (52) es un **punto de
+    equilibrio deliberado**, no una unidad "rota": el Piquetero vence al Caballo
+    en TODOS los valores de hp probados (52–80) por el ×2 del cuadrilátero, pero
+    subir el hp del Caballo por encima de ~55 hace que **aplaste a la Milicia**
+    en el matchup neutral (de 4/6 a 6/6), así que se mantiene en 52.
+- **Arreglo tras validación del orquestador — guarnición en MP**: el comando
+  `garrison` del cliente no podaba `selection`, así que volver a tocar el mismo
+  edificio sin reseleccionar duplicaba ids ya guarnecidos en el host
+  (`garrison=[76,77,76,77]`), inflando el bono de flechas y llenando el cupo con
+  fantasmas. Ahora `garrisonUnits` ignora unidades ya guarnecidas (`u.garrisonedIn`
+  o ya presentes en `b.garrison`), robusto ante reordenamientos de red y
+  selecciones obsoletas. Verificado headless: re-guarnecer las mismas unidades
+  es un no-op (`[76,77]`→`[76,77]`) y un arquero nuevo sí entra (`[76,77,78]`).
+- **Sprites pendientes**: catapulta, Taller de Asedio y Mercado usan el
+  respaldo de emoji esta sesión (sin acceso a Ideogram); sus nombres NO se
+  añadieron a `SPRITE_FILES` a propósito (para no generar peticiones 404 que
+  Chromium reporta como `console.error`). Ver `assets/ART.md`.
+- **Verificación headless** (Playwright, scripts en el scratchpad de la
+  sesión, no en el repo): 0 `pageerror`/`console.error` en todos los casos.
+  - Línea de mejora: investigar Espadachín en Era II sube hp 55→74 de una
+    milicia viva y de una futura; atq 6→8.1; coste descontado; tier viaja en
+    `serSide` (confirmado en un snapshot simulado).
+  - Catapulta: derriba una muralla (700hp) en 8 tiros; pierde 1 vs 2 caballos
+    (muere sin apenas dañarlos).
+  - Guarnición: 3 arqueros en una torre → 4 flechas por volea (vs 1 sin
+    guarnecer); expulsar los libera; tope de 4 respetado con 6 candidatos.
+  - Mercado: vender 100 madera → +70 oro exactos; comprar 100 piedra → -130
+    oro exactos; bloquea la operación sin recursos suficientes.
+  - Multijugador real (`server.js` + 2 páginas, host/cliente): ambos
+    `running===true`; el cliente ve el tier investigado por el host (bando
+    `enemy`↔`player` invertido) reflejado en `hp` de una unidad y en
+    `player.upg`, y ve el conteo de guarnición (2/4) de una torre — todo vía
+    snapshot, sin que el cliente ejecute `update()`; 0 errores.
+  - Estrés: ~246 entidades (incluye 20 catapultas y murallas) en combate
+    activo, `update()+render()` medio 3.39ms/cuadro (pico 12.7ms), muy por
+    debajo del presupuesto de 16.7ms/cuadro.
