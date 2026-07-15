@@ -82,7 +82,7 @@ El plan ataca las brechas en ese orden: primero *sensación* (1-2), luego
 
 ## 4. FASES
 
-### FASE 1 — «Está vivo»: animación, proyectiles y sonido ⬜
+### FASE 1 — «Está vivo»: animación, proyectiles y sonido ✅
 **Por qué primero**: es el 80% de la sensación. Hoy las unidades se deslizan
 mudas; con esto el mismo juego "se convierte" en un juego de verdad.
 
@@ -117,7 +117,10 @@ mudas; con esto el mismo juego "se convierte" en un juego de verdad.
 - Unidad caminando se ve caminar (bob+volteo); arquero dispara flecha visible
   que impacta; unidad muere con fade; edificio dañado humea.
 - 8+ SFX distintos + ambiente; toggle persiste; sin autoplay antes del primer gesto.
-- Headless: 0 errores; fps del estrés (`t22.cjs`) no cae >10% vs. base.
+- Headless: 0 errores; rendimiento por **presupuesto absoluto** — coste de
+  `update()+render()` por cuadro muy por debajo de 16.7ms (meta 60fps) bajo
+  estrés. (El % relativo vs. base es poco fiable en headless compartido, donde
+  el scheduling del navegador domina el fps bruto; medir el coste real de CPU.)
 - Multijugador: cliente ve proyectiles/muertes (snapshot o reconstrucción).
 
 ---
@@ -326,7 +329,7 @@ F6 Guardar+tutorial ──► F7 MP web (WebRTC) ──► F8 Rendimiento final
 ## 6. Registro de fases
 | Fase | Estado | PR | Notas |
 |---|---|---|---|
-| F1 Vida | ⬜ | — | |
+| F1 Vida | ✅ | #10 | Animación procedural sin sprites nuevos, proyectiles reales con daño al impacto, cadáveres/flash/humo-fuego, 10 SFX sintetizados + ambiente, ping verde. Ver `progress.md` 2026-07-15. |
 | F2 Niebla+minimapa | ⬜ | — | |
 | F3 Manos RTS | ⬜ | — | |
 | F4 Pathfinding | ⬜ | — | |

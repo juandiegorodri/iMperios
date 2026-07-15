@@ -52,14 +52,25 @@ El archivo se organiza en estas secciones (en orden de aparición):
    (con `mods.resMult` y `stats`), `gameSpeed`, `mapTheme`, `terrain`, `bridge`,
    flags (`running`, `paused`, `gameOver`, `difficulty`).
 2.5. **Sprites gráficos**: `SPRITE_FILES`, `sprites`, `loadSprites`, `spr`,
-   `drawSprite` (PNG escalado con respaldo de emoji), `drawShadow`, y patrones de
-   textura `getPattern`/`fillPattern` (suelo/agua/roca). Selección animada
+   `drawSprite` (PNG escalado con respaldo de emoji), `drawShadow`,
+   `setUnitTransform`/`resetTransform` (transform local barato para la
+   animación de unidades, sin `save/restore`), y patrones de textura
+   `getPattern`/`fillPattern` (suelo/agua/roca). Selección animada
    (`drawSelBox`/`drawSelRing`) y efectos `pings`. Murallas: `WALL_SP`,
    `WALL_TOWER_EVERY`, `wallTap`/`wallPoints`, colisión `blockedByWall`
    (`frameWalls`). La reparación vive en la rama `build` del bucle de unidades.
+2.55. **Sonido (WebAudio sintetizado)**: `audioCtx`/`masterGain`/`ambientNode`,
+   `ensureAudio` (creado/reanudado en el primer gesto táctil, requisito de
+   Safari), `setSoundOn` (persistido en `localStorage`), `playTone`/`playNoise`
+   (osciladores/ruido crudos), `startAmbient` (loop de viento), `playSfx`
+   (espada, flecha, talar, picar, construir, unidad lista, edificio destruido,
+   alerta, victoria/derrota) y `sfxAllowed` (throttle por nombre de efecto).
 2.6. **Multijugador P2P** (bloque `MULTIJUGADOR P2P`): estado `net`, conexión
    (`netConnect`/`netHostStart`/`netJoinStart`), serialización con bandos
-   invertidos (`serEntity`/`deserEntity`/`makeSnap`/`applySnap`), mensajería
+   invertidos (`serEntity`/`deserEntity`/`serProjectile`/`makeSnap`/
+   `applySnap` — este último también reconstruye efectos visuales del cliente:
+   flash de daño, cadáveres y SFX de "unidad lista"/"edificio destruido"/
+   "alerta" comparando instantáneas consecutivas), mensajería
    (`netOnMessage`/`netSendInit`/`clientStartFromInit`/`clientEnd`) y comandos
    del cliente aplicados por el anfitrión (`hostHandleCmd`/`hostPlace`/
    `hostWall`). Guardas de cliente en la economía, órdenes y colocación.
@@ -77,19 +88,27 @@ El archivo se organiza en estas secciones (en orden de aparición):
 7. **Economía / entrenamiento**: `queueUnit`, `countQueued`, `tryAdvanceAge`
    (multi-era), `buyUpgrade`, `buyEcon`/`nextEcon` (tecnologías de recursos),
    `cancelQueued` (cancela y reembolsa), stats efectivas (`unitAtk`, `unitRange`,
-   `unitArmor` por categoría, `gatherRate` por recurso), combate (`damage`, marca
-   `hitBy` para la retaliación).
+   `unitArmor` por categoría, `gatherRate` por recurso), combate: `computeDamage`
+   (cálculo puro), `applyDamage` (aplica hp, `hurtT`, `hitBy` y `alertFlags` al
+   impactar), `damage` (golpe cuerpo a cuerpo instantáneo), `fireProjectile`/
+   `updateProjectiles` (proyectiles reales — arqueros, héroe arco, torres,
+   torres de muralla, castillo — el daño se aplica al llegar, no al disparar).
 8. **Lógica de unidades / IA**: `nearestEnemy`, `nearestResourceOfType`,
    `nearestGatherFor`/`nearestAnyResource` (incluyen edificios de producción),
    `srcRtype`, `autoAssignIdle` (aldeano inactivo busca trabajo), `separate`.
-9. **Bucle principal**: `loop`, `update` (unidades con retaliación y auto-trabajo,
-   gather de nodos y edificios de producción, edificios con torres y bosqueros,
-   muertes con conteo de bajas, fin de partida), `stepToward` (guiado por el
-   puente y bloqueo de obstáculos), `spawnTrained`, `removeEntity`, `enemyAI` +
+9. **Bucle principal**: `loop`, `update` (proyectiles, unidades con
+   retaliación y auto-trabajo, gather de nodos y edificios de producción con
+   SFX de talar/picar, edificios con torres y bosqueros, muertes con conteo de
+   bajas y creación de cadáveres visuales, fin de partida), `stepToward`
+   (guiado por el puente y bloqueo de obstáculos), `spawnTrained` (SFX "unidad
+   lista"), `removeEntity` (limpia también `unitFace`), `enemyAI` +
    `DOCTRINE` (3 manuales) y `pickWaveTarget` (objetivo estratégico).
 10. **Render**: `render`, `drawTerrain` (río/puente/riscos), `drawGround`,
-    `onScreen`, `drawResource`/`drawBuilding`/`drawUnit` (dibujan **sprite** con
-    anillo de bando y sombra; respaldo de emoji), `drawHpBar`, `roundRect`.
+    `drawCorpses` (cadáveres: fade + caída), `onScreen`, `drawResource`/
+    `drawBuilding` (con `drawDamageFx`: humo/fuego por hp) /`drawUnit`
+    (animación procedural — bamboleo, lunge, volteo — y flash `hurtT`; dibujan
+    **sprite** con anillo de bando y sombra, respaldo de emoji),
+    `drawProjectiles` (flechas en vuelo), `drawHpBar`, `roundRect`.
 11. **Entrada táctil**: objeto `input`, manejadores `pointerdown/move/up/cancel`,
     `wheel`, teclado; `pickAt`, `handleTap`, `handleDoubleTap`,
     `finishBoxSelect`, `selectedUnits`, `selectedBuilding`; colocación

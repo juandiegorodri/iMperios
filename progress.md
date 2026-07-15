@@ -209,3 +209,75 @@ historial. Ver normas en `CLAUDE.md`.
 - Enlazado desde `CLAUDE.md`, `README.md` y `filemap.md`.
 - El trabajo de WebRTC iniciado en la sesión anterior queda formalizado como
   Fase 7 (el protocolo host-autoritativo actual no cambia; solo el transporte).
+
+## 2026-07-15 — PR #10: FASE 1 — «Está vivo»: animación, proyectiles y sonido
+- **Animación procedural de unidades** (sin sprites nuevos): bamboleo vertical
+  e inclinación ±4° al caminar, "lunge" (~4px) hacia el objetivo al
+  atacar/recolectar/construir, y volteo horizontal por dirección real de
+  movimiento (`e.face`), calculado en `drawUnit`. El volteo y el bamboleo se
+  derivan del desplazamiento cuadro a cuadro (idénticos en host y cliente MP);
+  el "lunge" depende del pulso `e.anim` del host, que en el cliente MP se
+  **reconstruye desde el snapshot** (campos `an`/`tg`/`bd`: pulso de animación
+  y objetivo/obra), de modo que el cliente también ve el golpe.
+  Por rendimiento, el transform de cada unidad usa `ctx.setTransform` directo
+  (`setUnitTransform`/`resetTransform`) en vez de `ctx.save/restore`: con ~130
+  unidades en pantalla, clonar el estado completo del canvas por unidad costaba
+  bastante más que fijar la matriz y devolverla a la base (`DPR,0,0,DPR,0,0`).
+- **Proyectiles reales** (`projectiles[]`): arqueros, héroe de arco, torres,
+  torres de muralla y castillo disparan una flecha visible (~300px/s); el daño
+  se calcula al disparar (`computeDamage`) pero se **aplica al impactar**
+  (`applyDamage`, vía `updateProjectiles`), moviendo la llamada de daño que
+  antes era instantánea. Se eliminó el antiguo "beam" instantáneo de torres y
+  la línea estática de flecha de arquero (ambos redundantes ahora).
+- **Muertes y daño visuales**: `corpses[]` (fuera de `entities`) con fade +
+  caída de 0.4s al morir una unidad; flash blanco `e.hurtT` (timestamp, no
+  contador) al recibir daño; edificios con hp<50% humean y hp<25% también
+  arden (`drawDamageFx`, puramente derivado de `hp/maxHp`, por lo que funciona
+  igual en el cliente MP sin lógica extra).
+- **Sonido con WebAudio sintetizado** (sin archivos): 10 SFX distintos —
+  espada, flecha, talar, picar, construir, unidad lista, edificio destruido,
+  alerta de ataque, victoria y derrota — más un loop ambiental de viento a bajo
+  volumen, todo generado con osciladores/ruido. Throttle por nombre de efecto
+  (`sfxAllowed`) para no saturar en batallas grandes. Botón 🔊/🔇 nuevo en
+  `#util`, estado en `localStorage`; el `AudioContext` se crea/reanuda en el
+  **primer gesto táctil** (requisito de Safari/iOS), nunca antes.
+- **Micro-feedback**: variante verde de `addPing` en el destino de una orden de
+  movimiento (antes solo existía el ping dorado de selección).
+- **Compatibilidad multijugador**: el host es quien simula proyectiles y daño;
+  el snapshot (`makeSnap`) incluye un campo ligero `shots` con los proyectiles
+  en vuelo (posición, progreso, bando) y un flag `al` de "te atacan". El
+  cliente (`applySnap`) **no simula**: solo interpola las flechas recibidas,
+  reconstruye cadáveres y flashes de daño comparando la instantánea anterior
+  con la nueva (unidades que desaparecen → cadáver; hp que baja → `hurtT`),
+  reconstruye el "lunge" (pulso `anim` + objetivo desde `an`/`tg`/`bd`), y
+  dispara SFX de forma reconstruida: el de **flecha** cuando aparece un
+  proyectil nuevo en `shots` (cada proyectil lleva un id `i`), y los de
+  "unidad lista"/"edificio destruido"/"alerta"/"victoria"/"derrota" comparando
+  `stats.trained`/`stats.lostB` y el flag `al` entre instantáneas. Los SFX de
+  acción cuerpo a cuerpo (espada, talar, picar) siguen siendo del host y no se
+  reconstruyen en el cliente (aproximación deliberada para no meter falsos
+  positivos).
+- **Pruebas**: Chromium headless (1024×768@2x) con `spritesReady>=32`, cero
+  `pageerror`/`console.error`; ejercitada la lógica nueva por `page.evaluate`
+  (arquero genera proyectil y el daño no se aplica hasta el impacto, muerte
+  crea cadáver, flash de daño y alerta se disparan, toggle de sonido persiste
+  en `localStorage`, `AudioContext` se crea tras un toque simulado). Prueba de
+  multijugador real con `node server.js` + 2 Chromium (anfitrión/cliente):
+  ambos llegan a `running=true` sin errores y el **cliente reconstruye el
+  proyectil del arquero a partir del snapshot** (`shots`), combate consistente
+  en ambos lados. Estrés con ~195 entidades (130 unidades en combate + 2
+  edificios dañados): el coste real de CPU en `update()+render()` se midió en
+  ~3.3-3.6ms/frame (base ~2.9-3.2ms). El criterio de rendimiento se evalúa como
+  **presupuesto absoluto**, no como % relativo: el coste por cuadro se mantiene
+  muy por debajo de los 16.7ms de un cuadro a 60fps (~4-5× de margen), así que
+  no hay riesgo real de caída de fps. El fps bruto por `requestAnimationFrame`
+  en este entorno headless compartido es ruidoso (gran parte del tiempo por
+  cuadro es scheduling del propio navegador, no `update`/`render`), por lo que
+  el % relativo entre versiones es poco informativo; se recomienda una medición
+  final en un iPad real antes de cerrar el rendimiento de cara a producción.
+- **Corrección de fidelidad MP** (misma fase, tras validación independiente):
+  se añadió la reconstrucción del "lunge" y del SFX de flecha en el cliente
+  (antes solo caminaba/oía alertas), verificada con dos Chromium reales
+  (host+cliente vía `server.js`): el cliente muestra `anim>0`, reconstruye el
+  objetivo del golpe y reproduce `arrow` al llegar proyectiles nuevos, con cero
+  errores de consola en ambos lados.
