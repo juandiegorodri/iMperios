@@ -63,6 +63,12 @@
     border-radius:10px; background:var(--bad); color:#fff; font-size:12px; font-weight:700;
     display:flex; align-items:center; justify-content:center; border:1px solid #0008; }
   #btnIdle.has{ border-color:var(--accent); box-shadow:0 0 0 2px #caa46a55; }
+  /* Grupos de control (①②③): mantener pulsado 0.5s = guardar, toque = seleccionar,
+     doble toque = seleccionar y centrar. */
+  #util .grp{ font-size:16px; font-weight:700; }
+  #util .grp.has{ border-color:var(--accent); box-shadow:0 0 0 2px #caa46a55; }
+  /* Chips de filtro por tipo en selecciones mixtas (mismo tamaño que la cola) */
+  .btn.chip{ background:#23282f; }
   /* Overlays */
   .overlay{ position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
     background:#000a; }
@@ -127,8 +133,12 @@
 
 <div id="util">
   <div class="ub" id="btnIdle" title="Aldeanos inactivos">👷<span class="badge" id="idleBadge">0</span></div>
+  <div class="ub" id="btnArmy" title="Todo el ejército">🪖</div>
+  <div class="ub grp" id="btnGrp1" title="Grupo 1 (mantén pulsado para guardar)">①<span class="badge" id="grpBadge1" style="display:none">0</span></div>
+  <div class="ub grp" id="btnGrp2" title="Grupo 2 (mantén pulsado para guardar)">②<span class="badge" id="grpBadge2" style="display:none">0</span></div>
+  <div class="ub grp" id="btnGrp3" title="Grupo 3 (mantén pulsado para guardar)">③<span class="badge" id="grpBadge3" style="display:none">0</span></div>
   <div class="ub" id="btnAlert" title="Ir al ataque">⚔️</div>
-  <div class="ub" id="btnCenter" title="Centrar">⌂</div>
+  <div class="ub" id="btnCenter" title="Centrar (doble toque: última alerta)">⌂</div>
   <div class="ub" id="btnPause" title="Pausa">⏸</div>
   <div class="ub" id="btnSound" title="Sonido">🔊</div>
 </div>
@@ -251,6 +261,7 @@ const WORLD = { w: 2600, h: 1500 };
 const POP_MAX = 200;        // tope absoluto de población
 const BONUS = 2;            // multiplicador de daño contra la presa ideal
 const AGGRO = 130;          // radio de auto-defensa de unidades militares
+const AMOVE_RANGE = 150;    // radio de auto-aggro continuo durante ataque-mover
 const MAX_AGE = 4;
 
 // Niebla de guerra: rejilla ~40px/celda sobre todo el mundo (65×38 celdas).
@@ -375,15 +386,19 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 let DPR = Math.min(window.devicePixelRatio || 1, 2);
 
-const cam = { x:0, y:0, zoom:1, min:0.5, max:1.6 };
+const cam = { x:0, y:0, zoom:1, min:0.5, max:1.6, vx:0, vy:0 };  // vx/vy: velocidad de inercia del paneo (px mundo/s)
 let entities = [];          // todas las entidades (unidades, edificios, recursos)
 let selection = [];         // ids seleccionados (del jugador)
 let nextId = 1;
 let nextShotId = 1;         // id incremental de proyectil (para detectar disparos nuevos en el cliente MP)
 let clientPrevShots = null; // Set de ids de proyectil vistos en la instantánea anterior (cliente MP)
 let placement = null;       // { btype } cuando se está colocando un edificio
+let orderMode = null;       // 'amove' cuando se espera el toque de destino de un ataque-mover
 let running = false, paused = false, gameOver = false;
 let difficulty = 'normal';
+// Grupos de control tácticos (①②③): arrays de ids de unidades propias, LOCALES
+// del cliente (no viajan por red; cada jugador guarda los suyos).
+let controlGroups = [[], [], []];
 
 function freshMods(){ return { archerAtk:0, archerRange:0, meleeAtk:0, armor:0, gather:1,
   resMult:{food:1, wood:1, gold:1, stone:1} }; }
@@ -618,13 +633,13 @@ function serEntity(e){
     // Datos para reconstruir la animación de "lunge" en el cliente (que no simula):
     // el pulso `anim` del host y el id del objetivo/obra para orientar el golpe.
     if(e.anim>0) o.an=Math.round(e.anim*100)/100;
-    if(e.state==='attack' && e.target && e.target.id!=null) o.tg=e.target.id;
+    if((e.state==='attack'||e.state==='amove') && e.target && e.target.id!=null) o.tg=e.target.id;
     if(e.state==='build' && e.build!=null) o.bd=e.build; }
   else if(e.kind==='building'){ o.b=e.btype; o.hp=Math.round(e.hp); o.mhp=e.maxHp; o.bt=e.built?1:0;
     o.pg=Math.round(e.progress*10)/10; if(e.dir) o.dir=e.dir;
     if(e.queue.length) o.q=e.queue.map(j=>({type:j.type,time:Math.round(j.time*10)/10,total:j.total}));
     if(e.reserve!==undefined){ o.rv=Math.round(e.reserve); o.mrv=e.maxReserve; }
-    if(e.rally) o.ry={x:Math.round(e.rally.x),y:Math.round(e.rally.y)}; }
+    if(e.rally){ o.ry={x:Math.round(e.rally.x),y:Math.round(e.rally.y)}; if(e.rally.rtype) o.ry.rt=e.rally.rtype; } }
   else if(e.kind==='resource'){ o.r=e.rtype; o.am=Math.round(e.amount); o.mam=e.maxAmount; }
   return o;
 }
@@ -637,7 +652,7 @@ function deserEntity(o){
   else if(o.kind==='building'){ e.btype=o.b; e.built=!!o.bt; e.progress=o.pg||0; if(o.dir) e.dir=o.dir;
     e.queue=(o.q||[]).map(j=>({type:j.type,time:j.time,total:j.total}));
     if(o.rv!==undefined){ e.reserve=o.rv; e.maxReserve=o.mrv; }
-    if(o.ry) e.rally=o.ry; }
+    if(o.ry) e.rally = o.ry.rt ? {x:o.ry.x,y:o.ry.y,rtype:o.ry.rt} : {x:o.ry.x,y:o.ry.y}; }
   else if(o.kind==='resource'){ e.rtype=o.r; e.amount=o.am; e.maxAmount=o.mam; }
   return e;
 }
@@ -720,6 +735,8 @@ function clientStartFromInit(m){
   terrain = m.terrain||[]; bridge = m.bridge||null;
   entities=[]; selection=[]; placement=null; pings=[]; frameWalls=[];
   projectiles=[]; corpses=[]; unitFace.clear(); alertFlags={player:false,enemy:false};
+  orderMode=null; controlGroups=[[],[],[]]; for(let gi=0;gi<3;gi++) updateGroupBadge(gi);
+  cam.vx=0; cam.vy=0;
   player.mods=freshMods(); enemy.mods=freshMods();
   applySnap(m.snap);
   buildMinimapTerrain(); resetFog(); positionMinimap();   // niebla + minimapa (Fase 2, cliente MP)
@@ -749,6 +766,8 @@ function hostHandleCmd(m){
   const tgt = (m.g!==undefined) ? find(m.g) : null;
   switch(m.c){
     case 'move': for(const u of units){ u.state='move'; u.move={x:m.x,y:m.y}; u.target=null; u.gather=null; u.build=null; u.halt=false; } break;
+    case 'amove': for(const u of units){ u.state='amove'; u.move={x:m.x,y:m.y}; u.target=null; u.gather=null; u.build=null;
+      u.resumeGather=null; u.resumeAmove=null; u.halt=false; } break;
     case 'gather': if(tgt) for(const u of units){ if(u.type!=='villager') continue;
       u.state='gather'; u.gather=tgt; u.resumeGather=null; u.halt=false;
       u.lastRtype = tgt.kind==='building' ? BLD[tgt.btype].produces : tgt.rtype; } break;
@@ -761,7 +780,7 @@ function hostHandleCmd(m){
     case 'age': tryAdvanceAge(own); break;
     case 'upg': if(UPG[m.k]) buyUpgrade(own, m.k); break;
     case 'econ': if(ECON[m.r]) buyEcon(own, m.r, m.i); break;
-    case 'rally': { const b=find(m.b); if(b && b.owner===own) b.rally={x:m.x,y:m.y}; break; }
+    case 'rally': { const b=find(m.b); if(b && b.owner===own) b.rally = m.rtype ? {x:m.x,y:m.y,rtype:m.rtype} : {x:m.x,y:m.y}; break; }
     case 'place': hostPlace(m, units); break;
     case 'wall': hostWall(m); break;
   }
@@ -833,6 +852,8 @@ function startGame(cfg){
   entities = []; selection = []; nextId = 1; placement = null; terrain = []; bridge = null;
   frameWalls = []; pings = []; projectiles = []; corpses = []; unitFace.clear();
   alertFlags = {player:false, enemy:false};
+  orderMode = null; controlGroups = [[],[],[]]; for(let gi=0;gi<3;gi++) updateGroupBadge(gi);
+  cam.vx = 0; cam.vy = 0;
   gameOver = false; paused = false; running = true;
 
   // Recursos iniciales según preset
@@ -970,6 +991,31 @@ function clampCam(){
 }
 function worldToScreen(wx,wy){ return { x:(wx-cam.x)*cam.zoom, y:(wy-cam.y)*cam.zoom }; }
 function screenToWorld(sx,sy){ return { x:cam.x + sx/cam.zoom, y:cam.y + sy/cam.zoom }; }
+
+// Inercia de cámara: al soltar el paneo de 2 dedos, `cam.vx/vy` trae la última
+// velocidad medida y aquí se deja decaer (~0.9 por cuadro a 60fps) hasta
+// pararse. Mientras hay un gesto de 2 dedos activo, el propio arrastre manda
+// (no se aplica inercia). El "tope elástico" SOLO entra en juego aquí: como el
+// paneo en vivo sigue con `clampCam()` (límite duro, sin overscroll), la
+// cámara solo puede salirse del mundo por la propia inercia; en ese caso se
+// atrae de vuelta con una aproximación exponencial (sin overshoot, sin
+// "temblor") en vez de un clamp duro que se sentiría como un choque.
+function updateCameraInertia(dt){
+  if(input.pointers.size>=2) return;   // gesto de 2 dedos en curso: lo maneja pointermove
+  if(Math.abs(cam.vx)>0.4 || Math.abs(cam.vy)>0.4){
+    cam.x += cam.vx*dt; cam.y += cam.vy*dt;
+    const decay = Math.pow(0.9, dt*60);   // ~0.9/cuadro a 60fps, independiente del framerate real
+    cam.vx *= decay; cam.vy *= decay;
+    if(Math.abs(cam.vx)<0.4) cam.vx=0;
+    if(Math.abs(cam.vy)<0.4) cam.vy=0;
+  }
+  const maxX = Math.max(0, WORLD.w - viewW()/cam.zoom);
+  const maxY = Math.max(0, WORLD.h - viewH()/cam.zoom);
+  if(cam.x<0){ cam.x *= 0.75; cam.vx=0; if(cam.x>-0.4) cam.x=0; }
+  else if(cam.x>maxX){ const over=cam.x-maxX; cam.x=maxX+over*0.75; cam.vx=0; if(cam.x<maxX+0.4) cam.x=maxX; }
+  if(cam.y<0){ cam.y *= 0.75; cam.vy=0; if(cam.y>-0.4) cam.y=0; }
+  else if(cam.y>maxY){ const over=cam.y-maxY; cam.y=maxY+over*0.75; cam.vy=0; if(cam.y<maxY+0.4) cam.y=maxY; }
+}
 
 // ---------- Resize ----------
 function resize(){
@@ -1446,6 +1492,7 @@ function loop(now){
   if(running && !gameOver){
     fogT-=dt; if(fogT<=0){ fogT=0.15; recomputeFog(); }
     minimapT-=dt; if(minimapT<=0){ minimapT=0.22; drawMinimap(); }
+    updateCameraInertia(dt);   // inercia del paneo de 2 dedos (puramente de cliente/cámara)
   }
   render();
   requestAnimationFrame(loop);
@@ -1475,12 +1522,18 @@ function update(dt){
     if(e.anim>0) e.anim-=dt;
 
     // Defensa: si fue golpeado y no está ya atacando algo válido, responde
-    // (vale para TODAS las unidades, incluidos aldeanos).
+    // (vale para TODAS las unidades, incluidos aldeanos). Una unidad en
+    // ataque-mover (`amove`) NO cambia de estado: su propio bucle ya persigue
+    // y ataca objetivos por el camino, así que solo se le fija el objetivo.
     if(e.hitBy!=null){
       const atk=find(e.hitBy);
-      if(atk && atk.hp>0 && (e.state!=='attack' || !e.target || !find(e.target.id))){
-        if(e.state==='gather') e.resumeGather=e.gather;   // recordar el recurso para volver
-        e.target=atk; e.state='attack';
+      if(atk && atk.hp>0){
+        if(e.state==='amove'){
+          if(!e.target || !find(e.target.id)) e.target=atk;
+        } else if(e.state!=='attack' || !e.target || !find(e.target.id)){
+          if(e.state==='gather') e.resumeGather=e.gather;   // recordar el recurso para volver
+          e.target=atk; e.state='attack';
+        }
       }
       e.hitBy=null;
     }
@@ -1498,6 +1551,26 @@ function update(dt){
     if(e.state==='move' && e.move){
       stepToward(e, e.move, dt);
       if(dist(e, e.move) < 6){ e.state='idle'; e.move=null; }
+    }
+    // Ataque-mover: avanza hacia `e.move` pero, en cada cuadro, si hay un
+    // enemigo cerca lo persigue y ataca (sin abandonar el estado `amove`);
+    // al perderlo (muere o se aleja) retoma la marcha hacia el destino.
+    else if(e.state==='amove' && e.move){
+      let t = e.target && find(e.target.id);
+      if(t && t.hp<=0) t=null;
+      if(!t){ t = nearestEnemy(e, AMOVE_RANGE); e.target = t||null; }
+      if(t){
+        const reach = unitRange(e) + radiusOf(t);
+        if(dist(e,t) > reach){ stepToward(e, t, dt); }
+        else if(e.cd<=0){
+          if(UNIT[e.type].cat==='archer') fireProjectile(e, t, computeDamage(e,t));
+          else damage(e,t);
+          e.cd = UNIT[e.type].cd;
+        }
+      } else {
+        stepToward(e, e.move, dt);
+        if(dist(e, e.move) < 6){ e.state='idle'; e.move=null; }
+      }
     }
     else if(e.state==='gather' && e.gather){
       const g = find(e.gather.id);
@@ -1730,9 +1803,11 @@ function spawnTrained(b, type){
   if(b.owner==='player') playSfx('ready');
   const r = b.rally;
   if(r){
-    if(type==='villager'){
-      const node = nearestResourceOfType(u, r.rtype||'food');
-      if(r.rtype && node){ u.state='gather'; u.gather=node; }
+    // Rally encadenable: si el punto de reunión se fijó sobre un recurso (o un
+    // edificio de producción propio), los aldeanos van derechos a recolectarlo.
+    if(type==='villager' && r.rtype){
+      const node = nearestGatherFor(u, r.rtype);
+      if(node){ u.state='gather'; u.gather=node; u.lastRtype=r.rtype; }
       else { u.state='move'; u.move={x:r.x,y:r.y}; }
     } else { u.state='move'; u.move={x:r.x,y:r.y}; }
   }
@@ -1745,6 +1820,11 @@ function removeEntity(ent){
   unitFace.delete(ent.id);   // limpia el seguimiento de animación (evita fugas de memoria)
   // limpiar referencias
   selection = selection.filter(id=>id!==ent.id);
+  // limpiar grupos de control (los muertos no se quedan "fantasma" en un grupo)
+  for(let gi=0; gi<controlGroups.length; gi++){
+    const idx = controlGroups[gi].indexOf(ent.id);
+    if(idx>=0){ controlGroups[gi].splice(idx,1); updateGroupBadge(gi); }
+  }
   for(const e of entities){
     if(e.kind==='unit'){
       if(e.target && e.target.id===ent.id){ e.target=null; if(e.state==='attack') e.state='idle'; }
@@ -2146,9 +2226,21 @@ function drawBuilding(e){
   }
   // selección (corchetes animados)
   if(sel) drawSelBox(s.x, s.y + sz*0.12 - spriteH/2, sz*0.95, spriteH*0.6);
-  // rally
+  // rally: línea punteada del edificio al punto de reunión + bandera (y el
+  // icono del recurso si es un rally encadenado sobre comida/madera/oro/piedra)
   if(sel && e.rally){ const r=worldToScreen(e.rally.x,e.rally.y);
-    ctx.fillStyle='#caa46a'; ctx.font=`${16*cam.zoom}px serif`; ctx.fillText('🚩', r.x, r.y); }
+    ctx.save();
+    ctx.strokeStyle='rgba(202,164,106,.75)'; ctx.lineWidth=1.5*cam.zoom;
+    ctx.setLineDash([5*cam.zoom,5*cam.zoom]);
+    ctx.beginPath(); ctx.moveTo(s.x, s.y+sz*0.12); ctx.lineTo(r.x, r.y); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle='#caa46a'; ctx.font=`${16*cam.zoom}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🚩', r.x, r.y);
+    if(e.rally.rtype && RES[e.rally.rtype]){
+      ctx.font=`${12*cam.zoom}px serif`;
+      ctx.fillText(RES[e.rally.rtype].emoji, r.x+12*cam.zoom, r.y-10*cam.zoom);
+    }
+  }
   // (el disparo se ve como flecha real en `projectiles[]`, ver drawProjectiles)
   // radio de alcance de la torre cuando está seleccionada
   if(sel && d.atk){
@@ -2183,7 +2275,7 @@ function drawUnit(e){
   }
   if(e.anim>0){
     let tp=null;
-    if(e.state==='attack' && e.target){ tp=find(e.target.id); }
+    if((e.state==='attack'||e.state==='amove') && e.target){ tp=find(e.target.id); }
     else if(e.state==='gather' && e.gather){ tp=find(e.gather.id); }
     else if(e.state==='build' && e.build){ tp=find(e.build); }
     if(tp){
@@ -2356,6 +2448,7 @@ const input = {
   dragSelect:false, panning:false, moved:false,
   lastTapTime:0, lastTapPos:{x:0,y:0},
   pinchDist:0, downTime:0,
+  panVelX:0, panVelY:0, lastPanT:0,   // velocidad reciente del paneo de 2 dedos (para la inercia)
 };
 
 function getPos(ev){
@@ -2377,6 +2470,8 @@ canvas.addEventListener('pointerdown', (ev)=>{
     const pts=[...input.pointers.values()];
     input.pinchDist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
     input.panMid = { x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 };
+    // Un nuevo gesto de 2 dedos "agarra" la cámara: corta cualquier inercia previa.
+    cam.vx=0; cam.vy=0; input.panVelX=0; input.panVelY=0; input.lastPanT=0;
   }
 }, {passive:false});
 
@@ -2391,8 +2486,15 @@ canvas.addEventListener('pointermove', (ev)=>{
     const mid={ x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 };
     const d = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
     if(input.panMid){
-      cam.x -= (mid.x - input.panMid.x)/cam.zoom;
-      cam.y -= (mid.y - input.panMid.y)/cam.zoom;
+      const ddx = (mid.x - input.panMid.x)/cam.zoom, ddy = (mid.y - input.panMid.y)/cam.zoom;
+      cam.x -= ddx; cam.y -= ddy;
+      // Velocidad reciente (para la inercia al soltar), suavizada (EMA) para no
+      // heredar un pico de jitter del último evento táctil.
+      const nowT = performance.now();
+      const pdt = clamp(input.lastPanT ? (nowT-input.lastPanT)/1000 : 0.016, 0.001, 0.05);
+      input.panVelX = input.panVelX*0.6 + (-ddx/pdt)*0.4;
+      input.panVelY = input.panVelY*0.6 + (-ddy/pdt)*0.4;
+      input.lastPanT = nowT;
     }
     if(input.pinchDist>0){
       const wBefore = screenToWorld(mid.x, mid.y);
@@ -2431,6 +2533,12 @@ canvas.addEventListener('pointerup', (ev)=>{
     input.dragSelect=false; input.panMid=null; input.pinchDist=0;
     return;
   }
+  // Se soltó un gesto de paneo de 2 dedos: la velocidad reciente pasa a la
+  // cámara como inercia (ver `updateCameraInertia`, llamada desde `loop`).
+  if(input.panning){
+    cam.vx = input.panVelX||0; cam.vy = input.panVelY||0;
+    input.panning=false; input.panVelX=0; input.panVelY=0; input.lastPanT=0;
+  }
   input.panMid=null; input.pinchDist=0;
 
   if(!input.moved){
@@ -2445,7 +2553,8 @@ canvas.addEventListener('pointerup', (ev)=>{
 }, {passive:false});
 
 canvas.addEventListener('pointercancel', (ev)=>{ input.pointers.delete(ev.pointerId);
-  input.dragSelect=false; input.panMid=null; input.pinchDist=0; });
+  input.dragSelect=false; input.panning=false; input.panMid=null; input.pinchDist=0;
+  input.panVelX=0; input.panVelY=0; input.lastPanT=0; });
 
 // Rueda = zoom (escritorio)
 canvas.addEventListener('wheel', (ev)=>{
@@ -2483,6 +2592,14 @@ function handleTap(p){
   const {ent, world} = pickAt(p);
   const selUnits = selectedUnits();
   const selBuild = selectedBuilding();
+
+  // Ataque-mover pendiente (botón ⚔️→): el próximo toque es el destino, sea
+  // terreno vacío o un enemigo (en ese caso empieza atacándolo directamente).
+  if(orderMode==='amove'){
+    orderMode=null;
+    if(selUnits.length){ amoveOrder(selUnits, world.x, world.y); showHint('Ataque-mover hacia el punto.'); }
+    return;
+  }
 
   // Si hay unidades propias seleccionadas → orden contextual.
   // En multijugador (cliente) la orden se envía al anfitrión como comando.
@@ -2543,11 +2660,16 @@ function handleTap(p){
     }
   }
 
-  // Si hay un edificio propio seleccionado y tocas terreno → fijar rally
-  if(selBuild && !ent){
-    selBuild.rally = {x:world.x, y:world.y};
-    if(isCli) netSend({t:'cmd', c:'rally', b:selBuild.id, x:world.x, y:world.y});
-    showHint('Punto de reunión fijado.'); return;
+  // Si hay un edificio propio seleccionado → fijar punto de reunión (rally).
+  // Vale tocar terreno vacío, un recurso o un edificio de producción propio;
+  // en estos dos últimos casos se guarda el TIPO de recurso, así los aldeanos
+  // entrenados van derechos a recolectarlo (rally encadenable, ver `spawnTrained`).
+  if(selBuild && (!ent || ent.kind==='resource' || (ent.kind==='building' && ent.owner==='player' && BLD[ent.btype].produces))){
+    const rtype = ent ? srcRtype(ent) : null;
+    selBuild.rally = rtype ? {x:world.x, y:world.y, rtype} : {x:world.x, y:world.y};
+    if(isCli) netSend({t:'cmd', c:'rally', b:selBuild.id, x:world.x, y:world.y, rtype});
+    showHint(rtype ? 'Punto de reunión fijado sobre '+RES[rtype].emoji+'.' : 'Punto de reunión fijado.');
+    return;
   }
 
   // Selección
@@ -2567,6 +2689,12 @@ function handleDoubleTap(p){
     pingEntities(selection, true);
     updateActionPanel();
     showHint('Seleccionados todos los '+UNIT[ent.type].name+'.');
+  } else if(ent && ent.owner==='player' && ent.kind==='building'){
+    // seleccionar todos los edificios del mismo tipo (visibles o no, son fijos)
+    selection = entities.filter(e=>e.kind==='building'&&e.owner==='player'&&e.btype===ent.btype).map(e=>e.id);
+    pingEntities(selection, true);
+    updateActionPanel();
+    showHint('Seleccionados todos los '+BLD[ent.btype].name+'.');
   } else { handleTap(p); }
 }
 
@@ -2584,6 +2712,20 @@ function finishBoxSelect(){
 
 function selectedUnits(){ return selection.map(find).filter(e=>e&&e.kind==='unit'&&e.owner==='player'); }
 function selectedBuilding(){ const e=find(selection[0]); return (e&&e.kind==='building'&&e.owner==='player')?e:null; }
+
+// ---------- Ataque-mover ----------
+// Las unidades avanzan hacia (x,y) y atacan automáticamente todo lo que
+// encuentren en el camino (estado `amove`, ver `update`). Comando MP propio
+// (`amove`), aplicado por el anfitrión en `hostHandleCmd`.
+function amoveOrder(units, x, y){
+  if(!units.length) return;
+  addPing(x, y, true, '#ff9d5c');   // ping naranja: distinto del mover normal (verde)
+  if(net.mode==='client'){ netSend({t:'cmd', c:'amove', ids:units.map(u=>u.id), x, y}); return; }
+  for(const u of units){
+    u.state='amove'; u.move={x,y}; u.target=null; u.gather=null; u.build=null;
+    u.resumeGather=null; u.resumeAmove=null; u.halt=false;
+  }
+}
 
 // ---------- Colocación de edificios ----------
 function placementValid(x,y){
@@ -2738,7 +2880,27 @@ function updateActionPanel(){
   // Unidades
   const types={}; for(const u of units) types[u.type]=(types[u.type]||0)+1;
   selinfoEl.innerHTML = Object.keys(types).map(t=>`<b>${types[t]}</b> ${UNIT[t].name}`).join(' · ');
+  // Selección mixta: chips para filtrar por tipo con un toque (reducen la
+  // selección actual a solo ese tipo, sin volver a tocar el mapa).
+  if(Object.keys(types).length>1){
+    const chipRow=document.createElement('div'); chipRow.className='qrow';
+    const lbl=document.createElement('span'); lbl.className='lbl'; lbl.textContent='Filtrar:'; chipRow.appendChild(lbl);
+    for(const t of Object.keys(types)){
+      const d=UNIT[t];
+      const chip=document.createElement('button'); chip.className='btn q chip';
+      chip.innerHTML=`<span>${d.emoji}</span>`;
+      chip.title='Solo '+d.name+' ('+types[t]+')';
+      chip.addEventListener('click',(ev)=>{ ev.preventDefault();
+        selection = units.filter(u=>u.type===t).map(u=>u.id);
+        pingEntities(selection, true);
+        updateActionPanel();
+      });
+      chipRow.appendChild(chip);
+    }
+    actionsEl.appendChild(chipRow);
+  }
   const hasVill = units.some(u=>u.type==='villager');
+  const hasMil = units.some(u=>u.type!=='villager');
   if(hasVill){
     for(const bt of ['house','farm','lumbercamp','goldmine','quarry','barracks','range','stable','blacksmith','tower','castle']){
       const d=BLD[bt];
@@ -2754,6 +2916,11 @@ function updateActionPanel(){
     actionsEl.appendChild(btnEl('🧱 Muralla', '🪨5/tramo', 'build', player.res.stone>=BLD.wall.cost.stone,
       ()=>{ placement={btype:'wall', wall:true, start:null}; updateActionPanel(); showHint('Muralla: toca el punto inicial.'); }));
   }
+  if(hasMil){
+    actionsEl.appendChild(btnEl('⚔️→ Ataque-mover','','',true, ()=>{
+      orderMode='amove'; showHint('Ataque-mover: toca el destino en el mapa.');
+    }));
+  }
   actionsEl.appendChild(btnEl('✋ Detener','','danger',true, ()=>{
     if(net.mode==='client'){ netSend({t:'cmd', c:'stop', ids:units.map(u=>u.id)}); return; }
     for(const u of units){ u.state='idle'; u.target=null; u.move=null; u.gather=null; u.build=null; u.resumeGather=null; u.halt=true; }
@@ -2761,7 +2928,7 @@ function updateActionPanel(){
   actionsEl.appendChild(btnEl('✕ Deseleccionar','','',true, deselectAll));
 }
 
-function deselectAll(){ if(selection.length) pingEntities(selection, false); selection=[]; updateActionPanel(); }
+function deselectAll(){ if(selection.length) pingEntities(selection, false); selection=[]; orderMode=null; updateActionPanel(); }
 
 function buildingButtons(b){
   const pop = popCount('player')+countQueued('player');
@@ -2960,7 +3127,13 @@ document.getElementById('btnRestart').addEventListener('click',()=>{
   document.getElementById('endScreen').classList.add('hidden');
   document.getElementById('startScreen').classList.remove('hidden');
 });
+// Centrar (⌂): toque simple = base propia; doble toque = última alerta (Fase 2).
+let centerTapT=0;
 document.getElementById('btnCenter').addEventListener('click',()=>{
+  const now=performance.now();
+  const isDouble = (now-centerTapT) < 350;
+  centerTapT = now;
+  if(isDouble && lastAlert){ centerOn(lastAlert.x, lastAlert.y); showHint('Centrado en la última alerta.'); return; }
   const t=entities.find(e=>e.kind==='building'&&e.owner==='player'&&e.btype==='town');
   if(t) centerOn(t.x,t.y);
 });
@@ -2968,6 +3141,82 @@ document.getElementById('btnIdle').addEventListener('click', selectNextIdle);
 document.getElementById('btnPause').addEventListener('click',function(){
   if(inMP()){ showHint('La pausa no está disponible en multijugador.'); return; }
   paused=!paused; this.textContent=paused?'▶':'⏸'; if(paused) showHint('Pausa');
+});
+
+// ---------- «Todo el ejército»: selecciona todos los militares vivos propios ----------
+document.getElementById('btnArmy').addEventListener('click', ()=>{
+  const mil = entities.filter(e=>e.kind==='unit'&&e.owner==='player'&&e.type!=='villager');
+  if(!mil.length){ showHint('No tienes unidades militares.'); return; }
+  selection = mil.map(e=>e.id);
+  pingEntities(selection, true);
+  updateActionPanel();
+  showHint('🪖 Ejército: '+mil.length+' unidades seleccionadas.');
+});
+
+// ---------- Grupos de control tácticos (①②③) ----------
+// Mantener pulsado 0.5s con selección activa = guardar el grupo; toque corto =
+// seleccionarlo; doble toque = seleccionarlo Y centrar la cámara en él. Los ids
+// se limpian de muertos al usarlos (y también al morir, ver `removeEntity`).
+function updateGroupBadge(idx){
+  const el = document.getElementById('grpBadge'+(idx+1)); if(!el) return;
+  const n = controlGroups[idx].length;
+  el.textContent = n; el.style.display = n ? 'flex' : 'none';
+  const btn = document.getElementById('btnGrp'+(idx+1)); if(btn) btn.classList.toggle('has', n>0);
+}
+function cleanControlGroup(idx){
+  controlGroups[idx] = controlGroups[idx].filter(id=>{ const e=find(id); return e && e.kind==='unit' && e.owner==='player'; });
+  updateGroupBadge(idx);
+}
+function saveControlGroup(idx){
+  const units = selectedUnits();
+  if(!units.length) return false;
+  controlGroups[idx] = units.map(u=>u.id);
+  updateGroupBadge(idx);
+  pingEntities(controlGroups[idx], true);
+  return true;
+}
+function selectControlGroup(idx, center){
+  cleanControlGroup(idx);
+  if(!controlGroups[idx].length){ showHint('Grupo '+(idx+1)+' vacío.'); return; }
+  selection = [...controlGroups[idx]];
+  pingEntities(selection, true);
+  updateActionPanel();
+  if(center){
+    const units = selection.map(find).filter(Boolean);
+    if(units.length){
+      const cx = units.reduce((s,u)=>s+u.x,0)/units.length;
+      const cy = units.reduce((s,u)=>s+u.y,0)/units.length;
+      centerOn(cx,cy);
+    }
+    showHint('Grupo '+(idx+1)+' seleccionado y centrado.');
+  } else {
+    showHint('Grupo '+(idx+1)+' seleccionado.');
+  }
+}
+[0,1,2].forEach(idx=>{
+  const el = document.getElementById('btnGrp'+(idx+1));
+  let holdTimer=null, holding=false, lastTapT=0;
+  el.addEventListener('pointerdown', (ev)=>{
+    ev.preventDefault();
+    holding=false;
+    clearTimeout(holdTimer);
+    holdTimer=setTimeout(()=>{
+      holding=true;
+      if(saveControlGroup(idx)) showHint('Grupo '+(idx+1)+' guardado ('+controlGroups[idx].length+').');
+      else showHint('Selecciona unidades primero para guardar un grupo.');
+    }, 500);
+  }, {passive:false});
+  el.addEventListener('pointerup', (ev)=>{
+    ev.preventDefault();
+    clearTimeout(holdTimer);
+    if(holding) return;   // ya se guardó con la pulsación larga
+    const now=performance.now();
+    const isDouble = (now-lastTapT) < 300;
+    lastTapT = now;
+    selectControlGroup(idx, isDouble);
+  }, {passive:false});
+  el.addEventListener('pointercancel', ()=>clearTimeout(holdTimer));
+  el.addEventListener('pointerleave', ()=>clearTimeout(holdTimer));
 });
 
 // ---------- Sonido: botón e inicialización en el primer gesto (Safari/iOS) ----------

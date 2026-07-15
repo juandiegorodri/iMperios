@@ -152,7 +152,7 @@ Presupuesto: niebla+minimapa <3ms/frame en el estrés.
 
 ---
 
-### FASE 3 — Manos de RTS: grupos, ataque-mover y cámara pro ⬜
+### FASE 3 — Manos de RTS: grupos, ataque-mover y cámara pro ✅
 **Por qué**: sin esto no puedes llevar dos frentes; es el techo de habilidad.
 
 **Alcance**
@@ -331,7 +331,7 @@ F6 Guardar+tutorial ──► F7 MP web (WebRTC) ──► F8 Rendimiento final
 |---|---|---|---|
 | F1 Vida | ✅ | #10 | Animación procedural sin sprites nuevos, proyectiles reales con daño al impacto, cadáveres/flash/humo-fuego, 10 SFX sintetizados + ambiente, ping verde. Ver `progress.md` 2026-07-15. |
 | F2 Niebla+minimapa | ✅ | #11 | Niebla de 3 estados (65×38 celdas, 40px), recálculo cada 150ms sobre offscreen de baja resolución escalado con suavizado bilineal; minimapa colapsable a ~4.5Hz con control táctil de cámara; alertas con throttle 8s/zona (pulso + botón ⚔️). Puramente render/cliente, protocolo MP intacto. Ver `progress.md` 2026-07-15. |
-| F3 Manos RTS | ⬜ | — | |
+| F3 Manos RTS | ✅ | #12 | Grupos de control ①②③ (locales del cliente, limpian muertos); ataque-mover (estado `amove`, comando MP propio, auto-aggro continuo sin perder el destino); "Todo el ejército" + chips de filtro por tipo + doble toque en edificio; inercia de cámara con clamp elástico (sin temblor); rally encadenable sobre recurso con línea+bandera. Ver `progress.md` 2026-07-15. |
 | F4 Pathfinding | ⬜ | — | |
 | F5 Profundidad | ⬜ | — | |
 | F6 Memoria+tutorial | ⬜ | — | |

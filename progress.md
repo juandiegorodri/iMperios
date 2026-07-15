@@ -367,3 +367,80 @@ historial. Ver normas en `CLAUDE.md`.
   suaves (bilineal) rodeado de negro, aldeanos caminando con la niebla
   siguiéndolos, y el minimapa mostrando terreno+niebla+puntos+cámara en la
   esquina inferior-derecha.
+
+## 2026-07-15 — PR #12: FASE 3 — Manos de RTS: grupos, ataque-mover y cámara pro
+Ver `PLAN.md` §4 F3. Cambios:
+- **Grupos de control tácticos (①②③)**: 3 botones nuevos en `#util` (badge con
+  el nº de unidades vivas). Con selección activa, mantener pulsado 0.5s guarda
+  el grupo (`saveControlGroup`); toque corto lo selecciona (`selectControlGroup`);
+  doble toque lo selecciona **y** centra la cámara en su centroide. Los ids se
+  limpian de unidades muertas al instante en `removeEntity` y también de forma
+  perezosa al usar el grupo (`cleanControlGroup`). Son **locales del cliente**
+  (no viajan por red; cada jugador de una partida MP guarda los suyos), y se
+  reinician en `startGame`/`clientStartFromInit`.
+- **Ataque-mover**: nuevo estado de unidad `amove` (`update`, junto a `move`/
+  `gather`/`build`/`attack`). Botón "⚔️→ Ataque-mover" en el panel de acciones
+  cuando hay al menos una unidad militar seleccionada; el siguiente toque en el
+  mapa fija el destino (`amoveOrder`). Cada cuadro, si hay un enemigo dentro de
+  `AMOVE_RANGE` (150px) lo persigue y ataca (reutiliza `unitRange`/
+  `computeDamage`/`damage`/`fireProjectile`, igual que `attack`) sin abandonar
+  el estado `amove`; al perderlo (muere o se aleja) retoma la marcha hacia el
+  punto. La retaliación (`hitBy`) ya no fuerza el cambio a estado `attack` para
+  una unidad en `amove`: solo le fija el objetivo y deja que su propio bucle
+  se encargue, así nunca "olvida" su destino tras defenderse. Comando MP propio
+  `amove` (`hostHandleCmd`), simétrico a `move`; el lunge de animación y el
+  campo `tg` del snapshot (`serEntity`) también cubren `amove` para que el
+  cliente vea el golpe.
+- **Selección mejorada**: botón "🪖 Todo el ejército" en `#util` (selecciona
+  todos los militares vivos propios, sin aldeanos ni edificios). En
+  selecciones mixtas (≥2 tipos de unidad), el panel muestra chips (`.btn.q.chip`)
+  que reducen la selección a un solo tipo con un toque. Doble toque sobre un
+  edificio propio ahora selecciona todos los edificios de ese tipo
+  (`handleDoubleTap`; antes solo existía para unidades).
+- **Cámara con inercia**: `cam.vx`/`cam.vy` guardan la velocidad reciente del
+  paneo de 2 dedos (medida con EMA en `pointermove`, aplicada en
+  `updateCameraInertia` desde `loop`); al soltar los dedos decae ~0.9/cuadro
+  (normalizado por `dt`, no depende del framerate real) hasta pararse. El
+  paneo EN VIVO sigue con el clamp duro de siempre (`clampCam`); el **clamp
+  elástico** (aproximación exponencial sin overshoot, sin "temblor") solo entra
+  en juego durante el propio deslizamiento inercial, si este saca a la cámara
+  del mundo. Doble toque en ⌂ centra en `lastAlert` (Fase 2) en vez de la base.
+- **Rally encadenable**: fijar el punto de reunión de un edificio (tocar
+  terreno con un edificio seleccionado) ahora también acepta tocar un recurso
+  o un edificio de producción propio, guardando el `rtype` en `b.rally`
+  (`o.ry.rt` en el snapshot). `spawnTrained` usa `nearestGatherFor` con ese
+  `rtype` para mandar a los aldeanos entrenados derechos a recolectar (nodo o
+  edificio, el que esté más cerca). Render: línea punteada del edificio al
+  punto de reunión + bandera 🚩 + icono del recurso, visible al seleccionar.
+- **Pruebas**: Chromium headless (1024×768) con `spritesReady>=32`, cero
+  `pageerror`/`console.error` en todos los escenarios. Por `page.evaluate`:
+  (a) `saveControlGroup`/`selectControlGroup` restauran exactamente la
+  selección guardada; matar a una unidad del grupo la quita al instante
+  (verificado antes y después de volver a seleccionar el grupo); (b) fila de 5
+  enemigos entre los puntos A y B, `amoveOrder` hacia B, ~900 cuadros de
+  `update()`: los 5 mueren y las unidades propias terminan más allá del punto
+  medio (estado `idle`, ya llegaron a B); (c) "Todo el ejército" selecciona
+  solo militares vivos propios (sin aldeanos/edificios/enemigos); con
+  selección mixta aparecen 2 chips y tocar uno reduce la selección al tipo
+  correcto; (d) inercia: velocidad grande simulada, 90 cuadros de
+  `updateCameraInertia` sin ningún cambio de signo en el desplazamiento (cero
+  "temblor"), termina con `vx=vy=0` y dentro del mundo; forzar `cam.x=-50`
+  confirma que se atrae de vuelta a 0 sin pasarse de largo (`overshotZero:
+  false`); (e) rally sobre un nodo de comida: el aldeano entrenado sale en
+  estado `gather` con `rtype==='food'` apuntando a ese nodo. **Multijugador
+  real** (`node server.js` + 2 Chromium, host «Crear partida» + cliente
+  «Unirse» a `127.0.0.1`): ambos llegan a `running=true` sin errores; el
+  comando `amove` enviado por el cliente aparece aplicado en el host (unidad
+  del lado `enemy` con `state==='amove'`) y reflejado en el siguiente
+  snapshot del cliente; se confirma que el cliente nunca llama a `update()`
+  (`net.mode==='client'`, sin simulación de daño). **Estrés**: 254 entidades
+  (90+90 militares repartidos en 4 tipos, todas en `amove`, más las
+  iniciales) tras 60 cuadros de mezcla en combate: `update()` ~3.42ms de media
+  (p95 4.6ms, máx 6.5ms) + `render()` ~0.63ms de media → **~4.0ms/cuadro
+  combinados**, muy por debajo de los 16.7ms de un cuadro a 60fps.
+  Regresión: partida real de ~9s con IA + pausa/reanudación + orden de
+  movimiento normal (no `amove`) sin errores ni comportamiento roto.
+- **Captura de pantalla**: panel de acciones con "3 Milicia" seleccionados,
+  botones "⚔️→ Ataque-mover"/"Detener"/"Deseleccionar", los 3 botones de grupo
+  de control (①②③, uno con badge "2") y el botón "🪖 Todo el ejército" en
+  `#util`, más la bandera y línea de rally sobre el Centro Urbano.

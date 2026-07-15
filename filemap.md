@@ -94,7 +94,15 @@ El archivo se organiza en estas secciones (en orden de aparición):
    (`netOnMessage`/`netSendInit`/`clientStartFromInit`/`clientEnd`) y comandos
    del cliente aplicados por el anfitrión (`hostHandleCmd`/`hostPlace`/
    `hostWall`). Guardas de cliente en la economía, órdenes y colocación.
-   Ver `iOS.md` para el protocolo completo.
+   Ver `iOS.md` para el protocolo completo. El comando `amove` (Fase 3) sigue
+   el mismo patrón que `move`.
+2.7. **Grupos de control tácticos** (Fase 3, LOCALES del cliente — no viajan
+   por red): `controlGroups` (3 arrays de ids), `saveControlGroup`/
+   `cleanControlGroup`/`selectControlGroup` y `updateGroupBadge`; listeners
+   `pointerdown`/`pointerup` de los botones `#btnGrp1-3` (mantener pulsado
+   0.5s = guardar, toque = seleccionar, doble toque = seleccionar+centrar).
+   Se reinician en `startGame`/`clientStartFromInit` y se limpian de muertos
+   en `removeEntity`.
 3. **Utilidades**: `dist`, `clamp`, `find`, `radiusOf`, recursos/coste
    (`canAfford`, `pay`, `costStr`, `popCount`, `popCap`), `hasBuilding`,
    `countBuildings`, `prodSpeed` (bono de producción por nº de edificios).
@@ -104,7 +112,12 @@ El archivo se organiza en estas secciones (en orden de aparición):
    con puente), `onObstacle` (bloqueo de construcción) y `blocksUnit` (bloqueo de
    paso: río salvo puente, y riscos).
 6. **Cámara**: `viewW/viewH`, `centerOn`, `clampCam`, conversiones
-   `worldToScreen` / `screenToWorld`, `resize`.
+   `worldToScreen` / `screenToWorld`, `resize`. **Inercia del paneo** (Fase 3):
+   `cam.vx`/`cam.vy` (velocidad, medida con EMA en `pointermove` durante el
+   gesto de 2 dedos) y `updateCameraInertia` (llamada desde `loop`): decae
+   ~0.9/cuadro tras soltar los dedos y aplica un **clamp elástico** (atracción
+   exponencial sin overshoot) si la inercia saca la cámara del mundo — el
+   paneo en vivo sigue usando el clamp duro de siempre.
 7. **Economía / entrenamiento**: `queueUnit`, `countQueued`, `tryAdvanceAge`
    (multi-era), `buyUpgrade`, `buyEcon`/`nextEcon` (tecnologías de recursos),
    `cancelQueued` (cancela y reembolsa), stats efectivas (`unitAtk`, `unitRange`,
@@ -116,36 +129,57 @@ El archivo se organiza en estas secciones (en orden de aparición):
 8. **Lógica de unidades / IA**: `nearestEnemy`, `nearestResourceOfType`,
    `nearestGatherFor`/`nearestAnyResource` (incluyen edificios de producción),
    `srcRtype`, `autoAssignIdle` (aldeano inactivo busca trabajo), `separate`.
+   **Ataque-mover** (Fase 3): `amoveOrder(units,x,y)` fija el estado `amove`
+   (envía comando MP si es cliente); la constante `AMOVE_RANGE` define el
+   radio de auto-aggro continuo que usa el propio bucle de `update`.
 9. **Bucle principal**: `loop` (además de simular, dispara `recomputeFog`
-   cada ~150ms y `drawMinimap` cada ~220ms — ver 2.55.5, también en el
-   cliente MP), `update` (proyectiles, unidades con retaliación y
-   auto-trabajo, gather de nodos y edificios de producción con SFX de
+   cada ~150ms, `drawMinimap` cada ~220ms — ver 2.55.5 — y
+   `updateCameraInertia` cada cuadro, también en el cliente MP), `update`
+   (proyectiles; unidades con retaliación y auto-trabajo — la retaliación NO
+   saca a una unidad en `amove` de su estado, solo le fija el objetivo, ver
+   §2.7 más abajo —; estado `amove`: persigue/ataca enemigos en
+   `AMOVE_RANGE` sin abandonar la marcha, retoma el destino al perder el
+   objetivo; gather de nodos y edificios de producción con SFX de
    talar/picar, edificios con torres y bosqueros, muertes con conteo de
    bajas y creación de cadáveres visuales, fin de partida), `stepToward`
    (guiado por el puente y bloqueo de obstáculos), `spawnTrained` (SFX "unidad
-   lista"), `removeEntity` (limpia también `unitFace`), `enemyAI` +
-   `DOCTRINE` (3 manuales) y `pickWaveTarget` (objetivo estratégico).
+   lista"; rally encadenable — ver 2.7 — usa `nearestGatherFor` con el
+   `rtype` del rally), `removeEntity` (limpia también `unitFace` y quita al
+   muerto de `controlGroups`), `enemyAI` + `DOCTRINE` (3 manuales) y
+   `pickWaveTarget` (objetivo estratégico).
 10. **Render**: `render` (culling `onScreen` + filtro de niebla `fogRenderOk`,
     y `drawFogOverlay` al final de la escena — ver 2.55.5), `drawTerrain`
     (río/puente/riscos), `drawGround`, `drawCorpses` (cadáveres: fade + caída,
     también filtrados por niebla), `onScreen`, `drawResource`/`drawBuilding`
     (con `drawDamageFx`: humo/fuego por hp) /`drawUnit` (animación procedural
     — bamboleo, lunge, volteo — y flash `hurtT`; dibujan **sprite** con anillo
-    de bando y sombra, respaldo de emoji), `drawProjectiles` (flechas en
-    vuelo, también filtradas por niebla), `drawHpBar`, `roundRect`.
-11. **Entrada táctil**: objeto `input`, manejadores `pointerdown/move/up/cancel`,
-    `wheel`, teclado; `pickAt`, `handleTap`, `handleDoubleTap`,
-    `finishBoxSelect`, `selectedUnits`, `selectedBuilding`; colocación
-    (`placementValid`, `tryPlaceBuilding`).
+    de bando y sombra, respaldo de emoji; el lunge también cubre el estado
+    `amove` — Fase 3), `drawProjectiles` (flechas en vuelo, también
+    filtradas por niebla), `drawHpBar`, `roundRect`. `drawBuilding` dibuja el
+    rally con línea punteada + bandera 🚩 + icono del recurso si es
+    encadenado (Fase 3).
+11. **Entrada táctil**: objeto `input` (incluye `panVelX`/`panVelY`/`lastPanT`
+    para la inercia de cámara, Fase 3), manejadores
+    `pointerdown/move/up/cancel`, `wheel`, teclado; `pickAt`, `handleTap`
+    (primero consume `orderMode==='amove'` pendiente — ver `amoveOrder` — y
+    también acepta fijar el rally sobre un recurso/edificio de producción),
+    `handleDoubleTap` (unidades del mismo tipo visibles; Fase 3: también
+    edificios del mismo tipo), `finishBoxSelect`, `selectedUnits`,
+    `selectedBuilding`; colocación (`placementValid`, `tryPlaceBuilding`).
 12. **UI: panel de acciones**: `btnEl`, `clearActions` (limpia botones y filas de
     cola), `updateActionPanel` (multiplicador de producción, fila de cola
-    cancelable y botón Deseleccionar), `buildingButtons` (incluye avance de era,
+    cancelable, chips de filtro por tipo en selecciones mixtas — Fase 3 — y
+    botón Deseleccionar), `buildingButtons` (incluye avance de era,
     tecnologías económicas y construcción de Casa/Castillo), `deselectAll`.
+    Botón "⚔️→ Ataque-mover" (Fase 3, con militares seleccionados) fija
+    `orderMode='amove'`; botón "🪖 Todo el ejército" (`#btnArmy`) selecciona
+    todos los militares vivos propios.
 13. **Barra superior y utilidades de UI**: `updateTopbar` (contador de inactivos
     y tasa de producción por recurso), `idleVillagers`, `selectNextIdle`,
     `showHint`, `endGame` y `renderSummary` (tabla del resumen final).
 14. **Menú principal y arranque**: `MAP_DESC`, `refreshMenu` y listeners de las
     opciones del menú; botón Empezar; **prueba gráfica** (`openGfxTest` + botón);
-    listeners de fin/centrar/pausa/inactivos; bloqueo de gestos del navegador;
-    refresco periódico del panel; `loadSprites()` + `resize()` +
+    listeners de fin/centrar (doble toque → `lastAlert`, Fase 3)/pausa/inactivos/
+    ejército (`#btnArmy`)/grupos de control (`#btnGrp1-3`); bloqueo de gestos
+    del navegador; refresco periódico del panel; `loadSprites()` + `resize()` +
     `requestAnimationFrame(loop)`.

@@ -314,3 +314,31 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     botón temporal "⚔️ ir al ataque" en `#util` (se oculta solo a los 10s o al
     tocarlo, y centra la cámara en la última zona atacada). El SFX de alerta
     (Fase 1) suena aparte, sin este throttle por zona.
+- **FASE 3 — Manos de RTS: grupos, ataque-mover y cámara pro** (PR #12): ver
+  `PLAN.md` §4 F3. Cambios:
+  - **Grupos de control tácticos** (①②③ en `#util`, ≥44px, con contador en
+    vivo): con selección activa, mantener pulsado 0.5s guarda el grupo; toque
+    corto lo selecciona; doble toque lo selecciona y centra la cámara en su
+    centro. Los ids se limpian de unidades muertas al instante. Son
+    **locales del cliente** (no viajan por red; en multijugador cada jugador
+    guarda los suyos).
+  - **Ataque-mover** (botón "⚔️→ Ataque-mover" en el panel con militares
+    seleccionados): las unidades avanzan hacia el punto tocado y persiguen y
+    atacan automáticamente cualquier enemigo que encuentren en el camino
+    (nuevo estado `amove`), retomando la marcha al perder el objetivo. Tiene
+    su propio comando de red (`amove`), simétrico a `move`.
+  - **Selección mejorada**: botón "🪖 Todo el ejército" en `#util` (selecciona
+    todos los militares vivos propios, sin aldeanos ni edificios). En
+    selecciones mixtas aparecen chips por tipo en el panel que reducen la
+    selección con un toque. Doble toque sobre un edificio propio selecciona
+    todos los edificios de ese tipo (antes solo existía para unidades).
+  - **Cámara con inercia**: al soltar el paneo de 2 dedos, la cámara sigue
+    deslizándose y decae suavemente (~0.9/cuadro) hasta pararse, con un tope
+    elástico en los bordes del mapa (sin "temblor" ni rebote) si la inercia la
+    saca del mundo. Doble toque en el botón ⌂ centra la cámara en la última
+    zona atacada (Fase 2) en vez de la base propia.
+  - **Rally encadenable**: fijar el punto de reunión de un edificio sobre un
+    recurso (o un edificio de producción propio) hace que los aldeanos
+    entrenados a partir de entonces vayan directos a recolectarlo; se ve una
+    línea punteada + bandera 🚩 + icono del recurso desde el edificio hasta el
+    punto de reunión al seleccionarlo.
