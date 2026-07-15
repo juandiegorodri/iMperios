@@ -317,6 +317,11 @@ const BLD = {
   wall:       { name:'Muralla',       emoji:'🧱', hp:700,  size:30, cost:{stone:5},  build:5, req:[], wall:true },
   wall_tower: { name:'Torre de Muralla',emoji:'🏯',hp:1100, size:38, cost:{stone:20}, build:9, req:[], wall:true,
                 atk:8, range:155, cd:1.0 },
+  // Puerta (Fase 4): tramo central de una muralla trazada de ≥3 tramos. Deja
+  // pasar a las unidades PROPIAS y bloquea a las rivales SIEMPRE (como una
+  // muralla normal); si se cierra manualmente (`b.closed`), bloquea a todos,
+  // incluido el dueño. HP menor que la Torre de Muralla.
+  gate:       { name:'Puerta',        emoji:'🚪', hp:600,  size:34, cost:{stone:12}, build:7, req:[], wall:true, gate:true },
 };
 
 // Edades (índice = nº de era). `cost` = coste para AVANZAR a esa era.
@@ -639,7 +644,8 @@ function serEntity(e){
     o.pg=Math.round(e.progress*10)/10; if(e.dir) o.dir=e.dir;
     if(e.queue.length) o.q=e.queue.map(j=>({type:j.type,time:Math.round(j.time*10)/10,total:j.total}));
     if(e.reserve!==undefined){ o.rv=Math.round(e.reserve); o.mrv=e.maxReserve; }
-    if(e.rally){ o.ry={x:Math.round(e.rally.x),y:Math.round(e.rally.y)}; if(e.rally.rtype) o.ry.rt=e.rally.rtype; } }
+    if(e.rally){ o.ry={x:Math.round(e.rally.x),y:Math.round(e.rally.y)}; if(e.rally.rtype) o.ry.rt=e.rally.rtype; }
+    if(e.btype==='gate') o.cl=e.closed?1:0; }
   else if(e.kind==='resource'){ o.r=e.rtype; o.am=Math.round(e.amount); o.mam=e.maxAmount; }
   return o;
 }
@@ -652,7 +658,8 @@ function deserEntity(o){
   else if(o.kind==='building'){ e.btype=o.b; e.built=!!o.bt; e.progress=o.pg||0; if(o.dir) e.dir=o.dir;
     e.queue=(o.q||[]).map(j=>({type:j.type,time:j.time,total:j.total}));
     if(o.rv!==undefined){ e.reserve=o.rv; e.maxReserve=o.mrv; }
-    if(o.ry) e.rally = o.ry.rt ? {x:o.ry.x,y:o.ry.y,rtype:o.ry.rt} : {x:o.ry.x,y:o.ry.y}; }
+    if(o.ry) e.rally = o.ry.rt ? {x:o.ry.x,y:o.ry.y,rtype:o.ry.rt} : {x:o.ry.x,y:o.ry.y};
+    if(o.b==='gate') e.closed = !!o.cl; }
   else if(o.kind==='resource'){ e.rtype=o.r; e.amount=o.am; e.maxAmount=o.mam; }
   return e;
 }
@@ -734,7 +741,7 @@ function clientStartFromInit(m){
   mapTheme = m.cfg.map; gameSpeed = 1;
   terrain = m.terrain||[]; bridge = m.bridge||null;
   entities=[]; selection=[]; placement=null; pings=[]; frameWalls=[];
-  projectiles=[]; corpses=[]; unitFace.clear(); alertFlags={player:false,enemy:false};
+  projectiles=[]; corpses=[]; unitFace.clear(); alertFlags={player:false,enemy:false}; invalidatePathGrid();
   orderMode=null; controlGroups=[[],[],[]]; for(let gi=0;gi<3;gi++) updateGroupBadge(gi);
   cam.vx=0; cam.vy=0;
   player.mods=freshMods(); enemy.mods=freshMods();
@@ -765,21 +772,21 @@ function hostHandleCmd(m){
   const units=(m.ids||[]).map(find).filter(e=>e&&e.kind==='unit'&&e.owner===own);
   const tgt = (m.g!==undefined) ? find(m.g) : null;
   switch(m.c){
-    case 'move': for(const u of units){ u.state='move'; u.move={x:m.x,y:m.y}; u.target=null; u.gather=null; u.build=null; u.halt=false; } break;
-    case 'amove': for(const u of units){ u.state='amove'; u.move={x:m.x,y:m.y}; u.target=null; u.gather=null; u.build=null;
-      u.resumeGather=null; u.resumeAmove=null; u.halt=false; } break;
+    case 'move': applyGroupMove(units, own, m.x, m.y, 'move'); break;    // A* + formación (Fase 4), calculado en el host
+    case 'amove': applyGroupMove(units, own, m.x, m.y, 'amove'); break;
     case 'gather': if(tgt) for(const u of units){ if(u.type!=='villager') continue;
       u.state='gather'; u.gather=tgt; u.resumeGather=null; u.halt=false;
       u.lastRtype = tgt.kind==='building' ? BLD[tgt.btype].produces : tgt.rtype; } break;
     case 'attack': if(tgt && tgt.owner==='player') for(const u of units){ u.state='attack'; u.target=tgt; u.resumeGather=null; u.halt=false; } break;
     case 'buildjob': if(tgt && tgt.kind==='building' && tgt.owner===own)
       for(const u of units){ if(u.type==='villager'){ u.state='build'; u.build=tgt.id; u.halt=false; } } break;
-    case 'stop': for(const u of units){ u.state='idle'; u.target=null; u.move=null; u.gather=null; u.build=null; u.resumeGather=null; u.halt=true; } break;
+    case 'stop': for(const u of units){ u.state='idle'; u.target=null; u.move=null; u.gather=null; u.build=null; u.resumeGather=null; u.halt=true; u.path=null; u.pathIdx=0; } break;
     case 'train': { const b=find(m.b); if(b && b.owner===own && b.built && UNIT[m.u]) queueUnit(b, m.u); break; }
     case 'cancel': { const b=find(m.b); if(b && b.owner===own) cancelQueued(b, m.i); break; }
     case 'age': tryAdvanceAge(own); break;
     case 'upg': if(UPG[m.k]) buyUpgrade(own, m.k); break;
     case 'econ': if(ECON[m.r]) buyEcon(own, m.r, m.i); break;
+    case 'gate': { const g=find(m.b); if(g && g.owner===own && g.btype==='gate'){ g.closed=!!m.closed; invalidatePathGrid(); } break; }
     case 'rally': { const b=find(m.b); if(b && b.owner===own) b.rally = m.rtype ? {x:m.x,y:m.y,rtype:m.rtype} : {x:m.x,y:m.y}; break; }
     case 'place': hostPlace(m, units); break;
     case 'wall': hostWall(m); break;
@@ -797,13 +804,15 @@ function hostPlace(m, units){
 function hostWall(m){
   const pts=wallPoints({x:m.x0,y:m.y0},{x:m.x1,y:m.y1});
   const cost={stone:0};
-  pts.forEach((pt,i)=>{ cost.stone += (i%WALL_TOWER_EVERY===0?BLD.wall_tower.cost.stone:BLD.wall.cost.stone); });
+  pts.forEach((pt,i)=>{ cost.stone += BLD[wallSegmentType(pts,i)].cost.stone; });
   if(!canAfford(enemy,cost)) return;
   pay(enemy,cost);
   const dir=Math.abs(m.x0-m.x1)>=Math.abs(m.y0-m.y1)?'h':'v';
   pts.forEach((pt,i)=>{ if(onObstacle(pt.x,pt.y)) return;
-    const b=makeBuilding('enemy', i%WALL_TOWER_EVERY===0?'wall_tower':'wall', pt.x,pt.y,false);
-    b.dir=dir; entities.push(b); });
+    const bt=wallSegmentType(pts,i);
+    const b=makeBuilding('enemy', bt, pt.x,pt.y,false);
+    b.dir=dir; if(bt==='gate') b.closed=false;
+    entities.push(b); });
 }
 
 // ---------- Utilidades ----------
@@ -851,7 +860,7 @@ function startGame(cfg){
   mapTheme = cfg.map;
   entities = []; selection = []; nextId = 1; placement = null; terrain = []; bridge = null;
   frameWalls = []; pings = []; projectiles = []; corpses = []; unitFace.clear();
-  alertFlags = {player:false, enemy:false};
+  alertFlags = {player:false, enemy:false}; invalidatePathGrid();
   orderMode = null; controlGroups = [[],[],[]]; for(let gi=0;gi<3;gi++) updateGroupBadge(gi);
   cam.vx = 0; cam.vy = 0;
   gameOver = false; paused = false; running = true;
@@ -1548,9 +1557,24 @@ function update(dt){
       autoAssignIdle(e);
     }
 
+    // Progreso de movimiento para el repath del A*: si una unidad en
+    // 'move'/'amove' lleva más de 0.6s casi sin avanzar (atascada en una
+    // esquina, un cambio de terreno, etc.), recalcula su camino desde donde
+    // está AHORA (solo host/partida local; el cliente MP no ejecuta `update`).
+    if((e.state==='move'||e.state==='amove') && e.move){
+      const moved = e._stuckX!==undefined ? Math.hypot(e.x-e._stuckX, e.y-e._stuckY) : Infinity;
+      if(moved < UNIT[e.type].speed*dt*0.25) e.stuckT=(e.stuckT||0)+dt; else e.stuckT=0;
+      e._stuckX=e.x; e._stuckY=e.y;
+      if(e.stuckT>0.6){
+        e.stuckT=0;
+        e.path = computeGroupPath([e], e.owner, e.move.x, e.move.y);
+        e.pathIdx=0;
+      }
+    } else if(e.stuckT){ e.stuckT=0; }
+
     if(e.state==='move' && e.move){
       stepToward(e, e.move, dt);
-      if(dist(e, e.move) < 6){ e.state='idle'; e.move=null; }
+      if(dist(e, e.move) < 6){ e.state='idle'; e.move=null; e.path=null; }
     }
     // Ataque-mover: avanza hacia `e.move` pero, en cada cuadro, si hay un
     // enemigo cerca lo persigue y ataca (sin abandonar el estado `amove`);
@@ -1569,7 +1593,7 @@ function update(dt){
         }
       } else {
         stepToward(e, e.move, dt);
-        if(dist(e, e.move) < 6){ e.state='idle'; e.move=null; }
+        if(dist(e, e.move) < 6){ e.state='idle'; e.move=null; e.path=null; }
       }
     }
     else if(e.state==='gather' && e.gather){
@@ -1616,6 +1640,7 @@ function update(dt){
           b.hp = Math.max(b.hp, BLD[b.btype].hp * (0.05 + 0.95*Math.min(1,b.progress/need)));
           if(b.progress>=need){ b.built=true; b.hp=BLD[b.btype].hp; e.state='idle'; e.build=null;
             side(b.owner).stats.built++;
+            if(BLD[b.btype].wall) invalidatePathGrid();   // nueva muralla/puerta: el grid de A* queda obsoleto
             if(e.owner==='player') showHint(BLD[b.btype].name+' construido.'); }
         } else if(b.built && BLD[b.btype].produces && b.reserve < b.maxReserve && b.hp>=b.maxHp){
           // RECARGAR un edificio de producción (hasta 500; cuesta el coste de construcción)
@@ -1670,7 +1695,10 @@ function update(dt){
 
     const px=e.x, py=e.y;
     separate(e, dt);
-    if(blocksUnit(e.x,e.y)){ e.x=px; e.y=py; }   // la separación no empuja al río/riscos
+    // La separación (empuje entre unidades) no debe colar a nadie por el río/
+    // riscos NI por una muralla/puerta que le bloquee (esquinas de murallas:
+    // sin esto, el apiñamiento podía "filtrar" unidades a través del muro).
+    if(blocksUnit(e.x,e.y) || blockedByWall(e,e.x,e.y)){ e.x=px; e.y=py; }
     e.x = clamp(e.x, 8, WORLD.w-8); e.y = clamp(e.y, 8, WORLD.h-8);
   }
 
@@ -1755,7 +1783,18 @@ function update(dt){
 }
 
 function stepToward(e, t, dt){
-  let gx=t.x, gy=t.y;
+  // Si la unidad tiene un camino A* pendiente PARA ESTE MOVIMIENTO (t===e.move;
+  // no aplica a perseguir un objetivo vivo de recolección/construcción/ataque,
+  // que ya esquivan localmente), avanza hacia el siguiente waypoint en vez de
+  // ir en línea recta al destino final. Al agotar el camino sigue el código de
+  // siempre (línea recta + deslizado + puente) hacia el destino real.
+  let target = t;
+  if(t===e.move && e.path){
+    while(e.path && e.pathIdx<e.path.length && dist(e, e.path[e.pathIdx])<16) e.pathIdx++;
+    if(e.path && e.pathIdx>=e.path.length) e.path=null;
+    if(e.path) target = e.path[e.pathIdx];
+  }
+  let gx=target.x, gy=target.y;
   // Río vertical con puente: si el destino está al otro lado, pasar por el puente.
   if(bridge){
     const eSide = e.x < bridge.x0 ? -1 : e.x > bridge.x1 ? 1 : 0;
@@ -1774,8 +1813,8 @@ function stepToward(e, t, dt){
     else if(!blocksUnit(e.x,ny)) nx=e.x;
     else { nx=e.x; ny=e.y; }
   }
-  // Murallas: bloquean a las unidades del bando contrario (salvo si su objetivo
-  // es la propia muralla, para poder atacarla).
+  // Murallas/puertas: bloquean a las unidades del bando contrario (salvo si su
+  // objetivo es la propia muralla, para poder atacarla).
   if(blockedByWall(e, nx, ny)){
     if(!blockedByWall(e, nx, e.y)) ny=e.y;
     else if(!blockedByWall(e, e.x, ny)) nx=e.x;
@@ -1783,15 +1822,246 @@ function stepToward(e, t, dt){
   }
   e.x=nx; e.y=ny;
 }
-// ¿La posición choca con una muralla enemiga? (no bloquea a su propio dueño)
+// ¿Este muro/puerta bloquea el paso a unidades del bando `moverSide`? Las
+// murallas normales nunca bloquean a su propio dueño; las puertas tampoco
+// (dejan pasar al dueño y bloquean al rival, igual que una muralla), SALVO que
+// estén cerradas manualmente (`w.closed`), en cuyo caso bloquean a TODOS,
+// incluido el dueño.
+function wallBlocksSide(w, moverSide){
+  if(BLD[w.btype].gate && w.closed) return true;
+  return w.owner !== moverSide;
+}
+// ¿La posición choca con una muralla/puerta que bloquea a este bando?
 function blockedByWall(e, x, y){
   for(const w of frameWalls){
-    if(w.owner===e.owner) continue;
+    if(!wallBlocksSide(w, e.owner)) continue;
     if(e.state==='attack' && e.target && e.target.id===w.id) continue;
     const r = radiusOf(w) + 11;
     if((x-w.x)*(x-w.x)+(y-w.y)*(y-w.y) < r*r) return true;
   }
   return false;
+}
+
+/* ==================== PATHFINDING (A*) Y FORMACIONES (Fase 4) ====================
+   Corre SOLO en el host/partida local (nunca en el cliente MP: éste solo sigue
+   las posiciones que recibe por snapshot, no calcula caminos ni daño). Rejilla
+   gruesa reaprovechando el tamaño de celda de la niebla (40px, 65×38 = 2.470
+   celdas): un A* completo es trivial a ese tamaño. El grid de obstáculos
+   ESTÁTICOS (río sin puente, riscos, murallas/puertas por bando) se cachea POR
+   BANDO y solo se invalida al construir/destruir una muralla o alternar una
+   puerta (`invalidatePathGrid`), nunca por cuadro.                              */
+function builtWalls(){ return entities.filter(e=>e.kind==='building'&&BLD[e.btype].wall&&e.built); }
+
+let pathGrids = { player:null, enemy:null };   // Uint8Array por bando (1 = bloqueado), null = sucio
+function invalidatePathGrid(){ pathGrids.player=null; pathGrids.enemy=null; }
+function buildPathGrid(ownerSide){
+  const grid = new Uint8Array(FOG_COLS*FOG_ROWS);
+  for(let gy=0; gy<FOG_ROWS; gy++){
+    const rowBase=gy*FOG_COLS;
+    for(let gx=0; gx<FOG_COLS; gx++){
+      const cx=gx*FOG_CELL+FOG_CELL/2, cy=gy*FOG_CELL+FOG_CELL/2;
+      if(blocksUnit(cx,cy)) grid[rowBase+gx]=1;
+    }
+  }
+  for(const w of builtWalls()){
+    if(!wallBlocksSide(w, ownerSide)) continue;
+    const r = radiusOf(w)+11;
+    const gx0=Math.max(0,Math.floor((w.x-r)/FOG_CELL)), gx1=Math.min(FOG_COLS-1,Math.floor((w.x+r)/FOG_CELL));
+    const gy0=Math.max(0,Math.floor((w.y-r)/FOG_CELL)), gy1=Math.min(FOG_ROWS-1,Math.floor((w.y+r)/FOG_CELL));
+    for(let gy=gy0; gy<=gy1; gy++){ const rowBase=gy*FOG_COLS;
+      for(let gx=gx0; gx<=gx1; gx++){
+        const cx=gx*FOG_CELL+FOG_CELL/2, cy=gy*FOG_CELL+FOG_CELL/2;
+        if((cx-w.x)*(cx-w.x)+(cy-w.y)*(cy-w.y) < r*r) grid[rowBase+gx]=1;
+      }
+    }
+  }
+  return grid;
+}
+function getPathGrid(ownerSide){
+  if(!pathGrids[ownerSide]) pathGrids[ownerSide] = buildPathGrid(ownerSide);
+  return pathGrids[ownerSide];
+}
+
+// Línea de visión: ¿se puede ir en línea recta de (x0,y0) a (x1,y1) sin cruzar
+// río/riscos ni una muralla/puerta que bloquee a `ownerSide`? Usada para (a)
+// evitar llamar al A* cuando no hace falta (caso común: terreno abierto) y (b)
+// suavizar el camino final saltando waypoints intermedios visibles.
+function losClear(ownerSide, x0, y0, x1, y1){
+  const d = Math.hypot(x1-x0, y1-y0);
+  if(d<1) return true;
+  const steps = Math.max(1, Math.ceil(d / (FOG_CELL*0.5)));
+  const walls = builtWalls();
+  for(let i=0;i<=steps;i++){
+    const t=i/steps, x=x0+(x1-x0)*t, y=y0+(y1-y0)*t;
+    if(blocksUnit(x,y)) return false;
+    for(const w of walls){
+      if(!wallBlocksSide(w, ownerSide)) continue;
+      const r=radiusOf(w)+11;
+      if((x-w.x)*(x-w.x)+(y-w.y)*(y-w.y) < r*r) return false;
+    }
+  }
+  return true;
+}
+
+// Min-heap simple (array binario) para el A*: suficiente a 2.470 nodos.
+function heapPush(heap, node){
+  heap.push(node); let i=heap.length-1;
+  while(i>0){ const p=(i-1)>>1; if(heap[p].f<=heap[i].f) break;
+    const tmp=heap[p]; heap[p]=heap[i]; heap[i]=tmp; i=p; }
+}
+function heapPop(heap){
+  const top=heap[0]; const last=heap.pop();
+  if(heap.length){ heap[0]=last; let i=0;
+    while(true){ const l=2*i+1, r=2*i+2; let sm=i;
+      if(l<heap.length && heap[l].f<heap[sm].f) sm=l;
+      if(r<heap.length && heap[r].f<heap[sm].f) sm=r;
+      if(sm===i) break;
+      const tmp=heap[sm]; heap[sm]=heap[i]; heap[i]=tmp; i=sm; } }
+  return top;
+}
+function octileH(ax,ay,bx,by){
+  const dx=Math.abs(ax-bx), dy=Math.abs(ay-by);
+  return (dx+dy) + (Math.SQRT2-2)*Math.min(dx,dy);
+}
+const PATH_DIRS = [[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,Math.SQRT2],[1,-1,Math.SQRT2],[-1,1,Math.SQRT2],[-1,-1,Math.SQRT2]];
+// A* en la rejilla gruesa (coordenadas de mundo → celda). Devuelve una lista de
+// waypoints (centros de celda, mundo) desde la celda de inicio hasta la de
+// destino (o la libre más cercana si el destino cae en una celda bloqueada), o
+// `null` si no hace falta camino (misma celda) o no existe ninguno.
+function astarPath(ownerSide, sx, sy, tx, ty){
+  const grid = getPathGrid(ownerSide);
+  const sgx=clamp(Math.floor(sx/FOG_CELL),0,FOG_COLS-1), sgy=clamp(Math.floor(sy/FOG_CELL),0,FOG_ROWS-1);
+  let tgx=clamp(Math.floor(tx/FOG_CELL),0,FOG_COLS-1), tgy=clamp(Math.floor(ty/FOG_CELL),0,FOG_ROWS-1);
+  if(grid[tgy*FOG_COLS+tgx]){
+    // el destino cae en celda bloqueada: usar la celda libre más cercana (radio 4)
+    let best=-1, bestD=Infinity;
+    for(let gy=Math.max(0,tgy-4); gy<=Math.min(FOG_ROWS-1,tgy+4); gy++)
+      for(let gx=Math.max(0,tgx-4); gx<=Math.min(FOG_COLS-1,tgx+4); gx++){
+        const idx=gy*FOG_COLS+gx; if(grid[idx]) continue;
+        const dd=(gx-tgx)*(gx-tgx)+(gy-tgy)*(gy-tgy);
+        if(dd<bestD){ bestD=dd; best=idx; }
+      }
+    if(best<0) return null;
+    tgy=(best/FOG_COLS)|0; tgx=best-tgy*FOG_COLS;
+  }
+  const startI=sgy*FOG_COLS+sgx, goalI=tgy*FOG_COLS+tgx;
+  if(startI===goalI) return null;
+  const N=FOG_COLS*FOG_ROWS;
+  const gScore=new Float32Array(N).fill(Infinity);
+  const came=new Int32Array(N).fill(-1);
+  const closed=new Uint8Array(N);
+  gScore[startI]=0;
+  const heap=[{i:startI, f:octileH(sgx,sgy,tgx,tgy)}];
+  let iter=0;
+  while(heap.length && iter++<6000){
+    const cur=heapPop(heap);
+    if(closed[cur.i]) continue;
+    if(cur.i===goalI) break;
+    closed[cur.i]=1;
+    const cx=cur.i%FOG_COLS, cy=(cur.i/FOG_COLS)|0;
+    for(const [dx,dy,cost] of PATH_DIRS){
+      const nx=cx+dx, ny=cy+dy;
+      if(nx<0||ny<0||nx>=FOG_COLS||ny>=FOG_ROWS) continue;
+      const ni=ny*FOG_COLS+nx;
+      if(grid[ni] || closed[ni]) continue;
+      if(dx!==0 && dy!==0 && (grid[cy*FOG_COLS+nx] || grid[ny*FOG_COLS+cx])) continue;   // no cortar esquinas
+      const ng=gScore[cur.i]+cost;
+      if(ng<gScore[ni]){ gScore[ni]=ng; came[ni]=cur.i; heapPush(heap,{i:ni, f:ng+octileH(nx,ny,tgx,tgy)}); }
+    }
+  }
+  if(gScore[goalI]===Infinity) return null;   // sin camino: se hará fallback al movimiento directo
+  const cellsRev=[]; let ci=goalI;
+  while(ci>=0){ cellsRev.push(ci); if(ci===startI) break; ci=came[ci]; }
+  cellsRev.reverse();
+  return cellsRev.map(i=>{ const gx=i%FOG_COLS, gy=(i/FOG_COLS)|0;
+    return { x:gx*FOG_CELL+FOG_CELL/2, y:gy*FOG_CELL+FOG_CELL/2 }; });
+}
+// Suavizado por línea de visión: sustituye el primer/último waypoint por las
+// coordenadas REALES de inicio/destino (no el centro de su celda) y salta
+// todos los waypoints intermedios que ya sean visibles en línea recta.
+function smoothPath(ownerSide, sx, sy, waypoints, tx, ty){
+  if(!waypoints || !waypoints.length) return null;
+  const pts = waypoints.slice();
+  pts[0] = {x:sx,y:sy}; pts[pts.length-1] = {x:tx,y:ty};
+  const out=[pts[0]];
+  let i=0;
+  while(i<pts.length-1){
+    let j=pts.length-1;
+    while(j>i+1 && !losClear(ownerSide, out[out.length-1].x, out[out.length-1].y, pts[j].x, pts[j].y)) j--;
+    out.push(pts[j]); i=j;
+  }
+  out.shift();   // la unidad ya está en el punto de inicio; solo interesan los waypoints por delante
+  return out.length ? out : null;
+}
+// Calcula (si hace falta) UN camino compartido para un grupo de unidades, desde
+// su centroide hasta (x,y). Si ya hay línea de visión directa, no hace falta
+// A* (caso común en terreno abierto): devuelve `null` y las unidades irán en
+// línea recta, como siempre.
+function computeGroupPath(units, ownerSide, x, y){
+  const n=units.length; if(!n) return null;
+  let cx=0, cy=0; for(const u of units){ cx+=u.x; cy+=u.y; } cx/=n; cy/=n;
+  if(losClear(ownerSide, cx, cy, x, y)) return null;
+  const raw = astarPath(ownerSide, cx, cy, x, y);
+  return raw ? smoothPath(ownerSide, cx, cy, raw, x, y) : null;
+}
+
+// Formaciones: reparte destinos en una rejilla compacta (filas de FORM_COLS,
+// separación FORM_SP) alrededor del punto de destino, asignando a cada unidad
+// el slot más cercano (greedy). Las filas más próximas al destino (r=0) se
+// reservan para cuerpo a cuerpo/aldeanos; las filas de atrás para arqueros.
+const FORM_COLS = 6, FORM_SP = 26;
+function formationSlots(units, tx, ty){
+  const n = units.length;
+  let cx=0, cy=0; for(const u of units){ cx+=u.x; cy+=u.y; } cx/=n; cy/=n;
+  let dx=tx-cx, dy=ty-cy; const dd=Math.hypot(dx,dy);
+  if(dd<1){ dx=0; dy=1; } else { dx/=dd; dy/=dd; }
+  const px=-dy, py=dx;   // eje perpendicular (lateral) a la dirección de avance
+  const rows = Math.ceil(n/FORM_COLS);
+  const slots=[];
+  for(let r=0;r<rows;r++){
+    const rowCount=Math.min(FORM_COLS, n-r*FORM_COLS);
+    const rowOffset=-(rowCount-1)/2;
+    for(let c=0;c<rowCount;c++){
+      const along=-r*FORM_SP, lateral=(rowOffset+c)*FORM_SP;
+      slots.push({ x:tx+dx*along+px*lateral, y:ty+dy*along+py*lateral, row:r });
+    }
+  }
+  const sorted = slots.slice().sort((a,b)=>a.row-b.row);   // r=0 (frente) primero
+  const melee = units.filter(u=>UNIT[u.type].cat!=='archer');
+  const archer = units.filter(u=>UNIT[u.type].cat==='archer');
+  const meleePool = sorted.slice(0, melee.length);         // filas delanteras reservadas
+  const archerPool = sorted.slice(melee.length);           // filas traseras reservadas
+  function greedyAssign(list, pool){
+    const free = pool.slice(); const map = new Map();
+    for(const u of list){
+      let bi=-1, bd=Infinity;
+      for(let i=0;i<free.length;i++){ const s=free[i]; if(!s) continue;
+        const dd2=(u.x-s.x)*(u.x-s.x)+(u.y-s.y)*(u.y-s.y);
+        if(dd2<bd){ bd=dd2; bi=i; } }
+      if(bi>=0){ map.set(u, free[bi]); free[bi]=null; }
+    }
+    return map;
+  }
+  const meleeMap=greedyAssign(melee, meleePool), archerMap=greedyAssign(archer, archerPool);
+  return units.map(u=> meleeMap.get(u) || archerMap.get(u) || {x:tx,y:ty});
+}
+
+// Punto de entrada común para las órdenes de movimiento en grupo ('move' y
+// 'amove'): calcula el camino compartido UNA vez y reparte destinos en
+// formación; cada unidad guarda el MISMO array de waypoints (referencia
+// compartida, barato en memoria) pero su propio `pathIdx` y su propio slot
+// final. Se usa desde `handleTap` (jugador local), `hostHandleCmd` (comandos
+// del cliente MP) y `amoveOrder`.
+function applyGroupMove(units, ownerSide, x, y, state){
+  if(!units.length) return;
+  const path = computeGroupPath(units, ownerSide, x, y);
+  const slots = units.length>1 ? formationSlots(units, x, y) : null;
+  for(let i=0;i<units.length;i++){
+    const u=units[i], slot = slots ? slots[i] : {x,y};
+    u.state=state; u.move={x:slot.x,y:slot.y}; u.target=null; u.gather=null; u.build=null;
+    u.resumeGather=null; if(state==='amove') u.resumeAmove=null;
+    u.halt=false; u.path=path; u.pathIdx=0; u.stuckT=0;
+  }
 }
 
 function spawnTrained(b, type){
@@ -1818,6 +2088,8 @@ function removeEntity(ent){
   if(i>=0) entities.splice(i,1);
   _byId.delete(ent.id);
   unitFace.delete(ent.id);   // limpia el seguimiento de animación (evita fugas de memoria)
+  // Muralla/puerta destruida: el grid de obstáculos del A* queda obsoleto.
+  if(ent.kind==='building' && BLD[ent.btype] && BLD[ent.btype].wall) invalidatePathGrid();
   // limpiar referencias
   selection = selection.filter(id=>id!==ent.id);
   // limpiar grupos de control (los muertos no se quedan "fantasma" en un grupo)
@@ -2171,7 +2443,7 @@ function drawBuilding(e){
   const s=worldToScreen(e.x,e.y); const d=BLD[e.btype];
   const sz=d.size*cam.zoom;
   const sel = e.owner==='player' && selection.includes(e.id);
-  const img = spr('bld_'+e.btype);
+  const img = spr(d.gate ? 'obj_gate' : ('bld_'+e.btype));
   const scale = d.wall ? 1.45 : 1.7;
   const spriteH = d.size*scale*cam.zoom;
   ctx.globalAlpha = e.built?1:0.55;
@@ -2180,11 +2452,13 @@ function drawBuilding(e){
       const wn = e.dir==='v' ? 'bld_wall_v' : 'bld_wall_h';
       if(!drawSprite(wn, s.x, s.y, d.size*1.2*cam.zoom, false))
         drawSprite('bld_wall', s.x, s.y, d.size*1.05*cam.zoom, false);   // respaldo
+    } else if(d.gate){
+      drawSprite('obj_gate', s.x, s.y, d.size*1.3*cam.zoom, false);
     } else {
       drawSprite('bld_'+e.btype, s.x, s.y + sz*0.12, spriteH, true);
     }
   } else {
-    // respaldo: rect + emoji
+    // respaldo: rect + emoji (la Puerta usa 🚪 si falta `obj_gate.png`)
     ctx.fillStyle = e.owner==='player' ? '#26384f' : '#4a2630';
     ctx.strokeStyle = e.owner==='player' ? '#5b86c4' : '#c46a6a';
     ctx.lineWidth = sel?3:1.5;
@@ -2194,6 +2468,12 @@ function drawBuilding(e){
     ctx.fillText(d.emoji, s.x, s.y);
   }
   ctx.globalAlpha=1;
+  // Puerta: candado abierto/cerrado siempre visible (no solo al seleccionar),
+  // para saber su estado de un vistazo antes de mandar unidades a cruzar.
+  if(d.gate && e.built){
+    ctx.font=`${13*cam.zoom}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(e.closed?'🔒':'🔓', s.x, s.y - d.size*0.8*cam.zoom);
+  }
   // flash blanco al recibir daño
   if(e.hurtT){
     const age = performance.now()-e.hurtT;
@@ -2655,7 +2935,7 @@ function handleTap(p){
     if(!(ent && ent.owner==='player')){
       addPing(world.x, world.y, true, '#7ddd7d');   // micro-feedback verde en el destino
       if(isCli){ netSend({t:'cmd', c:'move', ids:ids(selUnits), x:world.x, y:world.y}); return; }
-      for(const u of selUnits){ u.state='move'; u.move={x:world.x,y:world.y}; u.target=null; u.gather=null; u.build=null; u.halt=false; }
+      applyGroupMove(selUnits, 'player', world.x, world.y, 'move');   // A* + formación (Fase 4)
       return;
     }
   }
@@ -2721,10 +3001,7 @@ function amoveOrder(units, x, y){
   if(!units.length) return;
   addPing(x, y, true, '#ff9d5c');   // ping naranja: distinto del mover normal (verde)
   if(net.mode==='client'){ netSend({t:'cmd', c:'amove', ids:units.map(u=>u.id), x, y}); return; }
-  for(const u of units){
-    u.state='amove'; u.move={x,y}; u.target=null; u.gather=null; u.build=null;
-    u.resumeGather=null; u.resumeAmove=null; u.halt=false;
-  }
+  applyGroupMove(units, 'player', x, y, 'amove');   // A* + formación (Fase 4)
 }
 
 // ---------- Colocación de edificios ----------
@@ -2762,6 +3039,13 @@ function tryPlaceBuilding(p){
 // --- Murallas: primer toque = inicio, segundo toque = fin de la línea ---
 const WALL_SP = 28;          // separación entre segmentos
 const WALL_TOWER_EVERY = 6;  // un segmento de cada N es Torre de Muralla
+// Tipo de construcción para el tramo `i` de una muralla de `pts.length` puntos:
+// el tramo CENTRAL es una Puerta 🚪 (si hay al menos 3 tramos, para que tenga
+// sentido); si no, Torre de Muralla cada N tramos; si no, muralla normal.
+function wallSegmentType(pts, i){
+  if(pts.length>=3 && i===Math.floor(pts.length/2)) return 'gate';
+  return (i%WALL_TOWER_EVERY===0) ? 'wall_tower' : 'wall';
+}
 function wallTap(p){
   const w=screenToWorld(p.x,p.y);
   if(!placement.start){
@@ -2775,22 +3059,22 @@ function wallTap(p){
     showHint('Muralla enviada al anfitrión.'); return;
   }
   const pts = wallPoints(placement.start, {x:w.x,y:w.y});
-  // coste total
+  // coste total (el tramo central es una Puerta si hay sitio para distinguirla)
   const cost = {stone:0};
-  pts.forEach((pt,i)=>{ cost.stone += (i%WALL_TOWER_EVERY===0?BLD.wall_tower.cost.stone:BLD.wall.cost.stone); });
+  pts.forEach((pt,i)=>{ cost.stone += BLD[wallSegmentType(pts,i)].cost.stone; });
   if(!canAfford(player, cost)){ showHint('Necesitas 🪨'+Math.ceil(cost.stone)+' para '+pts.length+' tramos.'); placement=null; updateActionPanel(); return; }
   pay(player, cost);
   const dir = Math.abs(placement.start.x - w.x) >= Math.abs(placement.start.y - w.y) ? 'h' : 'v';
   let placed=0;
   pts.forEach((pt,i)=>{
     if(onObstacle(pt.x,pt.y)) return;
-    const bt = (i%WALL_TOWER_EVERY===0)?'wall_tower':'wall';
+    const bt = wallSegmentType(pts,i);
     const b=makeBuilding('player', bt, pt.x, pt.y, false);
-    b.dir = dir;
+    b.dir = dir; if(bt==='gate') b.closed=false;
     entities.push(b); placed++;
   });
   placement=null; updateActionPanel();
-  showHint('Muralla: '+placed+' tramos. Tus aldeanos la construirán.');
+  showHint('Muralla: '+placed+' tramos'+(pts.length>=3?' (con puerta 🚪 central)':'')+'. Tus aldeanos la construirán.');
 }
 // Puntos equiespaciados de una línea (inclusive en los extremos).
 function wallPoints(a, b){
@@ -2854,6 +3138,11 @@ function updateActionPanel(){
       info += b.reserve<=0
         ? ` · <b style="color:#d05a5a">agotada</b> (repara para recargar 500)`
         : ` · ${ico} reserva ${Math.ceil(b.reserve)}/${b.maxReserve}`;
+    }
+    if(b.built && b.btype==='gate'){
+      info += b.closed
+        ? ` · <b style="color:#d05a5a">🔒 cerrada</b> (bloquea a todos)`
+        : ` · <b style="color:#5fb15f">🔓 abierta</b> (pasas tú, no el rival)`;
     }
     selinfoEl.innerHTML=info;
     if(b.built){
@@ -2923,7 +3212,7 @@ function updateActionPanel(){
   }
   actionsEl.appendChild(btnEl('✋ Detener','','danger',true, ()=>{
     if(net.mode==='client'){ netSend({t:'cmd', c:'stop', ids:units.map(u=>u.id)}); return; }
-    for(const u of units){ u.state='idle'; u.target=null; u.move=null; u.gather=null; u.build=null; u.resumeGather=null; u.halt=true; }
+    for(const u of units){ u.state='idle'; u.target=null; u.move=null; u.gather=null; u.build=null; u.resumeGather=null; u.halt=true; u.path=null; u.pathIdx=0; }
   }));
   actionsEl.appendChild(btnEl('✕ Deseleccionar','','',true, deselectAll));
 }
@@ -2974,6 +3263,15 @@ function buildingButtons(b){
   else if(BLD[b.btype].produces){
     const ico={food:'🍖',wood:'🪵',gold:'🪙',stone:'🪨'}[BLD[b.btype].produces];
     actionsEl.appendChild(btnEl('ℹ️ Producción', ico+' renovable', '', false, ()=>{}));
+  }
+  else if(b.btype==='gate'){
+    // Puerta: abierta (por defecto) deja pasar al dueño y bloquea al rival, como
+    // una muralla normal; cerrada manualmente bloquea a TODOS, incluido el dueño.
+    actionsEl.appendChild(btnEl(b.closed?'🔓 Abrir puerta':'🔒 Cerrar puerta', b.closed?'':'', b.closed?'':'danger', true, ()=>{
+      if(net.mode==='client'){ netSend({t:'cmd', c:'gate', b:b.id, closed:!b.closed}); return; }
+      b.closed = !b.closed; invalidatePathGrid();
+      if(b.owner==='player') updateActionPanel();
+    }));
   }
 }
 
