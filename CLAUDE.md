@@ -485,3 +485,53 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     simula); se dibuja en `renderSummary` sobre un `<canvas id="tlChart">`
     del resumen final: 2 líneas sólidas (recursos tú/rival) y 2 discontinuas
     (valor militar tú/rival), o un aviso si la partida fue muy corta.
+- **FASE 7 — Multijugador en la web (WebRTC)** (PR #16): ver `PLAN.md` §4 F7.
+  El protocolo host-autoritativo (snapshots con flip de bandos, comandos del
+  cliente) NO cambió; solo se añadió una capa de transporte y robustez.
+  - **Transporte abstraído**: interfaz única `net.sendRaw(str)` (según el
+    transporte activo)/`net.onRaw(str)` (común a ambos). Transporte A = el
+    WebSocket LAN de siempre (`server.js`/`RelayServer.swift`, puerto 8765),
+    sin cambios de comportamiento. Transporte B = **WebRTC DataChannel**
+    señalizado con **PeerJS**, cargado bajo demanda desde
+    `https://unpkg.com/peerjs@1/dist/peerjs.min.js` (`loadPeerJs()`) solo al
+    pulsar un botón "Online" — en frío el juego sigue sin dependencias
+    (verificado: 0 peticiones de red no-`file://` al cargar en SP).
+  - **Multijugador Online con código de sala**: el anfitrión pulsa "Crear
+    sala" (`netOnlineHostStart`) y PeerJS le asigna un id (`miniaoe7-XXXXXX`);
+    se muestra un código de 6 caracteres grande + botón "📋 Copiar código". El
+    invitado escribe el código (`netOnlineJoinStart`) y `peer.connect(...)`
+    abre un DataChannel fiable/ordenado. Funciona desde `https:` (a diferencia
+    del WebSocket LAN, bloqueado como contenido mixto), así que es la vía para
+    jugar online desde el despliegue de Vercel sin estar en la misma red.
+  - **UI de menú con dos pestañas** («🌐 Online (código)» / «📶 Red local
+    (IP)», clase propia `.mp-tab`/`.mp-tab.active` para no depender del
+    resaltado genérico `.opt-b.sel` del menú, que marcaría ambas pestañas a
+    la vez al no tener `data-val`); la pestaña Red local mantiene tal cual el
+    flujo de IP existente.
+  - **Interpolación de posiciones en el cliente**: cada instantánea guarda la
+    posición previa y la nueva de cada unidad (`net.ipPrev`/`net.ipCur` +
+    marcas de tiempo); `interpClientPositions()` (llamada cada fotograma desde
+    `loop`) hace un lerp entre ambas según el tiempo transcurrido, quitando
+    los "saltitos" a ~7Hz. Puramente de render: no toca la simulación (el
+    cliente no simula) ni el guardado.
+  - **Deltas de snapshot**: el anfitrión alterna un snapshot **completo** cada
+    ~1s (`net.fullT`) con **deltas** el resto del tiempo (solo entidades cuya
+    forma serializada cambió desde el último mensaje, más los ids eliminados,
+    `makeSnapDelta`); reduce bytes/s sin cambiar qué información viaja.
+    Medido en una partida real de 2 jugadores: **~79% menos bytes/s** con
+    deltas que forzando siempre completo (`net.deltaEnabled=false`).
+  - **Reconexión con el mismo código** (~60s): si el DataChannel online se
+    cae en plena partida, el anfitrión mantiene su `Peer` abierto y, al
+    recibir una nueva conexión con el mismo código mientras la partida sigue
+    en curso, reenvía el estado completo (`netSendInit`, que reinicia también
+    la base de deltas) en vez de reiniciar la partida; el cliente reintenta
+    conectar solo hasta agotar la ventana de 60s. Aplica también, de forma
+    más simple, al `hello` de LAN (si ya hay partida en curso no se reinicia).
+  - **Límite conocido y verificado con honestidad**: en el entorno headless de
+    desarrollo (sandbox sin egreso de red real para el proceso del
+    navegador), PeerJS no logra completar la señalización real (el script
+    se inyecta pero no llega a cargar / el broker no responde); el fallo se
+    maneja con un mensaje honesto y sin errores de consola. Pendiente de
+    verificar con una conexión a internet real (o en el iPad). Ver
+    `progress.md` (entrada 2026-07-15/16) para el detalle completo de qué se
+    pudo y qué no se pudo probar.

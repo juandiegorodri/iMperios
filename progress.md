@@ -826,3 +826,151 @@ estructura de código en `filemap.md`, secciones 15-18):
 - Verificado headless con relé real (`server.js` + host + cliente `127.0.0.1`):
   el cliente ahora ve exactamente 1 Centro Urbano propio y 1 rival (bandos 4/4),
   cero errores de consola; regresión de un jugador (combate) OK.
+
+## 2026-07-15/16 — FASE 7: Multijugador en la web (WebRTC), PR #16
+
+Alcance ejecutado siguiendo `PLAN.md` §4 F7. El protocolo host-autoritativo
+(snapshots con flip de bandos, comandos del cliente, `hostHandleCmd`) **no
+cambió en absoluto** — todo lo nuevo vive en una capa de transporte y en
+mejoras de robustez que se apoyan en él.
+
+### 1. Transporte abstraído
+- Interfaz única: `net.sendRaw(str)` (envía; su implementación cambia según
+  el transporte activo) y `net.onRaw(str)` (recibe; una sola función, común a
+  los dos transportes, que además cuenta bytes para medir deltas). `netSend`
+  y `netOnMessage` pasan a apoyarse en esta interfaz en vez de tocar el
+  `WebSocket` directamente.
+- **Transporte A (LAN)**: `netConnect`/`netHostStart`/`netJoinStart` cablean
+  el mismo `WebSocket ws://` de siempre a `net.sendRaw`/`net.onRaw`. Cero
+  cambios de comportamiento para el usuario.
+- **Transporte B (Online/WebRTC)**: `loadPeerJs()` inyecta
+  `<script src="https://unpkg.com/peerjs@1/dist/peerjs.min.js">`
+  dinámicamente SOLO al pulsar un botón "Online" (con timeout de 12s y
+  mensaje honesto si falla). `netOnlineHostStart`/`netOnlineJoinStart` crean
+  un `Peer` con id `miniaoe7-<código>` (código de 6 caracteres sin
+  ambigüedades, `genRoomCode`); `wireOnlineConn` cablea el `DataChannel`
+  (`reliable:true`) a la misma interfaz `sendRaw`/`onRaw`.
+
+### 2. UI: pestañas Online / Red local
+- Sección "🎮 Multijugador en tiempo real" con pestañas «🌐 Online (código)»
+  y «📶 Red local (IP)» (la de siempre, intacta). Código grande +
+  "📋 Copiar código" (`navigator.clipboard`, con fallback a mostrarlo en el
+  estado si no hay permiso).
+- Las pestañas usan una clase propia `.mp-tab`/`.mp-tab.active` (NO
+  `.opt-b`): se detectó en pruebas que, si fueran `.opt-b` normales, el
+  refresco genérico del menú (`refreshMenu`, pensado para grupos con
+  `data-val` como mapa/velocidad) las marcaría a las DOS como "seleccionadas"
+  a la vez tras el primer toque en la sección (ninguna de las dos tiene
+  `data-val`, así que `data-val===gameConfig[...]` da `null===null`). Se
+  reprodujo el problema en capturas de pantalla y se corrigió sacando los
+  botones de pestaña del mecanismo `.opt-b` por completo.
+
+### 3. Robustez
+- **Interpolación de posiciones (cliente)**: `applySnap` guarda, además de
+  aplicar el snapshot, la posición previa y la nueva de cada unidad
+  (`net.ipPrev`/`net.ipCur`, con marcas de tiempo `net.ipT0`/`net.ipT1`).
+  `interpClientPositions()`, llamada cada fotograma desde `loop` (solo
+  `net.mode==='client'`), hace un lerp entre ambas según el tiempo
+  transcurrido. Puramente de render: no toca `entities` de forma persistente
+  más allá de la posición mostrada, no afecta al host ni al guardado.
+- **Deltas de snapshot**: el anfitrión alterna snapshot **completo**
+  (`makeSnap`) cada ~1s (`net.fullT`) con **delta** el resto del tiempo
+  (`makeSnapDelta`: solo entidades cuya forma serializada cambió desde el
+  último mensaje + ids eliminados, comparando contra `net.lastSentEnts`).
+  `applySnap` fusiona ambos tipos de mensaje (`snap`/`snapd`) sobre el mismo
+  array `entities`, así que el resto de la lógica (flash de daño, cadáveres,
+  SFX, alertas) no necesita saber cuál llegó. `net.deltaEnabled=false` fuerza
+  siempre completo (usado solo para medir el ahorro, ver pruebas abajo).
+- **Reconexión con el mismo código (~60s)**: si el DataChannel online se cae
+  en plena partida (`netOnlineConnLost`), el anfitrión mantiene su `Peer`
+  abierto (no lo destruye) y, si llega una nueva conexión con el mismo id
+  mientras la partida sigue (`running===true`), reenvía el estado completo
+  vía `netSendInit()` (que también reinicia la base de deltas) en vez de
+  reiniciar la partida; el cliente (`clientTryReconnect`) reintenta conectar
+  contra el mismo `Peer` hasta agotar la ventana de 60s. De paso, se aplicó el
+  mismo principio al `hello` de LAN: si el anfitrión ya tiene la partida en
+  curso al recibir un `hello`, reenvía `init` en vez de reiniciar (antes
+  siempre llamaba a `startGame`, lo que habría borrado la partida ante
+  cualquier reconexión).
+
+### Verificación headless (Playwright) — honestidad sobre los límites
+
+Scripts en el scratchpad de la sesión (`test_a_lan.cjs` … `test_f_ui_misc.cjs`,
+`screenshot_mp_ui.cjs`), `chromium.launch({executablePath:'/opt/pw-browsers/chromium'})`.
+
+- **(a) Regresión LAN — CRÍTICA (PASS)**: `node server.js` + 2 páginas reales
+  (host "Red local" → Crear partida; cliente → IP `127.0.0.1` → Conectar).
+  Ambos `running===true`, `net.kind==='lan'`, host `net.mode==='host'` y
+  cliente `net.mode==='client'`; ambos ven 1 base propia + 1 rival
+  (`myTown`/`rivalTown` true en los dos, 74 entidades en ambos). Se probó
+  además un comando real del cliente (`move` de un aldeano) reflejado en el
+  host. **0 `pageerror`/`console.error`.**
+- **(b) Interpolación (PASS)**: con una unidad del host avanzando a ritmo
+  constante (desacoplado de la simulación real, para tener una señal
+  perfectamente predecible), se muestreó la posición renderizada del cliente
+  a ritmo de fotograma durante 1.2s: **73 muestras, 73 valores distintos**,
+  estrictamente no decrecientes — frente a los ~8 valores "a saltos" que
+  habría sin interpolación (una instantánea cada ~150ms). 0 errores.
+- **(c) Deltas — cifras reales (PASS)**: en la MISMA partida en curso, 6s con
+  `net.deltaEnabled=true` → **53 431 bytes** (≈8905 B/s); 6s con
+  `net.deltaEnabled=false` (siempre completo) → **250 269 bytes**
+  (≈41 712 B/s). **Reducción del 78.7%** (repetido en una segunda corrida:
+  79.3%), por encima del 60% pedido por el criterio de la fase.
+- **(d) WebRTC/PeerJS — NO se pudo cerrar el círculo en headless (documentado
+  con honestidad)**: se intentó con el proxy de agente de este entorno
+  configurado explícitamente en el `launch` de Playwright
+  (`proxy:{server:'http://127.0.0.1:44475'}`, el mismo que usan `curl`/Node
+  `fetch` y que SÍ llega a `unpkg.com` y a `0.peerjs.com` desde el shell:
+  `curl` devuelve 200/302 a ambos). Sin embargo, **ninguna petición HTTPS del
+  proceso del navegador headless llega a destino** en este sandbox: probado
+  con y sin la opción `proxy` de Playwright, con `--proxy-server` explícito,
+  y contra varios hosts (`unpkg.com`, `0.peerjs.com`, `registry.npmjs.org`,
+  `anthropic.com`) — todas las peticiones HTTPS quedan en timeout; una
+  petición HTTP simple SÍ llega al proxy pero éste la rechaza con 405 (solo
+  acepta túneles CONNECT, no proxy HTTP plano), y una petición al propio
+  proxy en `127.0.0.1` (sin salir del host) sí funciona. Conclusión: el
+  proceso del navegador headless en este entorno no tiene salida de red real
+  hacia internet (a diferencia de las herramientas de shell), así que la
+  señalización de PeerJS no es verificable aquí de punta a punta.
+  **Hasta dónde llegó exactamente** (`test_d_webrtc.cjs`, con el juego real):
+  al pulsar "Crear sala" SÍ se inyecta el `<script>` de PeerJS en el DOM,
+  pero `window.Peer` **nunca llega a definirse** (el script no termina de
+  cargar); a los 12s el timeout de `loadPeerJs()` salta, se muestra un
+  mensaje honesto en `#mpStatus` ("No se pudo cargar el módulo online...") y
+  `net.mode` vuelve a `null` (permite reintentar o cambiar a Red local) — **0
+  errores de página/consola**, es decir, el camino de fallo (punto 5 del
+  alcance, "failovers claros") funciona correctamente. **Queda pendiente de
+  verificar con una conexión a internet real (portátil/iPad fuera de este
+  sandbox) que la señalización PeerJS y el DataChannel completen la conexión
+  de extremo a extremo.**
+- **(e) Regresión de un jugador (PASS)**: partida normal (sin MP) — 0
+  peticiones de red no-`file://` al cargar (confirma "sin dependencias en
+  frío"), `btnStart` arranca la partida, corre 2s con IA activa,
+  `net.mode===null` todo el tiempo, 0 errores.
+- **(f) UI online — casos borde (PASS)**: alternar "Unirse con código" muestra
+  el campo; intentar conectar sin escribir código muestra aviso y no cambia
+  `net.mode`; "Copiar código" con la sala ya mostrada actualiza el estado con
+  el texto copiado. 0 errores.
+- Captura de pantalla 1024×768 de ambas pestañas del menú (`mp_online_tab.png`
+  con un código de sala de muestra generado con las funciones reales del
+  juego — no una sesión conectada de verdad, ver caveat abajo —, y
+  `mp_lan_tab.png`) guardada en el scratchpad de la sesión.
+
+### Caveats honestos
+- La conexión WebRTC/PeerJS real (broker + ICE + DataChannel de extremo a
+  extremo) **no se pudo verificar en este entorno** por la razón de red
+  explicada en (d); todo lo demás del código (transporte abstraído, deltas,
+  interpolación, reconexión, UI, regresión LAN) sí quedó verificado con
+  pruebas reales de dos páginas.
+- El código de sala mostrado en la captura de pantalla de la pestaña Online
+  se generó llamando directamente a `genRoomCode()`/`showOnlineCode()` (las
+  mismas funciones del juego) para ilustrar la UI ya con datos, no proviene
+  de una sala real creada contra el broker de PeerJS.
+- La reconexión de LAN sigue limitada por `server.js` (acepta solo 2
+  conexiones y cierra ambas ante cualquier desconexión, sin cambios en esta
+  fase): la mejora de "no reiniciar la partida ante un `hello` con la partida
+  en curso" ya aplica también ahí, pero un reintento real de reconexión por
+  LAN necesitaría además tocar `server.js` para aceptar una tercera conexión
+  de reemplazo — fuera de alcance de esta fase (el foco de "mismo código" es
+  el transporte Online, que sí lo soporta de punta a punta salvo por el punto
+  de red no verificable en (d)).

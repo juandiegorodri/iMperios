@@ -86,6 +86,15 @@
   .opt-b{ flex:1 1 auto; min-width:64px; min-height:44px; padding:8px 10px; border-radius:10px;
     border:1px solid var(--line); background:var(--panel2); color:var(--txt); font-size:14px; font-weight:600; }
   .opt-b.sel{ border-color:var(--accent); background:#33302410; box-shadow:0 0 0 2px #caa46a66; color:#fff; }
+  /* Pestañas Online/Red local (Fase 7): clase PROPIA (no `.opt-b`) a propósito
+     — `.opt-b` dentro de `#startScreen .opt` recibe un listener genérico que
+     recalcula `.sel` según `data-val` en CUALQUIER clic del menú; como estos
+     botones no tienen `data-val`, ese mecanismo los marcaría a los DOS como
+     "seleccionados" a la vez tras el primer toque (visto y corregido en
+     pruebas). Mismo tamaño táctil que `.opt-b`, resaltado propio con `.active`. */
+  .mp-tab{ flex:1 1 auto; min-width:64px; min-height:44px; padding:8px 10px; border-radius:10px;
+    border:1px solid var(--line); background:var(--panel2); color:var(--txt); font-size:14px; font-weight:600; }
+  .mp-tab.active{ border-color:var(--accent); background:#33302410; box-shadow:0 0 0 2px #caa46a66; color:#fff; }
   .opt-desc{ font-size:12px; color:var(--muted); margin-top:5px; min-height:16px; }
   #joinIp{ flex:2 1 auto; min-width:180px; min-height:44px; border-radius:10px; border:1px solid var(--line);
     background:#0c0d10; color:var(--txt); padding:0 10px; font-size:16px; }
@@ -239,15 +248,39 @@
     </div>
 
     <div class="opt">
-      <div class="opt-title">📶 Multijugador en tiempo real (misma red)</div>
+      <div class="opt-title">🎮 Multijugador en tiempo real</div>
       <div class="opt-row">
-        <button class="opt-b" id="btnHost">Crear partida (anfitrión)</button>
-        <button class="opt-b" id="btnJoin">Unirse a una partida</button>
+        <button class="mp-tab active" id="mpTabOnline" data-tab="online">🌐 Online (código)</button>
+        <button class="mp-tab" id="mpTabLan" data-tab="lan">📶 Red local (IP)</button>
       </div>
-      <div class="opt-row hidden" id="joinRow" style="margin-top:6px">
-        <input id="joinIp" inputmode="decimal" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="IP del anfitrión (ej. 192.168.1.50)">
-        <button class="opt-b" id="btnJoinGo">Conectar</button>
+
+      <div id="mpOnlineTab" class="mp-pane" style="margin:8px 0 0">
+        <div class="opt-row">
+          <button class="opt-b" id="btnOnlineHost">Crear sala</button>
+          <button class="opt-b" id="btnOnlineJoin">Unirse con código</button>
+        </div>
+        <div class="hidden" id="onlineCodeBox" style="margin-top:8px; text-align:center;">
+          <div style="font-size:11px;opacity:.75">Código de sala — compártelo con el otro jugador:</div>
+          <div id="onlineCodeText" style="font-size:32px;font-weight:800;letter-spacing:5px;margin:4px 0;">------</div>
+          <button class="opt-b" id="btnCopyCode" style="min-width:160px">📋 Copiar código</button>
+        </div>
+        <div class="opt-row hidden" id="onlineJoinRow" style="margin-top:6px">
+          <input id="onlineCodeInput" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" maxlength="6" style="text-transform:uppercase" placeholder="Código (ej. AB12CD)">
+          <button class="opt-b" id="btnOnlineJoinGo">Conectar</button>
+        </div>
       </div>
+
+      <div id="mpLanTab" class="mp-pane hidden" style="margin:8px 0 0">
+        <div class="opt-row">
+          <button class="opt-b" id="btnHost">Crear partida (anfitrión)</button>
+          <button class="opt-b" id="btnJoin">Unirse a una partida</button>
+        </div>
+        <div class="opt-row hidden" id="joinRow" style="margin-top:6px">
+          <input id="joinIp" inputmode="decimal" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="IP del anfitrión (ej. 192.168.1.50)">
+          <button class="opt-b" id="btnJoinGo">Conectar</button>
+        </div>
+      </div>
+
       <div class="opt-desc" id="mpStatus"></div>
     </div>
 
@@ -754,43 +787,75 @@ function playSfx(name){
 /* ==================== MULTIJUGADOR P2P (host autoritativo) ====================
    Un jugador es el ANFITRIÓN (servidor): corre la simulación completa y envía
    instantáneas de estado ~7 veces/s. El otro es el CLIENTE: solo renderiza y
-   envía comandos (mover, atacar, entrenar…). Ambos se comunican por WebSocket
-   a través de un relé en el puerto 8765: en la app iOS lo levanta el propio
-   dispositivo anfitrión (RelayServer.swift); en escritorio, `node server.js`.
-   Truco de perspectiva: al cliente se le envía el estado con los bandos
-   INTERCAMBIADOS ('player'<->'enemy'), así todo el código de UI existente
-   funciona sin cambios — el cliente siempre "se ve" como 'player'.          */
+   envía comandos (mover, atacar, entrenar…).
+   FASE 7 — transporte abstraído: el protocolo (snapshots/comandos, más abajo)
+   NO sabe ni le importa cómo viajan los bytes. La única interfaz es
+   `net.sendRaw(str)` (enviar una cadena) y `net.onRaw(str)` (llega una
+   cadena) — cada transporte solo tiene que cablear sus propios eventos a
+   estas dos funciones:
+     A) LAN (igual que antes): WebSocket contra un relé tonto en el puerto
+        8765 (`server.js` en escritorio, `RelayServer.swift` en la app iOS).
+     B) Online: WebRTC DataChannel señalizado con PeerJS (broker público
+        `wss://`, cargado BAJO DEMANDA desde CDN solo al pulsar "Online" — en
+        frío el juego sigue sin dependencias). Funciona desde `https:` (a
+        diferencia de `ws://`, que los navegadores bloquean como contenido
+        mixto), así que es la vía para jugar online desde el despliegue de
+        Vercel sin estar en la misma red ni usar la app de iPad.
+   Truco de perspectiva (sin cambios): al cliente se le envía el estado con
+   los bandos INTERCAMBIADOS ('player'<->'enemy'), así todo el código de UI
+   existente funciona sin cambios — el cliente siempre "se ve" como 'player'.*/
 const NET_PORT = 8765;
-const net = { mode:null, ws:null, ready:false, snapT:0, uiT:0 };
+const PEERJS_URL = 'https://unpkg.com/peerjs@1/dist/peerjs.min.js';
+const PEERJS_PREFIX = 'miniaoe7-';   // namespace de los ids de PeerJS para no chocar con otras apps
+const net = { mode:null, kind:null, ws:null, peer:null, conn:null, ready:false, snapT:0, uiT:0,
+  sendRaw:null, bytesOut:0, bytesIn:0, deltaEnabled:true, lastSentEnts:null, fullT:0,
+  ipPrev:null, ipCur:null, ipT0:0, ipT1:0, onlineCode:null, reconnDeadline:0, reconnTimer:null };
 function inMP(){ return net.mode!==null; }
-function netSend(o){ if(net.ws && net.ws.readyState===1) net.ws.send(JSON.stringify(o)); }
+// Interfaz de transporte: netSend serializa UNA vez y cuenta bytes (para medir
+// el ahorro de los deltas, Fase 7 punto 4); net.onRaw hace lo inverso y es
+// COMÚN a los dos transportes (cada uno solo llama a `net.onRaw(str)` cuando
+// le llega un mensaje). net.sendRaw SÍ cambia según el transporte activo.
+function netSend(o){
+  if(!net.ready || !net.sendRaw) return;
+  const str = JSON.stringify(o);
+  net.bytesOut += str.length;
+  net.sendRaw(str);
+}
+net.onRaw = function(str){
+  net.bytesIn += str.length;
+  let m; try{ m = JSON.parse(str); }catch(_){ return; }
+  netOnMessage(m);
+};
 function netStatus(msg){ const el=document.getElementById('mpStatus'); if(el) el.textContent=msg; }
 
+// ---------- Transporte A: WebSocket LAN (idéntico al de antes) ----------
 function netConnect(host, onOpen){
   let ws;
   try{ ws = new WebSocket('ws://'+host+':'+NET_PORT); }
   catch(err){ netStatus('No se pudo conectar: '+err.message); net.mode=null; return; }
   net.ws = ws;
+  net.sendRaw = (str)=>{ if(net.ws && net.ws.readyState===1) net.ws.send(str); };
   ws.onopen = ()=>{ net.ready=true; onOpen(); };
-  ws.onmessage = (ev)=>{ let m; try{ m=JSON.parse(ev.data); }catch(_){ return; } netOnMessage(m); };
+  ws.onmessage = (ev)=> net.onRaw(ev.data);
   ws.onclose = ()=>{ net.ready=false;
     if(inMP() && running && !gameOver){ paused=true; showHint('Conexión perdida con el otro jugador.'); }
     netStatus('Conexión cerrada.'); };
   ws.onerror = ()=>{ netStatus('Error de conexión. ¿Servidor listo en el puerto '+NET_PORT+'?'); };
 }
-// El multijugador usa WebSocket ws:// a la red local. Un navegador NO permite
-// ws:// desde una página https:// (contenido mixto). Por eso solo funciona en
-// la app de iPad (file://) o abriendo el juego por http/localhost.
+// El transporte LAN usa WebSocket ws:// a la red local. Un navegador NO
+// permite ws:// desde una página https:// (contenido mixto). Por eso solo
+// funciona en la app de iPad (file://) o abriendo el juego por http/localhost.
+// (El transporte Online de abajo SÍ funciona desde https, por eso existe.)
 function netBlockedByHttps(){
   if(location.protocol==='https:'){
-    netStatus('⚠️ El multijugador por red local no funciona desde https. Usa la app de iPad, o abre el juego por http/localhost.');
+    netStatus('⚠️ El multijugador por red local no funciona desde https. Usa la app de iPad, la pestaña "Online", o abre el juego por http/localhost.');
     return true;
   }
   return false;
 }
 function netHostStart(){
   if(netBlockedByHttps()) return;
-  net.mode='host';
+  net.mode='host'; net.kind='lan';
   netStatus('Conectando al servidor local…');
   netConnect('127.0.0.1', ()=>{
     netSend({t:'hello', role:'host'});
@@ -800,9 +865,116 @@ function netHostStart(){
 }
 function netJoinStart(ip){
   if(netBlockedByHttps()) return;
-  net.mode='client';
+  net.mode='client'; net.kind='lan';
   netStatus('Conectando a '+ip+'…');
   netConnect(ip, ()=>{ netSend({t:'hello', role:'client'}); netStatus('Conectado. Esperando al anfitrión…'); });
+}
+
+// ---------- Transporte B: WebRTC (PeerJS), cargado bajo demanda ----------
+// El script NO se carga hasta que el jugador pulsa un botón "Online": el
+// juego sigue funcionando sin dependencias en frío (norma del proyecto).
+let peerJsPromise = null;
+function loadPeerJs(){
+  if(typeof Peer !== 'undefined') return Promise.resolve();
+  if(peerJsPromise) return peerJsPromise;
+  peerJsPromise = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = PEERJS_URL;
+    s.onload = ()=>{ if(typeof Peer!=='undefined') resolve(); else reject(new Error('PeerJS cargó pero no expone window.Peer')); };
+    s.onerror = ()=> reject(new Error('sin red o CDN bloqueado'));
+    document.head.appendChild(s);
+    setTimeout(()=>reject(new Error('tiempo de espera agotado')), 12000);
+  }).catch(err=>{ peerJsPromise=null; throw err; });   // fallo → permite reintentar más tarde
+  return peerJsPromise;
+}
+function peerIdFor(code){ return PEERJS_PREFIX + code.trim().toUpperCase(); }
+function genRoomCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // sin 0/O/1/I para que se lea/teclee fácil
+  let s=''; for(let i=0;i<6;i++) s+=chars[Math.floor(Math.random()*chars.length)];
+  return s;
+}
+// Cablea un DataChannel de PeerJS (host o cliente, primera conexión o
+// reconexión) a la interfaz común net.sendRaw/net.onRaw.
+function wireOnlineConn(conn, onOpen){
+  net.conn = conn;
+  net.sendRaw = (str)=>{ if(net.conn && net.conn.open) net.conn.send(str); };
+  conn.on('open', ()=>{ net.ready=true; if(net.reconnTimer){ clearTimeout(net.reconnTimer); net.reconnTimer=null; }
+    net.reconnDeadline=0; if(onOpen) onOpen(); });
+  conn.on('data', data=> net.onRaw(typeof data==='string'?data:String(data)));
+  conn.on('close', ()=> netOnlineConnLost());
+  conn.on('error', ()=> netStatus('Error en el canal de datos online.'));
+}
+// Robustez (Fase 7 punto 4): si el canal se cae en plena partida, no se da
+// por perdida de inmediato — se guarda el último estado (el host ya lo tiene
+// en `entities`; no hace falta nada extra) y se intenta reconectar con el
+// MISMO código hasta 60s antes de rendirse.
+function netOnlineConnLost(){
+  net.ready=false;
+  if(!(inMP() && net.kind==='online' && running && !gameOver)){ netStatus('Conexión cerrada.'); return; }
+  paused=true; showHint('Conexión online perdida. Reintentando 60s…');
+  netStatus('Conexión perdida. Reintentando reconectar (60s)…');
+  net.reconnDeadline = Date.now()+60000;
+  if(net.mode==='host') netStatus('Conexión perdida. Esperando a que el otro jugador vuelva a unirse con el código '+(net.onlineCode||'')+' (60s)…');
+  else clientTryReconnect();
+  if(net.reconnTimer) clearTimeout(net.reconnTimer);
+  net.reconnTimer = setTimeout(()=>{
+    if(!net.ready){ netStatus('Tiempo de reconexión agotado.'); showHint('No se pudo reconectar a tiempo.'); }
+  }, 60000);
+}
+function clientTryReconnect(){
+  if(net.ready || Date.now()>net.reconnDeadline || !net.peer || net.peer.destroyed) return;
+  try{
+    const conn = net.peer.connect(peerIdFor(net.onlineCode), { reliable:true });
+    wireOnlineConn(conn, ()=>{ netSend({t:'hello', role:'client'}); paused=false; showHint('¡Reconectado!'); netStatus('Reconectado.'); });
+    conn.on('error', ()=> setTimeout(clientTryReconnect, 3000));
+  }catch(_){ setTimeout(clientTryReconnect, 3000); }
+  setTimeout(()=>{ if(!net.ready) clientTryReconnect(); }, 4000);
+}
+function netOnlineHostStart(){
+  net.mode='host'; net.kind='online';
+  netStatus('Cargando el módulo online…');
+  loadPeerJs().then(()=>{
+    const code = genRoomCode();
+    net.onlineCode = code;
+    const peer = new Peer(peerIdFor(code));
+    net.peer = peer;
+    netStatus('Conectando con el servicio de señalización…');
+    peer.on('open', ()=>{ showOnlineCode(code); netStatus('Código de sala: '+code+'. Compártelo. Esperando al otro jugador…'); });
+    peer.on('connection', conn=>{
+      wireOnlineConn(conn, ()=>{
+        if(!running){ netStatus('¡Jugador conectado! Empezando partida…'); startGame(gameConfig); }
+        else { netSendInit(); showHint('El otro jugador se reconectó.'); netStatus('Reconectado. Partida en curso.'); }
+      });
+    });
+    peer.on('error', err=>{ netStatus('Error de señalización online ('+err.type+'). Prueba "Red local" si estáis en la misma WiFi.'); });
+    peer.on('disconnected', ()=>{ if(inMP() && running && !gameOver) netStatus('Señalización desconectada (la partida sigue si el DataChannel ya está abierto).'); });
+  }).catch(err=>{
+    netStatus('No se pudo cargar el módulo online ('+err.message+'). Prueba "Red local" si estáis en la misma WiFi.');
+    net.mode=null;
+  });
+}
+function netOnlineJoinStart(code){
+  net.mode='client'; net.kind='online'; net.onlineCode=code;
+  netStatus('Cargando el módulo online…');
+  loadPeerJs().then(()=>{
+    const peer = new Peer();
+    net.peer = peer;
+    peer.on('open', ()=>{
+      netStatus('Conectando a la sala '+code.toUpperCase()+'…');
+      const conn = peer.connect(peerIdFor(code), { reliable:true });
+      wireOnlineConn(conn, ()=>{ netSend({t:'hello', role:'client'}); netStatus('Conectado. Esperando al anfitrión…'); });
+      conn.on('error', ()=> netStatus('No se pudo conectar. Revisa el código, o probad "Red local".'));
+    });
+    peer.on('error', err=> netStatus('Error de señalización ('+err.type+'). Revisa el código, o probad "Red local".'));
+  }).catch(err=>{
+    netStatus('No se pudo cargar el módulo online ('+err.message+'). Prueba "Red local" si estáis en la misma WiFi.');
+    net.mode=null;
+  });
+}
+function showOnlineCode(code){
+  const box=document.getElementById('onlineCodeBox'), txt=document.getElementById('onlineCodeText');
+  if(txt) txt.textContent = code;
+  if(box) box.classList.remove('hidden');
 }
 
 // --- Serialización de estado (host → cliente, con bandos intercambiados) ---
@@ -865,6 +1037,27 @@ function makeSnap(){
   return { t:'snap', ents: entities.map(e=>serEntity(e)), me: serSide(enemy), foe: serSide(player),
     shots: projectiles.map(serProjectile) };
 }
+// Deltas (Fase 7 punto 4): en vez de reenviar TODAS las entidades ~7 veces/s,
+// solo se mandan las que cambiaron desde el último mensaje (completo o
+// delta) — la mayoría de edificios/unidades quietas no cambian de un tick al
+// siguiente. `net.lastSentEnts` guarda la última forma serializada (string)
+// de cada entidad que el host YA envió; si coincide, se omite. Un snapshot
+// completo (`makeSnap`) se manda cada ~1s (`net.fullT`) para no depender de
+// que ningún delta se pierda por el camino (reseteado también al reconectar,
+// ver `netSendInit`). Nunca corre en el cliente (que no simula).
+function makeSnapDelta(){
+  const upd=[], curIds=new Set();
+  for(const e of entities){
+    curIds.add(e.id);
+    const s = serEntity(e);
+    const str = JSON.stringify(s);
+    if(net.lastSentEnts.get(e.id) !== str){ upd.push(s); net.lastSentEnts.set(e.id, str); }
+  }
+  const rem=[];
+  for(const id of net.lastSentEnts.keys()) if(!curIds.has(id)) rem.push(id);
+  for(const id of rem) net.lastSentEnts.delete(id);
+  return { t:'snapd', upd, rem, me: serSide(enemy), foe: serSide(player), shots: projectiles.map(serProjectile) };
+}
 function applySnap(m){
   // Estado previo para reconstruir efectos puramente visuales (el cliente no
   // simula daño ni muertes): flash al bajar hp y cadáveres de unidades que
@@ -875,7 +1068,19 @@ function applySnap(m){
     if(e.kind==='unit') prevUnits[e.id] = { x:e.x, y:e.y, type:e.type, owner:e.owner };
   }
   const prevTrained = player.stats.trained, prevLostB = player.stats.lostB + enemy.stats.lostB;
-  entities = m.ents.map(deserEntity);
+  // Snapshot completo (`snap`) o delta (`snapd`, Fase 7): en el delta se
+  // fusionan las entidades actualizadas/eliminadas sobre las que ya había,
+  // así que el resultado final es EXACTAMENTE el mismo tipo de array
+  // `entities` en ambos casos y todo lo de abajo (flash/cadáveres/alertas) no
+  // necesita saber cuál llegó.
+  if(m.t==='snapd'){
+    const byId = new Map(entities.map(e=>[e.id, e]));
+    for(const id of (m.rem||[])) byId.delete(id);
+    for(const o of (m.upd||[])) byId.set(o.id, deserEntity(o));
+    entities = Array.from(byId.values());
+  } else {
+    entities = m.ents.map(deserEntity);
+  }
   rebuildIndex();
   const nowTs = performance.now(), liveIds = new Set();
   for(const e of entities){
@@ -908,23 +1113,60 @@ function applySnap(m){
   if(player.stats.trained > prevTrained) playSfx('ready');
   if(player.stats.lostB + enemy.stats.lostB > prevLostB) playSfx('destroyed');
   if(m.al) playSfx('alert');
+  // Interpolación de posiciones (Fase 7 punto 4): guarda la posición de cada
+  // unidad ANTES de esta instantánea (`ipPrev`, lo que ya se venía mostrando)
+  // y la nueva posición autoritativa (`ipCur`), con la marca de tiempo real
+  // en que llegó cada una. `interpClientPositions` (llamada cada cuadro desde
+  // `loop`) hace un lerp entre ambas según el tiempo transcurrido, así el
+  // movimiento se ve fluido entre instantáneas (~150ms) en vez de "a saltos".
+  // Puramente de RENDER: no toca la simulación (el cliente no simula) ni el
+  // guardado (deshabilitado en MP).
+  net.ipT0 = net.ipT1 || performance.now();
+  net.ipT1 = performance.now();
+  net.ipPrev = net.ipCur || new Map();
+  net.ipCur = new Map();
+  for(const e of entities) if(e.kind==='unit') net.ipCur.set(e.id, {x:e.x, y:e.y});
+}
+// Llamada cada cuadro (solo cliente MP, ver `loop`): mueve `e.x/e.y` de cada
+// unidad a lo largo del segmento [ipPrev→ipCur] según la fracción de tiempo
+// transcurrida desde que llegó la última instantánea. No afecta hp/estado/
+// selección — solo la posición dibujada (y el punto usado para tocar/
+// seleccionar, que de todos modos se corrige en la siguiente instantánea).
+function interpClientPositions(){
+  if(!net.ipCur) return;
+  const span = Math.max(1, net.ipT1 - net.ipT0);
+  let frac = (performance.now() - net.ipT1) / span;
+  if(frac<0) frac=0; else if(frac>1) frac=1;
+  for(const e of entities){
+    if(e.kind!=='unit') continue;
+    const cur = net.ipCur.get(e.id); if(!cur) continue;
+    const prev = net.ipPrev.get(e.id) || cur;
+    e.x = prev.x + (cur.x-prev.x)*frac;
+    e.y = prev.y + (cur.y-prev.y)*frac;
+  }
 }
 
 // --- Mensajería ---
 function netOnMessage(m){
   if(net.mode==='host'){
     if(m.t==='hello' && m.role==='client'){
-      netStatus('¡Jugador conectado! Empezando partida…');
-      startGame(gameConfig);
+      // Robustez (Fase 7 punto 4): si YA hay partida en curso, este 'hello' es
+      // una reconexión (mismo código online, o un segundo intento en LAN) —
+      // no reiniciar la partida, solo reenviar el estado actual con `init`.
+      if(!running){ netStatus('¡Jugador conectado! Empezando partida…'); startGame(gameConfig); }
+      else { netStatus('Jugador reconectado. Reenviando estado…'); netSendInit(); }
     }
     else if(m.t==='cmd') hostHandleCmd(m);
   } else if(net.mode==='client'){
     if(m.t==='init') clientStartFromInit(m);
-    else if(m.t==='snap'){ if(running && !gameOver) applySnap(m); }
+    else if(m.t==='snap' || m.t==='snapd'){ if(running && !gameOver) applySnap(m); }
     else if(m.t==='end') clientEnd(m.win);
   }
 }
 function netSendInit(){
+  // Reinicia la base de deltas: el `init` (y el próximo tick periódico)
+  // siempre van completos, así el cliente reconectado arranca sincronizado.
+  net.lastSentEnts = null; net.fullT = 0;
   netSend({ t:'init', cfg:{ map:mapTheme }, terrain, bridge, snap:makeSnap() });
 }
 function clientStartFromInit(m){
@@ -935,6 +1177,7 @@ function clientStartFromInit(m){
   orderMode=null; controlGroups=[[],[],[]]; for(let gi=0;gi<3;gi++) updateGroupBadge(gi);
   cam.vx=0; cam.vy=0;
   player.mods=freshMods(); enemy.mods=freshMods();
+  net.ipPrev=null; net.ipCur=null; net.ipT0=0; net.ipT1=0;   // Fase 7: reinicia la interpolación de posiciones
   applySnap(m.snap);
   buildMinimapTerrain(); resetFog(); positionMinimap();   // niebla + minimapa (Fase 2, cliente MP)
   gameOver=false; paused=false; running=true;
@@ -2180,8 +2423,11 @@ function loop(now){
   rebuildIndex();   // índice id→entidad fresco para este frame
   if(running && !paused && !gameOver){
     if(net.mode==='client'){
-      // El cliente no simula: renderiza las instantáneas del anfitrión
+      // El cliente no simula: renderiza las instantáneas del anfitrión,
+      // interpolando la posición de las unidades cada cuadro (Fase 7) para
+      // que no se vean "a saltos" al ritmo real de las instantáneas (~7Hz).
       net.uiT-=dt; if(net.uiT<=0){ net.uiT=0.2; updateTopbar(); }
+      interpClientPositions();
     } else {
       update(dt);
     }
@@ -2485,13 +2731,25 @@ function update(dt){
   // Alerta sonora "te atacan" para el propio bando (host o partida local)
   if(alertFlags.player){ playSfx('alert'); alertFlags.player=false; }
 
-  // Multijugador: el anfitrión difunde instantáneas de estado (~7/s)
+  // Multijugador: el anfitrión difunde instantáneas de estado (~7/s).
+  // Fase 7: alterna completa (cada ~1s, `net.fullT`) y delta (el resto) para
+  // recortar bytes/s — `net.deltaEnabled=false` fuerza siempre completa
+  // (usado para medir el ahorro real, ver progress.md).
   if(net.mode==='host' && net.ready && !gameOver){
     net.snapT -= dt;
     if(net.snapT<=0){
       net.snapT=0.15;
-      const snap = makeSnap();
-      snap.al = alertFlags.enemy; alertFlags.enemy=false;   // "te atacan" para el cliente remoto
+      net.fullT -= 0.15;
+      const alert = alertFlags.enemy; alertFlags.enemy=false;   // "te atacan" para el cliente remoto
+      let snap;
+      if(!net.deltaEnabled || !net.lastSentEnts || net.fullT<=0){
+        snap = makeSnap();
+        net.lastSentEnts = new Map(entities.map(e=>[e.id, JSON.stringify(serEntity(e))]));
+        net.fullT = 1.0;
+      } else {
+        snap = makeSnapDelta();
+      }
+      snap.al = alert;
       netSend(snap);
     }
   }
@@ -4219,7 +4477,40 @@ document.getElementById('btnStart').addEventListener('click',()=>{
 });
 refreshMenu();
 
-// ---------- Multijugador: botones del menú ----------
+// ---------- Multijugador: pestañas Online / Red local ----------
+document.getElementById('mpTabOnline').addEventListener('click', ()=>{
+  document.getElementById('mpTabOnline').classList.add('active');
+  document.getElementById('mpTabLan').classList.remove('active');
+  document.getElementById('mpOnlineTab').classList.remove('hidden');
+  document.getElementById('mpLanTab').classList.add('hidden');
+  netStatus('');
+});
+document.getElementById('mpTabLan').addEventListener('click', ()=>{
+  document.getElementById('mpTabLan').classList.add('active');
+  document.getElementById('mpTabOnline').classList.remove('active');
+  document.getElementById('mpLanTab').classList.remove('hidden');
+  document.getElementById('mpOnlineTab').classList.add('hidden');
+  netStatus('');
+});
+
+// ---------- Multijugador: Online (WebRTC/PeerJS, código de sala) ----------
+document.getElementById('btnOnlineHost').addEventListener('click', ()=>{ if(!inMP()) netOnlineHostStart(); });
+document.getElementById('btnOnlineJoin').addEventListener('click', ()=>{
+  document.getElementById('onlineJoinRow').classList.toggle('hidden');
+});
+document.getElementById('btnOnlineJoinGo').addEventListener('click', ()=>{
+  const code=document.getElementById('onlineCodeInput').value.trim();
+  if(!code){ netStatus('Escribe el código de sala.'); return; }
+  if(!inMP()) netOnlineJoinStart(code);
+});
+document.getElementById('btnCopyCode').addEventListener('click', ()=>{
+  const code = document.getElementById('onlineCodeText').textContent;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(code).then(()=>netStatus('Código copiado: '+code)).catch(()=>netStatus('Código: '+code));
+  } else netStatus('Código: '+code);
+});
+
+// ---------- Multijugador: Red local (WebSocket, IP) ----------
 document.getElementById('btnHost').addEventListener('click', ()=>{ if(!inMP()) netHostStart(); });
 document.getElementById('btnJoin').addEventListener('click', ()=>{
   document.getElementById('joinRow').classList.toggle('hidden');

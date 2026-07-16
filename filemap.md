@@ -22,7 +22,7 @@ código nuevas (ver normas en `CLAUDE.md`).
 | `assets/icon-180.png` / `icon-512.png` | Iconos de la app (apple-touch-icon / manifest). |
 | `iOS.md` | App de iPad y arquitectura del multijugador P2P. |
 | `PLAN.md` | Plan maestro por fases (revisión, principios y hoja de ruta ejecutable). |
-| `server.js` | Relé WebSocket (Node, sin dependencias) para multijugador en escritorio. |
+| `server.js` | Relé WebSocket (Node, sin dependencias) para multijugador LAN en escritorio (transporte A, Fase 7). |
 | `ios/MiniAoE.xcodeproj/` | Proyecto Xcode (app iPad, target único). |
 | `ios/MiniAoE/*.swift` | `MiniAoEApp` (entrada), `GameWebView` (WKWebView), `RelayServer` (relé WS + IP local). |
 | `ios/MiniAoE/Info.plist` | Permisos de red local, orientaciones de iPad, ATS. |
@@ -111,6 +111,26 @@ El archivo se organiza en estas secciones (en orden de aparición):
    unidad está guarnecida como `o.gi` (ambos en `serEntity`/`deserEntity`); el
    proyectil de catapulta lleva `o.k:'siege'` en `serProjectile`; comandos
    nuevos en `hostHandleCmd`: `lineupg`, `garrison`, `expel`, `market`.
+   **Fase 7 — transporte abstraído + WebRTC + robustez** (el protocolo de
+   arriba NO cambió): `net.sendRaw(str)`/`net.onRaw(str)` son la única
+   interfaz entre el protocolo y el transporte. Transporte A (LAN, sin
+   cambios): `netConnect`/`netHostStart`/`netJoinStart` cablean el WebSocket a
+   `net.sendRaw`/`net.onRaw`. Transporte B (Online/WebRTC): `loadPeerJs`
+   (inyecta `<script>` de PeerJS bajo demanda desde CDN),
+   `netOnlineHostStart`/`netOnlineJoinStart` (código de sala de 6 caracteres,
+   `genRoomCode`/`peerIdFor`), `wireOnlineConn` (cablea el DataChannel a
+   `net.sendRaw`/`net.onRaw`), `netOnlineConnLost`/`clientTryReconnect`
+   (reconexión ~60s con el mismo código, sin reiniciar la partida). UI: pestañas
+   `#mpTabOnline`/`#mpTabLan` (clase propia `.mp-tab`, no `.opt-b`, para no
+   heredar el resaltado genérico del menú), `#onlineCodeBox`/`#onlineCodeText`/
+   `#btnCopyCode`. Deltas: `makeSnapDelta` (solo entidades cuya serialización
+   cambió + ids eliminados) alterna con `makeSnap` completo cada ~1s
+   (`net.fullT`, `net.deltaEnabled`); `applySnap` fusiona ambos tipos de
+   mensaje (`snap`/`snapd`) sobre el mismo array `entities`. Interpolación:
+   `net.ipPrev`/`net.ipCur` (posiciones de unidades antes/después de cada
+   instantánea) + `interpClientPositions()` (lerp por fotograma, llamada desde
+   `loop` solo en el cliente) — puramente de render, no toca simulación ni
+   guardado.
 2.7. **Grupos de control tácticos** (Fase 3, LOCALES del cliente — no viajan
    por red): `controlGroups` (3 arrays de ids), `saveControlGroup`/
    `cleanControlGroup`/`selectControlGroup` y `updateGroupBadge`; listeners

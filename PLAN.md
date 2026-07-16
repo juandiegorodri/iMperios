@@ -293,7 +293,7 @@ inertes en MP. Detalle completo de las pruebas en `progress.md`.
 
 ---
 
-### FASE 7 — Multijugador en la web (WebRTC) ⬜
+### FASE 7 — Multijugador en la web (WebRTC) ✅
 **Por qué**: jugar desde Vercel contra cualquiera, sin misma WiFi ni app.
 **Estado**: el protocolo actual (host-autoritativo, `netOnMessage`,
 `hostHandleCmd`, snapshots con flip) NO cambia; solo se añade **transporte**.
@@ -320,6 +320,20 @@ inertes en MP. Detalle completo de las pruebas en `progress.md`.
 **Criterios**: dos pestañas headless juegan por WebRTC (PeerJS real) igual que
 el test `mp.cjs`; movimiento del cliente fluido (lerp); deltas reducen >60% los
 bytes/s medidos; LAN sigue funcionando.
+
+**Resultado (2026-07-15/16, PR #16)**: LAN verificada sin regresión (2 páginas
+headless, mismo protocolo). Lerp e interpolación verificados (73/73 muestras
+distintas, monótonas, en 1.2s). Deltas verificados con cifras reales: ~79% de
+reducción de bytes/s frente a snapshot completo siempre. El punto de WebRTC
+real con PeerJS **no se pudo cerrar en headless**: el sandbox de este entorno
+no da salida de red al proceso del navegador (ni con ni sin el proxy de
+agente configurado explícitamente — `curl`/Node sí llegan a los mismos hosts
+desde el shell, pero Chromium headless no), así que el script de PeerJS ni
+siquiera termina de cargar (queda documentado con detalle en `progress.md`).
+El código de la vía online está completo y su camino de fallo (mensaje
+honesto, sin errores de consola, `net.mode` se limpia para poder reintentar)
+quedó verificado; la conexión real queda pendiente de una red con internet de
+verdad o del iPad.
 
 ---
 
@@ -371,5 +385,5 @@ F6 Guardar+tutorial ──► F7 MP web (WebRTC) ──► F8 Rendimiento final
 | F4 Pathfinding | ✅ | #13 | A* en rejilla gruesa (40px, cachada por bando, invalidada solo al construir/destruir muralla o alternar puerta), formaciones (filas de 6, melee delante/arqueros detrás, asignación greedy), Puerta 🚪 como tramo central de muralla (bloquea siempre al rival; cerrada manualmente bloquea también al dueño), repath a los 0.6s atascado, separación consciente de murallas. MP: A* solo en el host. Ver `progress.md` 2026-07-15. |
 | F5 Profundidad | ✅ | #14 | Líneas de mejora por Era (chevrons ▲, tier en `side.upg`, gratis en MP); Catapulta + Taller de Asedio (daño de área ×4 vs edificios, proyectil parabólico); guarnición de torres/castillo/Centro Urbano (+1 flecha/arquero guarnecido); Mercado (100 recurso ↔ 70/130 oro); pasada de balance con arena 20v20 headless (tabla arriba). Sprites de catapulta/taller/mercado pendientes de generar. Ver `progress.md` 2026-07-15. |
 | F6 Memoria+tutorial | ✅ | #15 | Guardado local en 3 ranuras + autoguardado (2min/`visibilitychange`), reutiliza `serEntity`/`serSide` sin flip de bandos, guarnición reparada aparte con ids reales; ajustes (volumen SFX/ambiente, velocidad de cámara, fps, reiniciar tutorial) persistentes; tutorial de 10 pasos por sondeo de estado real (no temporizador), saltable, no se repite; línea de tiempo (recursos+valor militar cada 30s) en el resumen. Todo deshabilitado limpiamente en MP. Ver `progress.md` 2026-07-15. |
-| F7 MP web | ⬜ | — | (transporte WS ya abstraíble; PeerJS pendiente) |
+| F7 MP web | ✅ | #16 | Transporte abstraído (`net.sendRaw`/`net.onRaw`), transporte A=WS LAN sin cambios (regresión verificada) y B=WebRTC/PeerJS bajo demanda con código de sala de 6 caracteres; menú con pestañas Online/Red local; interpolación de posiciones en cliente (lerp por fotograma); snapshots con deltas (~79% menos bytes/s medido vs. completo); reconexión ~60s con el mismo código. PeerJS real no verificable en headless (sandbox sin egreso de red para el navegador) — código y fallback honesto verificados, conexión real pendiente de red/iPad. Ver `progress.md` 2026-07-15/16. |
 | F8 Rendimiento | ⬜ | — | |
