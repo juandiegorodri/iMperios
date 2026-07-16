@@ -50,6 +50,7 @@
   .res .rate{ font-size:11px; font-weight:600; color:var(--muted); margin-left:2px; }
   .res .rate.on{ color:var(--good); }
   #era{ margin-left:auto; color:var(--accent); font-size:13px; text-align:right; }
+  #peaceLabel{ color:#7ddd7d; font-size:13px; margin-left:10px; white-space:nowrap; }
   /* Panel inferior de acciones */
   #actions{ position:fixed; left:0; right:0; bottom:0; z-index:10; display:flex; flex-wrap:wrap;
     gap:8px; padding:8px; padding-bottom:calc(8px + env(safe-area-inset-bottom));
@@ -181,6 +182,7 @@
   <div class="res">🪨 <span id="rStone">0</span><span class="rate" id="rateStone">+0/s</span></div>
   <div class="res">👥 <span id="rPop">0</span></div>
   <div id="era">Edad Inicial</div>
+  <div id="peaceLabel" class="hidden">🕊️ Tregua: <span id="peaceTime">0:00</span></div>
 </div>
 
 <div id="util">
@@ -204,6 +206,29 @@
 <div id="tutBox" class="hidden">
   <p id="tutText"></p>
   <div class="row"><button class="btn" id="btnTutSkip">Saltar tutorial</button></div>
+</div>
+
+<!-- Infografía rápida (feedback de juego real): a diferencia del tutorial de
+     10 pasos (solo la primera partida), esta aparece al EMPEZAR CADA partida
+     -salvo que el jugador marque "no volver a mostrar"- con un resumen breve
+     de los controles básicos, para reducir la confusión inicial con la
+     selección/deselección. Puramente informativa, sin lógica de juego. -->
+<div id="quickHelpScreen" class="overlay hidden">
+  <div class="card" style="width:min(440px,94vw)">
+    <h1>👋 Controles básicos</h1>
+    <ul style="text-align:left; font-size:14px; line-height:1.6; margin:0 0 12px; padding-left:20px">
+      <li><b>Toque simple</b>: selecciona una unidad o edificio.</li>
+      <li><b>Arrastra con 1 dedo</b> sobre el mapa: caja de selección (varias unidades).</li>
+      <li><b>Doble toque</b>: selecciona todas las del mismo tipo en pantalla.</li>
+      <li><b>Toque en vacío</b>: deselecciona.</li>
+      <li><b>2 dedos</b>: mueve la cámara (paneo) y pellizca para hacer zoom.</li>
+      <li>Con unidades seleccionadas, toca: <b>terreno</b>=mover, <b>recurso</b>=recolectar, <b>enemigo</b>=atacar, <b>cimientos</b>=construir.</li>
+    </ul>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-bottom:10px">
+      <input type="checkbox" id="quickHelpDontShow"> No volver a mostrar
+    </label>
+    <div class="row"><button class="btn big" id="btnQuickHelpClose">Entendido, ¡a jugar!</button></div>
+  </div>
 </div>
 
 <!-- Minimapa: terreno+niebla+unidades en miniatura; toca/arrastra para mover la cámara -->
@@ -280,6 +305,25 @@
         <button class="opt-b" data-val="right">Derecha</button>
         <button class="opt-b" data-val="random">Aleatoria</button>
       </div>
+    </div>
+
+    <div class="opt" data-opt="peace">
+      <div class="opt-title">🕊️ Tiempo de tregua</div>
+      <div class="opt-row">
+        <button class="opt-b" data-val="0">Sin tregua</button>
+        <button class="opt-b" data-val="60">1 min</button>
+        <button class="opt-b" data-val="120">2 min</button>
+        <button class="opt-b" data-val="300">5 min</button>
+      </div>
+    </div>
+
+    <div class="opt" data-opt="garrison">
+      <div class="opt-title">🛡️ Guarnición de unidades</div>
+      <div class="opt-row">
+        <button class="opt-b" data-val="off">Deshabilitada</button>
+        <button class="opt-b" data-val="on">Habilitada</button>
+      </div>
+      <div class="opt-desc">Deshabilitada por defecto: tocar el Centro Urbano/Castillo/Torre con unidades seleccionadas no las mete dentro por accidente.</div>
     </div>
 
     <div class="opt">
@@ -374,6 +418,15 @@
         <button class="opt-b" data-val="0">No</button>
         <button class="opt-b" data-val="1">Sí</button>
       </div>
+    </div>
+    <div class="opt" id="setGSpeedGroup">
+      <div class="opt-title">⏱️ Velocidad de partida</div>
+      <div class="opt-row">
+        <button class="opt-b" id="setGSpeedSlow" data-val="slow">Lenta</button>
+        <button class="opt-b" id="setGSpeedNormal" data-val="normal">Normal</button>
+        <button class="opt-b" id="setGSpeedFast" data-val="fast">Rápida</button>
+      </div>
+      <div class="opt-desc">Cambia el ritmo de la partida en curso (un jugador).</div>
     </div>
     <div class="row" style="margin-top:10px">
       <button class="btn big" id="btnTutReset">🔄 Reiniciar tutorial</button>
@@ -488,7 +541,10 @@ const UNIT_LINES = {
 
 // Definición de edificios. `pop` = población que aporta; `reqAge` = era mínima.
 const BLD = {
-  town:       { name:'Centro Urbano', emoji:'🏛️', hp:1200, size:70, cost:{}, build:0, pop:20 },
+  // El Centro Urbano se defiende solo (auto-disparo, feedback de juego real):
+  // antes no tenía `atk` y no podía hacer nada contra un ataque directo.
+  town:       { name:'Centro Urbano', emoji:'🏛️', hp:1200, size:70, cost:{}, build:0, pop:20,
+                atk:11, range:170, cd:1.0 },
   house:      { name:'Casa',          emoji:'🏠', hp:300,  size:40, cost:{wood:50}, build:12, req:[], pop:5 },
   barracks:   { name:'Cuartel',       emoji:'🛡️', hp:600,  size:54, cost:{wood:150}, build:20, req:[] },
   range:      { name:'Galería de Tiro',emoji:'🎯', hp:600,  size:54, cost:{wood:175}, build:22, req:['barracks'] },
@@ -587,11 +643,18 @@ const MAPS = {
   cliffs:  { name:'Riscos',      ground:'#2e2a22' },
 };
 // Configuración elegida en el menú (valores por defecto).
-const gameConfig = { map:'plains', res:'standard', speed:'normal', diff:'normal', pos:'left' };
+const gameConfig = { map:'plains', res:'standard', speed:'normal', diff:'normal', pos:'left', peace:'0', garrison:'off' };
 
 let gameSpeed = 1;          // multiplicador de velocidad de la partida
 let mapTheme = 'plains';    // mapa activo
 let terrain = [];           // figuras decorativas/obstáculos del mapa
+// Ajustes de partida (feedback de juego real): guarnición deshabilitada por
+// defecto (evita el guarnecido accidental al tocar Centro Urbano/Castillo/
+// Torre con unidades seleccionadas) y tregua inicial configurable, sin combate
+// entre bandos hasta que `peaceTimer` llega a 0. Ambos solo importan en
+// host/partida local: el cliente MP no simula, solo ve el resultado.
+let garrisonEnabled = false;
+let peaceTimer = 0;
 
 // ---------- Estado global ----------
 const canvas = document.getElementById('game');
@@ -768,6 +831,32 @@ function drawSprite(name, cx, cy, targetH, anchorBottom){
   ctx.drawImage(img, cx - w/2, dy, w, h);
   return true;
 }
+// Dibuja un sprite girado 90° (feedback de juego real): la Puerta (`obj_gate`)
+// solo tiene una orientación de arte (pensada para muralla horizontal) y se
+// veía perpendicular/sin sentido en una muralla vertical. En vez de generar un
+// sprite nuevo, se gira el existente 90° con el mismo `thickness` (grosor,
+// perpendicular a la muralla) en ambos casos, para que se vea del mismo ancho
+// que un tramo de muralla normal, solo que orientado según `e.dir`.
+function drawWallOrientedSprite(name, cx, cy, thickness, vertical){
+  let img, fw, fh, sx=0, sy=0, sw, sh, fromAtlas=false;
+  if(atlasReady && atlasFrames && atlasFrames[name]){
+    const f = atlasFrames[name]; img=atlasImg; fw=f.w; fh=f.h; sx=f.x; sy=f.y; sw=f.w; sh=f.h; fromAtlas=true;
+  } else {
+    img = spr(name); if(!img) return false;
+    fw=img.naturalWidth; fh=img.naturalHeight; sw=fw; sh=fh;
+  }
+  const sc = thickness/fh, w = fw*sc, h = thickness;   // local: h siempre es el grosor
+  if(!vertical){
+    if(fromAtlas) ctx.drawImage(img, sx,sy,sw,sh, cx-w/2, cy-h/2, w, h);
+    else ctx.drawImage(img, cx-w/2, cy-h/2, w, h);
+  } else {
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI/2);
+    if(fromAtlas) ctx.drawImage(img, sx,sy,sw,sh, -w/2, -h/2, w, h);
+    else ctx.drawImage(img, -w/2, -h/2, w, h);
+    ctx.restore();
+  }
+  return true;
+}
 // Transform local barato para la animación de unidades (traslado+rotación+
 // volteo) SIN usar ctx.save()/restore(): en Canvas 2D clonar todo el estado
 // (fillStyle, clip, alpha...) en cada unidad es mucho más caro que fijar la
@@ -812,6 +901,20 @@ function applySettingsToUI(){
     b.classList.toggle('sel', (b.getAttribute('data-val')==='1')===settings.showFps);
   });
   const fh=document.getElementById('fpsHud'); if(fh) fh.classList.toggle('hidden', !settings.showFps);
+  // Velocidad de partida en vivo (feedback de juego real): solo tiene sentido
+  // con una partida en curso de un jugador (en MP la simulación es del host;
+  // cambiar el ritmo desde el cliente no tendría efecto real y confundiría).
+  const gspeedGroup=document.getElementById('setGSpeedGroup');
+  if(gspeedGroup){
+    const show = running && !gameOver && !inMP();
+    gspeedGroup.classList.toggle('hidden', !show);
+    if(show){
+      const curKey = Object.keys(SPEED_PRESETS).find(k=>SPEED_PRESETS[k].mult===gameSpeed) || 'normal';
+      gspeedGroup.querySelectorAll('.opt-b').forEach(b=>{
+        b.classList.toggle('sel', b.getAttribute('data-val')===curKey);
+      });
+    }
+  }
 }
 function setAmbientVolumeLive(){
   if(ambientNode && audioCtx) ambientNode.g.gain.setTargetAtTime(0.09*(settings.ambVol/100), audioCtx.currentTime, 0.1);
@@ -1365,7 +1468,7 @@ function hostHandleCmd(m){
     case 'upg': if(UPG[m.k]) buyUpgrade(own, m.k); break;
     case 'econ': if(ECON[m.r]) buyEcon(own, m.r, m.i); break;
     case 'lineupg': if(UNIT_LINES[m.cat]) buyLineTier(own, m.cat, m.i); break;
-    case 'garrison': { const gb=find(m.b); if(gb && gb.owner===own && GARRISON_MAX[gb.btype]!==undefined){
+    case 'garrison': { const gb=find(m.b); if(garrisonEnabled && gb && gb.owner===own && GARRISON_MAX[gb.btype]!==undefined){
       garrisonUnits(units.filter(u=>canGarrison(gb.btype,u.type)), gb); } break; }
     case 'expel': { const eb=find(m.b); if(eb && eb.owner===own) expelGarrison(eb); break; }
     case 'market': if(RES[m.r]) marketTrade(own, m.dir, m.r); break;
@@ -1385,12 +1488,13 @@ function hostPlace(m, units){
   for(const u of units) if(u.type==='villager'){ u.state='build'; u.build=b.id; u.halt=false; }
 }
 function hostWall(m){
-  const pts=wallPoints({x:m.x0,y:m.y0},{x:m.x1,y:m.y1});
+  const p0=snapWallEndpoint({x:m.x0,y:m.y0}), p1=snapWallEndpoint({x:m.x1,y:m.y1});
+  const pts=wallPoints(p0, p1);
   const cost={stone:0};
   pts.forEach((pt,i)=>{ cost.stone += BLD[wallSegmentType(pts,i)].cost.stone; });
   if(!canAfford(enemy,cost)) return;
   pay(enemy,cost);
-  const dir=Math.abs(m.x0-m.x1)>=Math.abs(m.y0-m.y1)?'h':'v';
+  const dir=Math.abs(p0.x-p1.x)>=Math.abs(p0.y-p1.y)?'h':'v';
   pts.forEach((pt,i)=>{ if(onObstacle(pt.x,pt.y)) return;
     const bt=wallSegmentType(pts,i);
     const b=makeBuilding('enemy', bt, pt.x,pt.y,false);
@@ -1714,6 +1818,8 @@ function startGame(cfg){
   difficulty = cfg.diff;
   gameSpeed = SPEED_PRESETS[cfg.speed].mult;
   mapTheme = cfg.map;
+  garrisonEnabled = cfg.garrison === 'on';
+  peaceTimer = Number(cfg.peace)||0;
   entities = []; selection = []; nextId = 1; placement = null; terrain = []; bridge = null;
   frameWalls = []; pings = []; projectiles = []; corpses = []; unitFace.clear();
   alertFlags = {player:false, enemy:false}; invalidatePathGrid();
@@ -1754,8 +1860,18 @@ function startGame(cfg){
   document.getElementById('endScreen').classList.add('hidden');
   updateActionPanel();
   tutorialArm();   // Fase 6: arranca el tutorial en la primera partida de un jugador (no en MP)
+  maybeShowQuickHelp();   // infografía rápida de controles (cada partida, saltable)
   if(net.mode==='host'){ netSendInit(); showHint('¡Multijugador! Destruye el Centro Urbano rival.'); }
   else if(!tutorial.active) showHint('Mapa: '+MAPS[mapTheme].name+'. Manda tus aldeanos a recolectar.');
+}
+// Infografía rápida de controles: se muestra al empezar CADA partida (a
+// diferencia del tutorial de 10 pasos, que solo corre una vez) salvo que el
+// jugador marque "no volver a mostrar". Puramente informativa: no bloquea la
+// simulación ni depende del estado del juego.
+const QUICKHELP_KEY = 'miniaoe_quickhelp_skip';
+function maybeShowQuickHelp(){
+  if(localStorage.getItem(QUICKHELP_KEY)==='1') return;
+  document.getElementById('quickHelpScreen').classList.remove('hidden');
 }
 
 // Cluster de recursos estándar alrededor de un punto (con pesos opcionales)
@@ -2234,6 +2350,9 @@ function computeDamage(attacker, target){
 // Aplica el daño ya calculado (al impactar, sea golpe cuerpo a cuerpo instantáneo
 // o proyectil que llega). Marca flash de daño, retaliación y alerta de ataque.
 function applyDamage(attacker, target, dmg){
+  // Tregua inicial: si el jugador fuerza un ataque manual (nearestEnemy ya
+  // bloquea la IA/auto-defensa), el golpe no hace daño real mientras dure.
+  if(peaceTimer>0 && attacker.owner && target.owner && attacker.owner!==target.owner) return;
   target.hp -= dmg;
   target.hurtT = performance.now();   // flash blanco al recibir daño
   if(target.kind==='unit') target.hitBy = attacker.id;   // permite retaliación
@@ -2295,6 +2414,7 @@ function updateProjectiles(dt){
 
 // ---------- Lógica de IA / órdenes para unidades ----------
 function nearestEnemy(e, range){
+  if(peaceTimer>0) return null;   // tregua inicial: nadie inicia combate (auto-defensa/IA)
   let best=null, bd=range;
   for(const o of entities){
     if(o.garrisonedIn) continue;   // unidad guarnecida (Fase 5): no es un blanco válido
@@ -2615,6 +2735,7 @@ function cancelQueued(b, idx){
 }
 
 function update(dt){
+  if(peaceTimer>0) peaceTimer = Math.max(0, peaceTimer-dt);
   // Murallas construidas (para colisión de movimiento de este frame). Reusa
   // el array (`.length=0` + `push`) en vez de `.filter()` para no crear un
   // array nuevo cada frame (Fase 8: menos presión sobre el GC).
@@ -2704,14 +2825,20 @@ function update(dt){
       const exhausted = isBld && g.reserve!==undefined && g.reserve<=0;
       const invalid = !g || (isBld && (!g.built || !BLD[g.btype].produces || exhausted)) || (!isBld && g.amount<=0);
       if(invalid){
-        const next = nearestGatherFor(e, rtype);
-        if(next){ e.gather=next; } else { e.state='idle'; e.gather=null; }
+        if(exhausted){
+          // Granja/mina agotada: el aldeano se queda a recargarla en vez de
+          // abandonarla a buscar otra (antes la dejaba sin recursos para
+          // siempre). `build` con recarga la retoma sola al llegar a 500.
+          e.state='build'; e.build=g.id; e.gather=null;
+        } else {
+          const next = nearestGatherFor(e, rtype);
+          if(next){ e.gather=next; } else { e.state='idle'; e.gather=null; }
+        }
       } else {
         const reach = radiusOf(g)+14;
         if(dist(e,g) > reach){ stepToward(e, g, dt); }
         else {
           e.anim = 0.3;
-          playSfx(rtype==='wood' ? 'chop' : 'mine');
           if(isBld){
             const amt = Math.min(g.reserve, gatherRate(e, rtype)*dt);   // capacidad finita
             g.reserve -= amt; side(e.owner).res[rtype] += amt;
@@ -2752,8 +2879,12 @@ function update(dt){
           if(canPay){
             for(const k in pay) s.res[k]-=pay[k];
             b.reserve += dr; e.anim=0.3;
-            if(b.reserve>=b.maxReserve){ b.reserve=b.maxReserve; e.state='idle'; e.build=null;
-              if(e.owner==='player') showHint(BLD[b.btype].name+' recargada (500).'); }
+            if(b.reserve>=b.maxReserve){
+              b.reserve=b.maxReserve;
+              // Recarga completa: retomar la recolección de esa misma fuente en
+              // vez de quedar idle (antes el aldeano dejaba de trabajar ahí).
+              e.state='gather'; e.gather=b; e.build=null; e.lastRtype=BLD[b.btype].produces;
+              if(e.owner==='player') showHint(BLD[b.btype].name+' recargada (500). Reanudando recolección.'); }
           } else { e.state='idle'; e.build=null; if(e.owner==='player') showHint('Sin recursos para recargar.'); }
         } else {
           // REPARAR (gasta recursos del coste de construcción)
@@ -3615,7 +3746,10 @@ function drawBuilding(e){
       if(!drawSprite(wn, s.x, s.y, d.size*1.2*cam.zoom, false))
         drawSprite('bld_wall', s.x, s.y, d.size*1.05*cam.zoom, false);   // respaldo
     } else if(d.gate){
-      drawSprite('obj_gate', s.x, s.y, d.size*1.3*cam.zoom, false);
+      // obj_gate.png solo tiene una orientación de arte (pensada para muralla
+      // horizontal); en muralla vertical se gira 90° para que no se vea
+      // perpendicular/sin sentido (feedback de juego real, sin sprite nuevo).
+      drawWallOrientedSprite('obj_gate', s.x, s.y, d.size*1.3*cam.zoom, e.dir==='v');
     } else {
       drawSprite('bld_'+e.btype, s.x, s.y + sz*0.12, spriteH, true);
     }
@@ -3740,7 +3874,18 @@ function drawUnit(e){
       ctx.beginPath(); ctx.arc(0, sz*0.1, sz*0.7, 0, Math.PI*2);
       ctx.fillStyle='rgba(230,190,90,.28)'; ctx.fill();
     }
-    ctx.font=`${sz}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    // Unidades de asedio sin sprite (catapulta, Fase 5): sin esta "plataforma"
+    // de madera detrás, el emoji quedaba pequeño y se perdía entre el terreno
+    // (parecía "sin gráfica"). Se dibuja más grande y con una base sólida para
+    // que se note como una máquina de asedio pesada, no una unidad más.
+    const isSiege = d.cat==='siege' && !d.hero;
+    const emojiSz = isSiege ? sz*1.6 : sz;
+    if(isSiege){
+      ctx.beginPath(); ctx.ellipse(0, sz*0.42, sz*0.85, sz*0.4, 0, 0, Math.PI*2);
+      ctx.fillStyle='#5b4632'; ctx.fill();
+      ctx.strokeStyle='#2e2318'; ctx.lineWidth=1.5; ctx.stroke();
+    }
+    ctx.font=`${emojiSz}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(d.emoji, 0, 0);
     if(d.hero){ ctx.font=`${12*cam.zoom}px serif`; ctx.fillText('⭐', sz*0.45, -sz*0.45); }
   }
@@ -3779,14 +3924,20 @@ function drawUnit(e){
     ctx.font=`${11*cam.zoom}px serif`; ctx.fillStyle='#d6b24a'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('💤', bx, by);
   }
-  // insignia de línea de mejora (Fase 5): chevrons ▲ por cada tier investigado
-  // por el bando (sin sprites nuevos); los héroes no llevan chevron.
+  // Insignia de línea de mejora (Fase 5, mejorada tras feedback de juego real):
+  // antes eran chevrons ▲ sin fondo a 9px, casi invisibles en combate. Ahora es
+  // un óvalo oscuro con borde (mismo lenguaje visual que las demás insignias)
+  // con 1-2 ⭐ según el tier investigado por el bando, para que se note de un
+  // vistazo qué unidades ya están mejoradas. Los héroes no llevan insignia.
   if(!d.hero){
     const tier = lineTierCount(e.owner, d.cat);
     if(tier>0){
-      ctx.font=`${9*cam.zoom}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillStyle='#ffe08c';
-      ctx.fillText('▲'.repeat(tier), s.x, s.y-36*cam.zoom);
+      const bx=s.x, by=s.y-40*cam.zoom, brx=(7+tier*4.5)*cam.zoom, bry=7.5*cam.zoom;
+      ctx.beginPath(); ctx.ellipse(bx,by,brx,bry,0,0,Math.PI*2);
+      ctx.fillStyle='#0b0c0fdd'; ctx.fill();
+      ctx.strokeStyle='#ffd75e'; ctx.lineWidth=1.2; ctx.stroke();
+      ctx.font=`${10*cam.zoom}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('⭐'.repeat(tier), bx, by);
     }
   }
   // barra de vida (si dañado)
@@ -4104,8 +4255,10 @@ function handleTap(p){
     }
     // Guarnición (Fase 5): tocar una torre/castillo propio con arqueros
     // seleccionados los mete dentro (máx. según `GARRISON_MAX`); tocar el
-    // Centro Urbano con aldeanos seleccionados los refugia.
-    if(ent && ent.owner==='player' && ent.kind==='building' && ent.built && GARRISON_MAX[ent.btype]!==undefined){
+    // Centro Urbano con aldeanos seleccionados los refugia. DESHABILITADA por
+    // defecto (opción de menú `gameConfig.garrison`) tras feedback de juego
+    // real: guarnecía por accidente al tocar el propio edificio sin querer.
+    if(garrisonEnabled && ent && ent.owner==='player' && ent.kind==='building' && ent.built && GARRISON_MAX[ent.btype]!==undefined){
       const eligible = selUnits.filter(u=>canGarrison(ent.btype, u.type));
       if(eligible.length){
         if(isCli){ netSend({t:'cmd', c:'garrison', ids:ids(eligible), b:ent.id}); return; }
@@ -4263,13 +4416,14 @@ function wallTap(p){
     placement=null; updateActionPanel();
     showHint('Muralla enviada al anfitrión.'); return;
   }
-  const pts = wallPoints(placement.start, {x:w.x,y:w.y});
+  const p0 = snapWallEndpoint(placement.start), p1 = snapWallEndpoint({x:w.x,y:w.y});
+  const pts = wallPoints(p0, p1);
   // coste total (el tramo central es una Puerta si hay sitio para distinguirla)
   const cost = {stone:0};
   pts.forEach((pt,i)=>{ cost.stone += BLD[wallSegmentType(pts,i)].cost.stone; });
   if(!canAfford(player, cost)){ showHint('Necesitas 🪨'+Math.ceil(cost.stone)+' para '+pts.length+' tramos.'); placement=null; updateActionPanel(); return; }
   pay(player, cost);
-  const dir = Math.abs(placement.start.x - w.x) >= Math.abs(placement.start.y - w.y) ? 'h' : 'v';
+  const dir = Math.abs(p0.x - p1.x) >= Math.abs(p0.y - p1.y) ? 'h' : 'v';
   let placed=0;
   pts.forEach((pt,i)=>{
     if(onObstacle(pt.x,pt.y)) return;
@@ -4280,6 +4434,28 @@ function wallTap(p){
   });
   placement=null; updateActionPanel();
   showHint('Muralla: '+placed+' tramos'+(pts.length>=3?' (con puerta 🚪 central)':'')+'. Tus aldeanos la construirán.');
+}
+// Ajusta un extremo de muralla al borde del mapa o a una muralla/puerta ya
+// construida si cae MUY cerca (feedback de juego real: una muralla corta que
+// se queda a unos pocos píxeles del borde del mapa o de otra muralla deja un
+// hueco por el que cualquier unidad rodea el extremo casi de inmediato, dando
+// la sensación de que "las murallas no bloquean nada"). Una muralla realmente
+// CERRADA (sin huecos) sigue siendo 100% infranqueable — esto solo evita el
+// hueco accidental por imprecisión al tocar.
+const WALL_SNAP = 46;
+function snapWallEndpoint(pt){
+  let x=pt.x, y=pt.y;
+  if(x<=WALL_SNAP) x=0; else if(x>=WORLD.w-WALL_SNAP) x=WORLD.w;
+  if(y<=WALL_SNAP) y=0; else if(y>=WORLD.h-WALL_SNAP) y=WORLD.h;
+  let best=null, bd=WALL_SNAP;
+  for(const e of entities){
+    if(e.kind==='building' && BLD[e.btype].wall){
+      const dd=Math.hypot(e.x-pt.x, e.y-pt.y);
+      if(dd<bd){ bd=dd; best=e; }
+    }
+  }
+  if(best){ x=best.x; y=best.y; }
+  return {x,y};
 }
 // Puntos equiespaciados de una línea (inclusive en los extremos).
 function wallPoints(a, b){
@@ -4527,6 +4703,12 @@ function updateTopbar(){
   document.getElementById('rGold').textContent=Math.floor(player.res.gold);
   document.getElementById('rStone').textContent=Math.floor(player.res.stone);
   document.getElementById('rPop').textContent=(popCount('player'))+'/'+popCap('player');
+  const peaceEl=document.getElementById('peaceLabel');
+  if(peaceTimer>0){
+    const m=Math.floor(peaceTimer/60), s=Math.floor(peaceTimer%60);
+    document.getElementById('peaceTime').textContent = m+':'+String(s).padStart(2,'0');
+    peaceEl.classList.remove('hidden');
+  } else peaceEl.classList.add('hidden');
   // Nivel de producción actual por recurso (incluye nodos y edificios de producción)
   const rates={food:0,wood:0,gold:0,stone:0};
   for(const e of entities){
@@ -4842,10 +5024,24 @@ document.querySelectorAll('#settingsScreen .opt[data-opt="fps"] .opt-b').forEach
     if(!settings.showFps){ const el=document.getElementById('fpsHud'); if(el) el.classList.add('hidden'); } });
 });
 document.getElementById('btnTutReset').addEventListener('click', tutorialReset);
+document.querySelectorAll('#setGSpeedGroup .opt-b').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    if(inMP() || !running || gameOver) return;
+    gameSpeed = SPEED_PRESETS[b.getAttribute('data-val')].mult;
+    applySettingsToUI();
+    showHint('Velocidad de partida: '+SPEED_PRESETS[b.getAttribute('data-val')].name+'.');
+  });
+});
 applySettingsToUI();
 
 // ---------- Fase 6: tutorial guiado (botón «Saltar») ----------
 document.getElementById('btnTutSkip').addEventListener('click', tutorialSkip);
+
+// ---------- Infografía rápida de controles ----------
+document.getElementById('btnQuickHelpClose').addEventListener('click', ()=>{
+  if(document.getElementById('quickHelpDontShow').checked) localStorage.setItem(QUICKHELP_KEY, '1');
+  document.getElementById('quickHelpScreen').classList.add('hidden');
+});
 
 // ---------- Arranque + pantalla de carga (Fase 8) ----------
 // Barra de progreso sobre los assets gráficos: camino feliz = atlas (1

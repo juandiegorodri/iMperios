@@ -383,3 +383,16 @@ El archivo se organiza en estas secciones (en orden de aparición):
     desde `loop` cada 30s de juego, solo host/partida local — no en el
     cliente MP, que no simula), `drawTimelineChart` (dibuja `#tlChart` en
     `#endScreen`, llamado desde `renderSummary`).
+19. **Corrección post-lanzamiento** (2026-07-16, tras juego real): `garrisonEnabled`
+    y `peaceTimer` (globales fijados en `startGame` desde `gameConfig.garrison`/
+    `gameConfig.peace`, nuevas opciones del menú principal); `nearestEnemy` y
+    `applyDamage` respetan `peaceTimer` (sin combate durante la tregua); las dos
+    ramas de guarnición (`handleTap` y el caso `'garrison'` de `hostHandleCmd`)
+    exigen `garrisonEnabled`. `snapWallEndpoint` (usado por `wallTap`/`hostWall`)
+    ajusta los extremos de una muralla al borde del mapa o a otra muralla
+    cercana. `drawWallOrientedSprite` (junto a `drawSprite`) dibuja un sprite
+    girado 90° — usado para que la Puerta se vea orientada según `e.dir`.
+    `maybeShowQuickHelp`/`QUICKHELP_KEY` (overlay `#quickHelpScreen`, llamado
+    desde `startGame`). El bucle de recolección (`update`) ya no reproduce SFX
+    por cuadro y, al agotarse un edificio de producción, pasa a `build` sobre
+    el mismo edificio en vez de buscar otro (retoma `gather` al recargarse).

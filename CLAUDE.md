@@ -573,3 +573,64 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     camino de respaldo, cero errores. Matriz QA completa (qué se verificó
     headless / qué queda pendiente de dispositivo real) en `progress.md`
     (entrada 2026-07-16).
+- **Corrección post-lanzamiento tras juego real** (2026-07-16): con las 8 fases
+  ya fusionadas, se jugó una partida real y se corrigieron 11 problemas
+  concretos reportados por el jugador:
+  - **Sonido de recolección quitado**: `chop`/`mine` sonaban cada ~420ms de
+    forma global mientras CUALQUIER aldeano recolectaba (un throttle por
+    nombre de SFX, no por unidad), percibido como un pitido rítmico continuo
+    durante toda la partida. Se quitaron esas llamadas del bucle de gather.
+  - **Granjas/minas se renuevan solas**: al agotarse la reserva de un
+    edificio de producción, el aldeano ANTES abandonaba la fuente para
+    buscar otra; ahora se queda a recargarla (pasa a `build` sobre el mismo
+    edificio) y, al llegar a 500, **retoma la recolección de esa misma
+    fuente** en vez de quedar `idle` (antes se plantaba sin trabajar).
+  - **Murallas cortas ya no dejan huecos en los extremos**: se comprobó por
+    prueba que una muralla CERRADA (anillo completo) ya era 100%
+    infranqueable; el problema real eran los extremos abiertos de murallas
+    cortas, fáciles de rodear. `snapWallEndpoint` ajusta cada extremo al
+    borde del mapa o a una muralla ya construida si cae muy cerca (~46px),
+    cerrando el hueco accidental por imprecisión al trazarla.
+  - **Puerta orientada según la muralla**: `obj_gate.png` solo tenía una
+    orientación de arte (pensada para muralla horizontal) y se veía
+    perpendicular/sin sentido en una muralla vertical. Nueva
+    `drawWallOrientedSprite` gira el sprite existente 90° cuando `e.dir==='v'`
+    (sin arte nuevo), manteniendo el mismo grosor que un tramo de muralla.
+  - **Insignia de nivel/tier mejorada**: los chevrons ▲ de la línea de mejora
+    (Fase 5) eran texto plano de 9px sin fondo, casi invisibles en combate.
+    Ahora es un óvalo oscuro con borde (mismo lenguaje visual que las demás
+    insignias) con 1-2 ⭐ según el tier investigado, claramente legible.
+  - **Catapulta con respaldo más visible**: seguía sin sprite propio esta
+    sesión (Ideogram no disponible), pero su emoji de respaldo se veía
+    pequeño y se perdía en el terreno ("parecía sin gráfica"). Ahora dibuja
+    una plataforma de madera detrás y el emoji más grande, como una máquina
+    de asedio pesada. El Taller de Asedio ya usaba correctamente su respaldo
+    (rect + emoji), verificado por prueba.
+  - **Guarnición deshabilitada por defecto**: tocar el Centro Urbano/Castillo/
+    Torre con unidades seleccionadas las guarnecía SIN querer (no había
+    ninguna confirmación). Nueva opción de menú «🛡️ Guarnición» (Deshabilitada
+    por defecto / Habilitada); con la opción desactivada, tocar el edificio
+    simplemente lo selecciona, como cualquier otro edificio propio.
+  - **Infografía rápida de controles**: overlay `#quickHelpScreen` con los
+    controles básicos (selección/deselección, caja, doble toque, cámara de 2
+    dedos, órdenes contextuales), mostrada al empezar CADA partida (a
+    diferencia del tutorial de 10 pasos de la Fase 6, que solo corre una vez)
+    salvo que el jugador marque «no volver a mostrar» (persistido en
+    `localStorage`).
+  - **El Centro Urbano se defiende solo**: antes no tenía `atk`/`range`/`cd`
+    y no podía hacer nada ante un ataque directo. Ahora dispara igual que una
+    Torre (auto-fuego a enemigos en rango).
+  - **Tiempo de tregua configurable**: nueva opción de menú «🕊️ Tiempo de
+    tregua» (sin tregua / 1 / 2 / 5 min). Mientras dura, ninguna unidad/IA
+    inicia combate (`nearestEnemy` no devuelve blancos) y, si el jugador
+    fuerza un ataque manual igualmente, no hace daño real (`applyDamage` lo
+    bloquea entre bandos distintos). Cuenta atrás visible en la barra
+    superior.
+  - **Velocidad de partida ajustable en vivo**: nuevo control en Ajustes ⚙️
+    para cambiar `gameSpeed` durante la partida (un jugador; oculto en MP,
+    donde la simulación es del host).
+  - Verificado headless: regresión de combate/proyectiles, niebla/MP LAN
+    (bandos correctos), cruce del puente, y una partida real simulada de 300s
+    con IA Difícil y tregua (sin errores, sin fugas). Detalle completo,
+    incluidas las cifras de cada prueba, en `progress.md` (entrada
+    2026-07-16, sección de correcciones post-lanzamiento).

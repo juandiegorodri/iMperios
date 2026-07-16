@@ -1158,3 +1158,130 @@ transitada, no merecía la pena duplicar la lógica de pre-escalado ahí.
   se marca pendiente con honestidad en la tabla del punto 5, siguiendo la
   misma norma que las Fases 6 y 7 aplicaron a sus propios límites de
   entorno.
+
+## 2026-07-16 — Corrección post-lanzamiento (feedback de juego real)
+
+Con las 8 fases del plan maestro ya fusionadas en `main`, se jugó una partida
+real (no headless) y se reportaron 11 problemas concretos. Se corrigieron
+todos en la misma tanda, con diagnóstico y verificación headless por cada uno
+antes de dar el problema por cerrado.
+
+1. **Sonido continuo de recolección**: `playSfx('chop'/'mine')` se llamaba
+   cada cuadro dentro del bucle de `gather`, con un throttle interno
+   (`sfxAllowed`) por NOMBRE de SFX (global), no por unidad — con cualquier
+   aldeano recolectando, sonaba un pitido cada ~420ms de forma ininterrumpida
+   durante TODA la partida. Se quitó la llamada del bucle de recolección
+   (dos sitios: nodo natural y edificio de producción). Verificado: el sonido
+   ya no se dispara; el resto de SFX (espada, flecha, construir…) intactos.
+
+2. **Granjas/minas se abandonaban al agotarse**: al llegar `reserve<=0`, el
+   código buscaba INMEDIATAMENTE otro nodo del mismo tipo, dejando la fuente
+   original sin recolectar para siempre. Además, al terminar de recargarla
+   manualmente, el aldeano quedaba `idle` en vez de retomar la recolección.
+   Arreglo: si la fuente agotada es un edificio de producción, el aldeano pasa
+   a `build` sobre ESA MISMA fuente (recarga in situ); al llegar a 500, vuelve
+   a `gather` de la misma fuente. Verificado con traza completa: `gather`
+   (reserve 6→0) → `build` (recarga 64→224→384) → `gather` de nuevo (reserve
+   500→494), sin intervención manual.
+
+3. **Murallas: huecos en los extremos**: se comprobó primero que una muralla
+   **cerrada** (anillo de 20 tramos alrededor de un punto, sin puerta) es
+   100% infranqueable — una unidad enemiga persistente se quedó fuera
+   (distancia 174 del centro, radio protegido 150) tras 150 segundos
+   simulados de intentos. El problema real es que las murallas CORTAS (con
+   extremos abiertos, lo normal al defender un paso) son rodeables por el
+   extremo en pocos segundos si el jugador no las hace llegar exactamente
+   hasta el borde del mapa u otra muralla. Nueva `snapWallEndpoint`: ajusta
+   cada extremo de la línea trazada (`wallTap` y `hostWall`, cliente y
+   anfitrión) al borde del mapa o a una muralla/puerta ya construida si cae
+   a menos de 46px (~1.6 tramos), cerrando el hueco accidental. Verificado:
+   una muralla que arranca a 20px del borde superior queda con su primer
+   tramo exactamente en `y=0`; una segunda línea trazada cerca del final de
+   la primera queda pegada exactamente a su posición (sin hueco).
+
+4. **Puerta perpendicular en muralla vertical**: `obj_gate.png` solo existe
+   en una orientación (pensada para muralla horizontal, confirmado mirando el
+   sprite: puertas de madera dobles en una banda ancha y corta) y se dibujaba
+   igual en cualquier `e.dir`, viéndose perpendicular/sin sentido en una
+   muralla vertical. Nueva `drawWallOrientedSprite` (junto a `drawSprite`):
+   gira el sprite existente 90° con `ctx.rotate` cuando `e.dir==='v'`,
+   calculando el tamaño local para que el grosor (eje corto, perpendicular a
+   la muralla) sea el mismo en ambas orientaciones. Verificado visualmente
+   con una muralla horizontal y una vertical, cada una con su puerta: ambas
+   se ven correctamente integradas en su respectiva muralla (captura en el
+   scratchpad de la sesión).
+
+5. **Insignia de tier casi invisible**: los chevrons ▲ de la línea de mejora
+   (Fase 5) eran texto plano de 9px en dorado pálido, sin fondo, encima de la
+   unidad — fácil de perder de vista en combate. Ahora es un óvalo oscuro con
+   borde dorado (mismo lenguaje visual que las insignias de recurso/inactivo
+   ya existentes) con 1-2 ⭐ según el tier investigado por el bando.
+
+6. **Catapulta "transparente"**: se diagnosticó a fondo (probado en `file://`
+   y sirviendo por HTTP con el atlas activo): el respaldo de emoji SÍ se
+   dibuja correctamente en ambos casos (0 errores, `spr()`/`atlasFrames`
+   confirman que ni la catapulta ni el Taller de Asedio están registrados,
+   como es intencional desde la Fase 5) — no hay nada literalmnete
+   transparente. El problema real es de legibilidad: el emoji 🎯 a tamaño
+   normal se pierde entre el terreno/otras unidades. Se le añadió una
+   plataforma de madera (óvalo oscuro) detrás y se agrandó el emoji ×1.6,
+   para que lea como una máquina de asedio pesada. El Taller de Asedio ya
+   se veía bien (rect + emoji, confirmado por captura); no se tocó.
+
+7. **Guarnición accidental**: tocar el Centro Urbano/Castillo/Torre con
+   unidades elegibles seleccionadas las guarnecía sin ninguna confirmación
+   — un aldeano seleccionado + un toque casual al Centro Urbano bastaba.
+   Nueva opción de menú «🛡️ Guarnición» (`gameConfig.garrison`,
+   **Deshabilitada por defecto** / Habilitada); con la opción desactivada
+   (`garrisonEnabled=false`), tanto `handleTap` como el comando MP
+   `'garrison'` de `hostHandleCmd` ignoran la acción y el toque simplemente
+   selecciona el edificio (comportamiento normal de cualquier edificio
+   propio). Verificado: con `garrison:'off'`, tocar el Centro Urbano con un
+   aldeano seleccionado NO lo guarnece y selecciona el edificio; con
+   `garrison:'on'`, el guarnecido funciona exactamente como antes.
+
+8. **Infografía rápida de controles**: overlay `#quickHelpScreen` con los
+   controles básicos (selección, caja de selección, doble toque, cámara de 2
+   dedos, órdenes contextuales), mostrado al empezar CADA partida — a
+   diferencia del tutorial interactivo de 10 pasos (Fase 6), que solo corre
+   la primera vez — con casilla «no volver a mostrar» persistida en
+   `localStorage` (`miniaoe_quickhelp_skip`). Verificado: aparece en la
+   primera partida, desaparece y persiste el flag al marcar la casilla, y ya
+   no reaparece en una partida nueva posterior.
+
+9. **Centro Urbano sin autodefensa**: `BLD.town` no tenía `atk`/`range`/`cd`,
+   así que no podía hacer nada ante un ataque directo (el bucle de
+   auto-disparo de edificios, reutilizado tal cual, es genérico sobre
+   `bd.atk`). Se le dieron valores moderados (`atk:11, range:170, cd:1.0`,
+   entre Torre y Castillo). Verificado: un enemigo pegado al Centro Urbano
+   muere en ~10s simulados sin ninguna otra unidad defendiendo.
+
+10. **Tiempo de tregua configurable**: nueva opción de menú «🕊️ Tiempo de
+    tregua» (sin tregua / 1 / 2 / 5 min, `gameConfig.peace`). Mientras
+    `peaceTimer>0`: `nearestEnemy` no devuelve blancos (ninguna IA ni
+    auto-defensa inicia combate) y `applyDamage` anula el daño entre bandos
+    distintos aunque el jugador fuerce un ataque manual (el golpe se ve pero
+    no hace daño real). Cuenta atrás visible en la barra superior
+    (`#peaceLabel`, mm:ss). Verificado: hp de un Centro Urbano atacado se
+    mantiene en 1200 durante la tregua, el temporizador baja de 60 a 50 tras
+    10s simulados, llega a 0 a los 60s, y el ataque vuelve a hacer daño real
+    justo después (hp 1200→1176). Nota: el temporizador es del host/partida
+    local (como el resto de la simulación); el cliente MP no tiene su propio
+    conteo visual, aunque el bloqueo de daño sí aplica correctamente porque
+    corre en el host autoritativo.
+
+11. **Velocidad de partida ajustable en vivo**: nuevo control en el panel de
+    Ajustes ⚙️ (visible solo con partida en curso de un jugador; oculto en
+    MP, donde la simulación es del host) que cambia `gameSpeed` en caliente.
+    Verificado: clic en «Rápida»/«Lenta» cambia `gameSpeed` a 1.6/0.7 al
+    instante.
+
+**Verificación de regresión** (headless, Chromium, cero errores en todos los
+casos): combate/proyectiles (Fase 1) sin cambios; multijugador LAN
+(`server.js` + 2 páginas) sigue viendo exactamente 1 base propia + 1 rival;
+cruce del puente del río (Fase río) intacto; partida real simulada de 300s
+(6000 `update()` de 0.05s) con IA Difícil y 30s de tregua — el enemigo avanzó
+de Era, la tregua expiró a tiempo, 82 entidades vivas, sin errores ni cuelgues.
+
+**Documentación actualizada en la misma tanda**: `CLAUDE.md` §6 (nueva
+entrada), `filemap.md` (§19), este archivo.
