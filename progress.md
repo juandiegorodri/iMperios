@@ -974,3 +974,22 @@ Scripts en el scratchpad de la sesión (`test_a_lan.cjs` … `test_f_ui_misc.cjs
   de reemplazo — fuera de alcance de esta fase (el foco de "mismo código" es
   el transporte Online, que sí lo soporta de punta a punta salvo por el punto
   de red no verificable en (d)).
+
+### Arreglo tras validación del orquestador — soft-lock del menú MP (Fase 7)
+- La validación independiente encontró que `net.mode` no se reseteaba tras un
+  error de señalización online (`peer`/`conn` `error`) ni al agotarse el timeout
+  de reconexión de 60s, así que el menú multijugador quedaba **bloqueado**: el
+  fallback a «Red local» no respondía (su handler está gateado con `if(!inMP())`)
+  y había que recargar la página — incumpliendo la promesa de la fase de un
+  "fallback limpio a LAN".
+- Arreglo: helper `netFreeIfIdle(msg)` que libera el estado de red (destruye el
+  `peer`/cierra el `ws`, deja `net.mode=null`) **solo si no hay partida en curso**
+  (un error transitorio en mitad de una partida no tira la conexión). Cableado en
+  los `error` de host/cliente online, en `netOnlineConnLost` y en el timeout de
+  reconexión (que además marca la partida como terminada). Un error transitorio
+  con partida en curso sigue mostrando el aviso sin liberar.
+- Verificado headless: tras un error de señalización simulado (mock de `Peer`)
+  sin partida en curso, `net.mode`/`net.kind` vuelven a `null` y `!inMP()` es
+  true (el botón LAN «Crear partida» vuelve a funcionar); regresión LAN real
+  (`server.js` + 2 páginas) intacta: el cliente ve 1 base propia + 1 rival, 0
+  errores de consola.

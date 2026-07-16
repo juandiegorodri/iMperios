@@ -827,6 +827,22 @@ net.onRaw = function(str){
   netOnMessage(m);
 };
 function netStatus(msg){ const el=document.getElementById('mpStatus'); if(el) el.textContent=msg; }
+// Libera el estado de red para volver al menú y poder reintentar (LAN u Online)
+// SIN recargar la página. Solo actúa cuando NO hay una partida en curso (un
+// error transitorio en mitad de una partida no debe tirar la conexión). Deja
+// `net.mode=null`, así los botones del menú (gateados con `!inMP()`) y el cambio
+// de pestaña LAN/Online vuelven a funcionar tras cualquier fallo de señalización
+// o timeout de reconexión. Devuelve true si liberó.
+function netFreeIfIdle(msg){
+  if(running && !gameOver) return false;
+  try{ if(net.ws){ net.ws.onclose=null; net.ws.close(); } }catch(_){}
+  try{ if(net.peer && !net.peer.destroyed) net.peer.destroy(); }catch(_){}
+  if(net.reconnTimer){ clearTimeout(net.reconnTimer); net.reconnTimer=null; }
+  net.mode=null; net.kind=null; net.ws=null; net.peer=null; net.conn=null;
+  net.ready=false; net.onlineCode=null; net.reconnDeadline=0;
+  if(msg) netStatus(msg);
+  return true;
+}
 
 // ---------- Transporte A: WebSocket LAN (idéntico al de antes) ----------
 function netConnect(host, onOpen){
@@ -910,7 +926,7 @@ function wireOnlineConn(conn, onOpen){
 // MISMO código hasta 60s antes de rendirse.
 function netOnlineConnLost(){
   net.ready=false;
-  if(!(inMP() && net.kind==='online' && running && !gameOver)){ netStatus('Conexión cerrada.'); return; }
+  if(!(inMP() && net.kind==='online' && running && !gameOver)){ if(!netFreeIfIdle('Conexión cerrada.')) netStatus('Conexión cerrada.'); return; }
   paused=true; showHint('Conexión online perdida. Reintentando 60s…');
   netStatus('Conexión perdida. Reintentando reconectar (60s)…');
   net.reconnDeadline = Date.now()+60000;
@@ -918,7 +934,13 @@ function netOnlineConnLost(){
   else clientTryReconnect();
   if(net.reconnTimer) clearTimeout(net.reconnTimer);
   net.reconnTimer = setTimeout(()=>{
-    if(!net.ready){ netStatus('Tiempo de reconexión agotado.'); showHint('No se pudo reconectar a tiempo.'); }
+    if(!net.ready){
+      showHint('No se pudo reconectar a tiempo.');
+      // La partida online se da por perdida: marcarla terminada y liberar la red
+      // para que el menú (LAN/Online) vuelva a estar disponible sin recargar.
+      running=false; gameOver=true;
+      netFreeIfIdle('Tiempo de reconexión agotado. Puedes iniciar otra partida.');
+    }
   }, 60000);
 }
 function clientTryReconnect(){
@@ -946,7 +968,7 @@ function netOnlineHostStart(){
         else { netSendInit(); showHint('El otro jugador se reconectó.'); netStatus('Reconectado. Partida en curso.'); }
       });
     });
-    peer.on('error', err=>{ netStatus('Error de señalización online ('+err.type+'). Prueba "Red local" si estáis en la misma WiFi.'); });
+    peer.on('error', err=>{ const m='Error de señalización online ('+err.type+'). Prueba "Red local" si estáis en la misma WiFi.'; if(!netFreeIfIdle(m)) netStatus(m); });
     peer.on('disconnected', ()=>{ if(inMP() && running && !gameOver) netStatus('Señalización desconectada (la partida sigue si el DataChannel ya está abierto).'); });
   }).catch(err=>{
     netStatus('No se pudo cargar el módulo online ('+err.message+'). Prueba "Red local" si estáis en la misma WiFi.');
@@ -963,9 +985,9 @@ function netOnlineJoinStart(code){
       netStatus('Conectando a la sala '+code.toUpperCase()+'…');
       const conn = peer.connect(peerIdFor(code), { reliable:true });
       wireOnlineConn(conn, ()=>{ netSend({t:'hello', role:'client'}); netStatus('Conectado. Esperando al anfitrión…'); });
-      conn.on('error', ()=> netStatus('No se pudo conectar. Revisa el código, o probad "Red local".'));
+      conn.on('error', ()=>{ const m='No se pudo conectar. Revisa el código, o probad "Red local".'; if(!netFreeIfIdle(m)) netStatus(m); });
     });
-    peer.on('error', err=> netStatus('Error de señalización ('+err.type+'). Revisa el código, o probad "Red local".'));
+    peer.on('error', err=>{ const m='Error de señalización ('+err.type+'). Revisa el código, o probad "Red local".'; if(!netFreeIfIdle(m)) netStatus(m); });
   }).catch(err=>{
     netStatus('No se pudo cargar el módulo online ('+err.message+'). Prueba "Red local" si estáis en la misma WiFi.');
     net.mode=null;
