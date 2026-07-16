@@ -1,6 +1,6 @@
-# Mini-AoE ⚔️
+# iMperios ⚔️
 
-Versión **ultra básica de Age of Empires** para jugar con pantalla táctil
+Versión **ultra básica de un RTS clásico** para jugar con pantalla táctil
 directamente desde el navegador del iPad (Safari). La lógica vive en un único
 **`index.html`** (Canvas 2D + JavaScript puro, sin dependencias ni compilación);
 los **gráficos** son sprites pixel-art en `assets/sprites/` (con respaldo de

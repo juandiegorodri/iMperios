@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		BA0000000000000000000001 /* MiniAoEApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000001 /* MiniAoEApp.swift */; };
+		BA0000000000000000000001 /* iMperiosApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000001 /* iMperiosApp.swift */; };
 		BA0000000000000000000002 /* GameWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000002 /* GameWebView.swift */; };
 		BA0000000000000000000003 /* RelayServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000003 /* RelayServer.swift */; };
 		BA0000000000000000000005 /* index.html in Resources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000005 /* index.html */; };
@@ -15,8 +15,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		AA000000000000000000000E /* MiniAoE.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MiniAoE.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		FA0000000000000000000001 /* MiniAoEApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniAoEApp.swift; sourceTree = "<group>"; };
+		AA000000000000000000000E /* iMperios.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iMperios.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FA0000000000000000000001 /* iMperiosApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iMperiosApp.swift; sourceTree = "<group>"; };
 		FA0000000000000000000002 /* GameWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameWebView.swift; sourceTree = "<group>"; };
 		FA0000000000000000000003 /* RelayServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayServer.swift; sourceTree = "<group>"; };
 		FA0000000000000000000004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -38,7 +38,7 @@
 		AA0000000000000000000002 = {
 			isa = PBXGroup;
 			children = (
-				AA000000000000000000000F /* MiniAoE */,
+				AA000000000000000000000F /* iMperios */,
 				AA0000000000000000000010 /* Web (juego) */,
 				AA0000000000000000000003 /* Products */,
 			);
@@ -47,20 +47,20 @@
 		AA0000000000000000000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AA000000000000000000000E /* MiniAoE.app */,
+				AA000000000000000000000E /* iMperios.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		AA000000000000000000000F /* MiniAoE */ = {
+		AA000000000000000000000F /* iMperios */ = {
 			isa = PBXGroup;
 			children = (
-				FA0000000000000000000001 /* MiniAoEApp.swift */,
+				FA0000000000000000000001 /* iMperiosApp.swift */,
 				FA0000000000000000000002 /* GameWebView.swift */,
 				FA0000000000000000000003 /* RelayServer.swift */,
 				FA0000000000000000000004 /* Info.plist */,
 			);
-			path = MiniAoE;
+			path = iMperios;
 			sourceTree = "<group>";
 		};
 		AA0000000000000000000010 /* Web (juego) */ = {
@@ -75,9 +75,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		AA0000000000000000000004 /* MiniAoE */ = {
+		AA0000000000000000000004 /* iMperios */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AA0000000000000000000008 /* Build configuration list for PBXNativeTarget "MiniAoE" */;
+			buildConfigurationList = AA0000000000000000000008 /* Build configuration list for PBXNativeTarget "iMperios" */;
 			buildPhases = (
 				AA000000000000000000000B /* Sources */,
 				AA000000000000000000000C /* Frameworks */,
@@ -87,9 +87,9 @@
 			);
 			dependencies = (
 			);
-			name = MiniAoE;
-			productName = MiniAoE;
-			productReference = AA000000000000000000000E /* MiniAoE.app */;
+			name = iMperios;
+			productName = iMperios;
+			productReference = AA000000000000000000000E /* iMperios.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -102,7 +102,7 @@
 				LastSwiftUpdateCheck = 1500;
 				LastUpgradeCheck = 1500;
 			};
-			buildConfigurationList = AA0000000000000000000005 /* Build configuration list for PBXProject "MiniAoE" */;
+			buildConfigurationList = AA0000000000000000000005 /* Build configuration list for PBXProject "iMperios" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = es;
 			hasScannedForEncodings = 0;
@@ -115,7 +115,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				AA0000000000000000000004 /* MiniAoE */,
+				AA0000000000000000000004 /* iMperios */,
 			);
 		};
 /* End PBXProject section */
@@ -137,7 +137,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BA0000000000000000000001 /* MiniAoEApp.swift in Sources */,
+				BA0000000000000000000001 /* iMperiosApp.swift in Sources */,
 				BA0000000000000000000002 /* GameWebView.swift in Sources */,
 				BA0000000000000000000003 /* RelayServer.swift in Sources */,
 			);
@@ -184,13 +184,13 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = MiniAoE/Info.plist;
+				INFOPLIST_FILE = iMperios/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.miniaoe.game;
+				PRODUCT_BUNDLE_IDENTIFIER = com.imperios.game;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -204,13 +204,13 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = MiniAoE/Info.plist;
+				INFOPLIST_FILE = iMperios/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.miniaoe.game;
+				PRODUCT_BUNDLE_IDENTIFIER = com.imperios.game;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -221,7 +221,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		AA0000000000000000000005 /* Build configuration list for PBXProject "MiniAoE" */ = {
+		AA0000000000000000000005 /* Build configuration list for PBXProject "iMperios" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AA0000000000000000000006 /* Debug */,
@@ -230,7 +230,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		AA0000000000000000000008 /* Build configuration list for PBXNativeTarget "MiniAoE" */ = {
+		AA0000000000000000000008 /* Build configuration list for PBXNativeTarget "iMperios" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AA0000000000000000000009 /* Debug */,

@@ -1,7 +1,7 @@
-# PLAN.md — Plan maestro: "que se sienta un Age of Empires de verdad"
+# PLAN.md — Plan maestro: "que se sienta un RTS de verdad"
 
-> **Objetivo del producto**: jugar Age of Empires desde el navegador del iPad,
-> con controles táctiles de primera, y que la sensación sea la de un AoE real:
+> **Objetivo del producto**: jugar iMperios desde el navegador del iPad,
+> con controles táctiles de primera, y que la sensación sea la de un RTS real:
 > vivo, legible, táctico y con ritmo.
 >
 > **Cómo usar este documento**: cada fase está escrita para que un modelo
@@ -28,7 +28,7 @@ de web desplegable; PWA + Vercel listos; multijugador LAN (WS) + app iOS.
 - Gráficos pixel-art coherentes (manual en `assets/ART.md`) con fallback emoji.
 - Multijugador anfitrión-autoritativo funcionando en LAN y app iOS montada.
 
-### Las brechas que impiden que "se sienta AoE" (por impacto)
+### Las brechas que impiden que "se sienta un RTS real" (por impacto)
 | # | Brecha | Síntoma para el jugador |
 |---|--------|--------------------------|
 | 1 | **Cero sonido y unidades estáticas** (se deslizan sin animación; sin proyectiles ni muertes) | "Parece una maqueta, no un juego" |
@@ -126,7 +126,7 @@ mudas; con esto el mismo juego "se convierte" en un juego de verdad.
 ---
 
 ### FASE 2 — Niebla de guerra, minimapa y alertas ✅
-**Por qué**: exploración y mapa mental = identidad AoE.
+**Por qué**: exploración y mapa mental = identidad RTS.
 
 **Alcance**
 1. **Niebla de 3 estados** en rejilla ~40px/celda (65×38): oculto (negro),
@@ -206,7 +206,7 @@ MP: paths solo en host (cliente sigue snapshots, sin cambios).
 
 ---
 
-### FASE 5 — Profundidad AoE: líneas de unidad, asedio, guarnición y mercado ✅
+### FASE 5 — Profundidad RTS: líneas de unidad, asedio, guarnición y mercado ✅
 **Por qué**: que cada Era cambie tu ejército y las murallas tengan respuesta.
 
 **Alcance**

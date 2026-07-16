@@ -1,6 +1,6 @@
 # iOS.md — App de iPad y multijugador en tiempo real
 
-Documentación de la app iOS de Mini-AoE y de la arquitectura multijugador P2P.
+Documentación de la app iOS de iMperios y de la arquitectura multijugador P2P.
 Léelo junto a `CLAUDE.md` (normas del proyecto) y `filemap.md` (mapa de código).
 
 ---
@@ -20,10 +20,10 @@ Léelo junto a `CLAUDE.md` (normas del proyecto) y `filemap.md` (mapa de código
 
 ```
 ios/
-├── MiniAoE.xcodeproj/
+├── iMperios.xcodeproj/
 │   └── project.pbxproj          Proyecto Xcode (target único de app iPad)
-└── MiniAoE/
-    ├── MiniAoEApp.swift         Entrada SwiftUI; arranca el relé y muestra el juego
+└── iMperios/
+    ├── iMperiosApp.swift        Entrada SwiftUI; arranca el relé y muestra el juego
     ├── GameWebView.swift        WKWebView que carga index.html del bundle e
     │                            inyecta window.__NATIVE_IP tras cargar
     ├── RelayServer.swift        Servidor WebSocket (puerto 8765) con
@@ -37,7 +37,7 @@ los copia al bundle, así la app siempre empaqueta la última versión del juego
 
 ### Cómo abrir y correr
 
-1. En un Mac con **Xcode 15+**: abrir `ios/MiniAoE.xcodeproj`.
+1. En un Mac con **Xcode 15+**: abrir `ios/iMperios.xcodeproj`.
 2. En *Signing & Capabilities*, elegir tu **Team** (firma automática).
 3. Elegir un iPad (real o simulador) y **Run**.
 4. La primera vez que se cree/una una partida, iOS pedirá permiso de **Red
@@ -47,7 +47,7 @@ los copia al bundle, así la app siempre empaqueta la última versión del juego
 > Linux (aquí no hay Xcode para compilarlo). Sigue el formato estándar de
 > Xcode 14/15 y los tres archivos Swift usan solo APIs públicas estables
 > (SwiftUI, WebKit, Network). Si Xcode objetara algo del `.pbxproj`, basta
-> crear un proyecto vacío "App (SwiftUI)" llamado MiniAoE y arrastrar los 3
+> crear un proyecto vacío "App (SwiftUI)" llamado iMperios y arrastrar los 3
 > `.swift`, el `Info.plist` y las referencias a `../index.html` y `../assets`
 > — son 2 minutos; todo el valor está en los fuentes.
 
@@ -82,7 +82,7 @@ cliente a `ws://<IP-del-anfitrión>:8765`. En la app, `GameWebView` inyecta
 `window.__NATIVE_IP` para que el menú muestre la IP a compartir.
 
 Para el transporte Online, el anfitrión crea un `Peer` con id
-`miniaoe7-<código>` (código de 6 caracteres, `genRoomCode`/`peerIdFor`) y lo
+`imperios7-<código>` (código de 6 caracteres, `genRoomCode`/`peerIdFor`) y lo
 muestra en pantalla; el invitado escribe el código y `peer.connect(...)` abre
 el `DataChannel` (`wireOnlineConn` cablea ambos lados a `sendRaw`/`onRaw`).
 

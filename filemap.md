@@ -24,9 +24,9 @@ código nuevas (ver normas en `CLAUDE.md`).
 | `iOS.md` | App de iPad y arquitectura del multijugador P2P. |
 | `PLAN.md` | Plan maestro por fases (revisión, principios y hoja de ruta ejecutable). |
 | `server.js` | Relé WebSocket (Node, sin dependencias) para multijugador LAN en escritorio (transporte A, Fase 7). |
-| `ios/MiniAoE.xcodeproj/` | Proyecto Xcode (app iPad, target único). |
-| `ios/MiniAoE/*.swift` | `MiniAoEApp` (entrada), `GameWebView` (WKWebView), `RelayServer` (relé WS + IP local). |
-| `ios/MiniAoE/Info.plist` | Permisos de red local, orientaciones de iPad, ATS. |
+| `ios/iMperios.xcodeproj/` | Proyecto Xcode (app iPad, target único). |
+| `ios/iMperios/*.swift` | `iMperiosApp` (entrada), `GameWebView` (WKWebView), `RelayServer` (relé WS + IP local). |
+| `ios/iMperios/Info.plist` | Permisos de red local, orientaciones de iPad, ATS. |
 
 ## Estructura interna de `index.html`
 

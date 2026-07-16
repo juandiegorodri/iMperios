@@ -17,7 +17,7 @@ final class RelayServer {
 
     private var listener: NWListener?
     private var peers: [NWConnection] = []
-    private let queue = DispatchQueue(label: "miniaoe.relay")
+    private let queue = DispatchQueue(label: "imperios.relay")
 
     func start() {
         guard listener == nil else { return }

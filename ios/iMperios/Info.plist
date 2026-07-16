@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>es</string>
 	<key>CFBundleDisplayName</key>
-	<string>Mini-AoE</string>
+	<string>iMperios</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -38,7 +38,7 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Mini-AoE usa la red local para partidas multijugador entre dos iPads: uno crea la partida y el otro se conecta a su IP.</string>
+	<string>iMperios usa la red local para partidas multijugador entre dos iPads: uno crea la partida y el otro se conecta a su IP.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

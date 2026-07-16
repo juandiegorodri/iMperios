@@ -1,4 +1,4 @@
-# Manual de línea gráfica — Mini-AoE
+# Manual de línea gráfica — iMperios
 
 Guía para que **todos** los sprites del juego mantengan el mismo estilo y se
 entiendan de un vistazo. Las imágenes se generan con Ideogram siguiendo estas

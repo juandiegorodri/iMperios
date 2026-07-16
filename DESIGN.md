@@ -1,6 +1,6 @@
-# Mini-AoE — Documento de Diseño (GDD)
+# iMperios — Documento de Diseño (GDD)
 
-Versión web ultra básica de Age of Empires, pensada para jugarse con **pantalla
+Versión web ultra básica de un RTS clásico, pensada para jugarse con **pantalla
 táctil desde el navegador del iPad** (Safari) sin instalar nada, sin servidor y
 sin proceso de compilación. Todo vive en un único archivo `index.html`
 (Canvas 2D + JavaScript puro).

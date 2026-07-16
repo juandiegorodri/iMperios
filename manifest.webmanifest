@@ -1,7 +1,7 @@
 {
-  "name": "Mini-AoE",
-  "short_name": "Mini-AoE",
-  "description": "Age of Empires ultra básico para jugar con pantalla táctil desde el navegador del iPad.",
+  "name": "iMperios",
+  "short_name": "iMperios",
+  "description": "RTS ultra básico para jugar con pantalla táctil desde el navegador del iPad.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",

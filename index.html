@@ -6,20 +6,20 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Mini-AoE">
+<meta name="apple-mobile-web-app-title" content="iMperios">
 <meta name="theme-color" content="#0e0f12">
-<meta name="description" content="Mini-AoE: Age of Empires ultra básico para jugar con pantalla táctil desde el navegador del iPad.">
+<meta name="description" content="iMperios: RTS ultra básico para jugar con pantalla táctil desde el navegador del iPad.">
 <meta name="format-detection" content="telephone=no">
 <!-- Open Graph / compartir enlace (Fase 8) -->
-<meta property="og:title" content="Mini-AoE ⚔️">
-<meta property="og:description" content="Age of Empires ultra básico para jugar con pantalla táctil desde el navegador del iPad. Un solo index.html, sin instalación.">
+<meta property="og:title" content="iMperios ⚔️">
+<meta property="og:description" content="RTS ultra básico para jugar con pantalla táctil desde el navegador del iPad. Un solo index.html, sin instalación.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="assets/icon-512.png">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Mini-AoE ⚔️">
-<meta name="twitter:description" content="Age of Empires ultra básico, táctil, en el navegador.">
+<meta name="twitter:title" content="iMperios ⚔️">
+<meta name="twitter:description" content="RTS ultra básico, táctil, en el navegador.">
 <meta name="twitter:image" content="assets/icon-512.png">
-<title>Mini-AoE ⚔️</title>
+<title>iMperios ⚔️</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="assets/icon-180.png">
 <link rel="icon" type="image/png" href="assets/icon-180.png">
@@ -246,7 +246,7 @@
      no bloquear el juego si algún asset falla. -->
 <div id="loadScreen" class="overlay">
   <div class="card">
-    <h1>Mini-AoE ⚔️</h1>
+    <h1>iMperios ⚔️</h1>
     <p>Cargando gráficos…</p>
     <div id="loadBarWrap"><div id="loadBarFill"></div></div>
     <div id="loadPct">0%</div>
@@ -256,7 +256,7 @@
 <!-- Pantalla de inicio / menú principal -->
 <div id="startScreen" class="overlay">
   <div class="card menu">
-    <h1>⚔️ Mini-AoE</h1>
+    <h1>⚔️ iMperios</h1>
     <p>Configura tu partida. Destruye el Centro Urbano enemigo. Cuadrilátero:
     Arquero &gt; Milicia &gt; Piquetero &gt; Caballo &gt; Arquero.</p>
 
@@ -467,7 +467,7 @@
 <script>
 "use strict";
 /* =========================================================================
-   Mini-AoE — Age of Empires ultra básico para iPad (Canvas 2D + JS puro)
+   iMperios — RTS ultra básico para iPad (Canvas 2D + JS puro)
    Un solo archivo, sin dependencias. Ver DESIGN.md para el diseño completo.
    ========================================================================= */
 
@@ -854,7 +854,7 @@ function drawShadow(cx, cy, rx){
 // Persisten en localStorage como un único objeto JSON compacto. Los valores
 // de volumen son 0-100 (porcentaje); `camSpeed` es un multiplicador aplicado
 // al paneo táctil/teclado; `showFps` activa el contador de fps en pantalla.
-const SETTINGS_KEY = 'miniaoe_settings';
+const SETTINGS_KEY = 'imperios_settings';
 function loadSettings(){
   const def = { sfxVol:70, ambVol:45, camSpeed:1, showFps:false };
   try{
@@ -900,7 +900,7 @@ function setAmbientVolumeLive(){
 // no se reproduce nada antes de eso. El interruptor de silencio persiste en
 // localStorage aparte; el volumen fino (SFX/ambiente) vive en `settings`.
 let audioCtx = null, masterGain = null, ambientNode = null;
-let soundOn = localStorage.getItem('miniaoe_sound') !== 'off';
+let soundOn = localStorage.getItem('imperios_sound') !== 'off';
 const _sfxLast = {};
 function sfxAllowed(name, minGapMs){
   const now = performance.now();
@@ -919,7 +919,7 @@ function ensureAudio(){
 }
 function setSoundOn(on){
   soundOn = on;
-  localStorage.setItem('miniaoe_sound', on ? 'on' : 'off');
+  localStorage.setItem('imperios_sound', on ? 'on' : 'off');
   if(masterGain && audioCtx) masterGain.gain.setTargetAtTime(on?1:0, audioCtx.currentTime, 0.05);
   const btn = document.getElementById('btnSound'); if(btn) btn.textContent = on ? '🔊' : '🔇';
 }
@@ -1006,7 +1006,7 @@ function playSfx(name){
    existente funciona sin cambios — el cliente siempre "se ve" como 'player'.*/
 const NET_PORT = 8765;
 const PEERJS_URL = 'https://unpkg.com/peerjs@1/dist/peerjs.min.js';
-const PEERJS_PREFIX = 'miniaoe7-';   // namespace de los ids de PeerJS para no chocar con otras apps
+const PEERJS_PREFIX = 'imperios7-';   // namespace de los ids de PeerJS para no chocar con otras apps
 const net = { mode:null, kind:null, ws:null, peer:null, conn:null, ready:false, snapT:0, uiT:0,
   sendRaw:null, bytesOut:0, bytesIn:0, deltaEnabled:true, lastSentEnts:null, fullT:0,
   ipPrev:null, ipCur:null, ipT0:0, ipT1:0, onlineCode:null, reconnDeadline:0, reconnTimer:null };
@@ -1504,8 +1504,8 @@ function upgradeWallToTower(w){
    es una función de un jugador y se deshabilita limpiamente en multijugador
    para no interferir con el protocolo de red ni el estado autoritativo. */
 const SAVE_VERSION = 1;
-const SAVE_SLOT_KEY = i => 'miniaoe_save_'+i;
-const AUTOSAVE_KEY = 'miniaoe_autosave';
+const SAVE_SLOT_KEY = i => 'imperios_save_'+i;
+const AUTOSAVE_KEY = 'imperios_autosave';
 const AUTOSAVE_INTERVAL_MS = 120000;   // autoguardado cada 2 minutos
 
 // `fogExplored` es un Uint8Array de 0/1 (~2.470 celdas): se guarda como una
@@ -1862,7 +1862,7 @@ function startGame(cfg){
 // diferencia del tutorial de 10 pasos, que solo corre una vez) salvo que el
 // jugador marque "no volver a mostrar". Puramente informativa: no bloquea la
 // simulación ni depende del estado del juego.
-const QUICKHELP_KEY = 'miniaoe_quickhelp_skip';
+const QUICKHELP_KEY = 'imperios_quickhelp_skip';
 function maybeShowQuickHelp(){
   if(localStorage.getItem(QUICKHELP_KEY)==='1') return;
   document.getElementById('quickHelpScreen').classList.remove('hidden');
@@ -2045,7 +2045,7 @@ function markVision(wx, wy, r){
 // edificios propios construidos. Se llama cada ~150ms desde `loop` (host,
 // partida local y también el cliente MP, que solo mira las posiciones que ya
 // recibió por snapshot). Las celdas visibles quedan también como "exploradas"
-// para siempre (no se re-oscurecen del todo al perder la visión, como en AoE).
+// para siempre (no se re-oscurecen del todo al perder la visión, como en un RTS real).
 function recomputeFog(){
   fogVisible.fill(0);
   for(const e of entities){
@@ -2083,7 +2083,7 @@ function drawFogOverlay(){
 // o enemigos) solo necesitan estar EXPLORADOS (se ven oscurecidos, como pide
 // la Fase 2: "terreno y edificios visibles, unidades no"). Unidades, cadáveres
 // y proyectiles enemigos necesitan estar en una celda VISIBLE ahora mismo:
-// desaparecen al salir de la visión, como en un AoE real.
+// desaparecen al salir de la visión, como en un RTS real.
 function fogRenderOk(e){
   if(e.owner==='player') return true;
   if(e.kind==='unit') return fogVisibleAt(e.x, e.y);
@@ -2490,9 +2490,9 @@ function separate(e, dt){
    No depende de temporizadores: si el jugador ya cumplió la condición de un
    paso (p.ej. al cargar una partida guardada a medias), la máquina avanza
    sola sin bloquear. Saltable en cualquier momento; recuerda en localStorage
-   (`miniaoe_tutorial_done`) que ya se completó o se saltó, para no repetirlo.
+   (`imperios_tutorial_done`) que ya se completó o se saltó, para no repetirlo.
    Deshabilitado por completo en multijugador (ver `tutorialArm`). */
-const TUTORIAL_DONE_KEY = 'miniaoe_tutorial_done';
+const TUTORIAL_DONE_KEY = 'imperios_tutorial_done';
 let tutorial = { active:false, step:0, baseline:{}, flags:{} };
 function firstPlayerVillager(){ return entities.find(e=>e.kind==='unit'&&e.owner==='player'&&e.type==='villager'); }
 function playerTown(){ return entities.find(e=>e.kind==='building'&&e.owner==='player'&&e.btype==='town'); }
@@ -2517,7 +2517,7 @@ function fogExploredCount(){ let n=0; for(let i=0;i<fogExplored.length;i++) n+=f
 // avance). `onEnter` opcional captura una "línea base" al empezar el paso
 // (p.ej. cuántos aldeanos hay ya, para detectar "uno MÁS").
 const TUTORIAL_STEPS = [
-  { msg:'👋 ¡Bienvenido a Mini-AoE! Toca uno de tus aldeanos 👷 para seleccionarlo.',
+  { msg:'👋 ¡Bienvenido a iMperios! Toca uno de tus aldeanos 👷 para seleccionarlo.',
     target(){ const v=firstPlayerVillager(); return v?{x:v.x,y:v.y}:null; },
     check(){ return selectedUnits().some(u=>u.type==='villager'); } },
   { msg:'Con el aldeano seleccionado, toca un árbol 🌳 para que recolecte madera.',

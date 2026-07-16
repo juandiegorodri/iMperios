@@ -1379,3 +1379,60 @@ de 300s con IA Difícil sin errores.
 
 **Documentación actualizada en la misma tanda**: `CLAUDE.md` §6, `filemap.md`,
 este archivo.
+
+---
+
+## 2026-07-16 — Cambio de nombre del proyecto: Mini-AoE → iMperios
+
+Para evitar cualquier problema legal con Microsoft (dueño de la marca "Age of
+Empires"), se renombró el proyecto de **Mini-AoE** a **iMperios** en todo el
+código y la documentación:
+
+- **`index.html`**: `<title>`, meta tags (`description`, Open Graph, Twitter
+  Card, `apple-mobile-web-app-title`), textos en pantalla (pantalla de carga,
+  menú principal, mensaje de bienvenida del tutorial) y comentarios del
+  código. Las menciones sueltas a "Age of Empires"/"AoE" como referencia de
+  género se cambiaron por "RTS"/"RTS real" (comparaciones genéricas, sin
+  nombrar la marca).
+- **Claves de `localStorage`** renombradas de `miniaoe_*` a `imperios_*`
+  (`imperios_settings`, `imperios_sound`, `imperios_save_1/2/3`,
+  `imperios_autosave`, `imperios_quickhelp_skip`, `imperios_tutorial_done`);
+  esto invalida partidas guardadas/ajustes previos en el navegador de quien
+  ya hubiera jugado (no había usuarios reales todavía). El prefijo de los ids
+  de sala de PeerJS pasó de `miniaoe7-` a `imperios7-`.
+- **`manifest.webmanifest`**: `name`/`short_name` a "iMperios", descripción
+  sin "Age of Empires".
+- **`server.js`**: comentario de cabecera y el log de arranque del relé.
+- **Documentación** (`README.md`, `DESIGN.md`, `PLAN.md`, `CLAUDE.md`,
+  `filemap.md`, `iOS.md`, `assets/ART.md`): título y menciones al nombre del
+  proyecto actualizadas; comparaciones con el género "Age of Empires"/"AoE"
+  cambiadas por "RTS"/"RTS clásico"/"RTS real". Las entradas históricas ya
+  existentes en este archivo (`progress.md`) NO se tocaron —es un registro
+  cronológico— por lo que siguen mencionando `miniaoe_*`/"Mini-AoE" tal como
+  eran ciertas en su momento.
+- **App iOS** (`ios/`): proyecto y carpeta renombrados de `MiniAoE`/
+  `MiniAoE.xcodeproj` a `iMperios`/`iMperios.xcodeproj`; `MiniAoEApp.swift` →
+  `iMperiosApp.swift` (`struct MiniAoEApp` → `struct iMperiosApp`); bundle id
+  `com.miniaoe.game` → `com.imperios.game`; `Info.plist`
+  (`CFBundleDisplayName`, texto de permiso de red local) e
+  `INFOPLIST_FILE`/rutas dentro de `project.pbxproj` actualizadas al nuevo
+  nombre de carpeta/target/producto.
+- **No se tocó** la rama de desarrollo `claude/mini-aoe-browser-game-k5vf3r`
+  (nombre de infraestructura fijado por el flujo de trabajo, no un texto de
+  producto).
+
+**Límite conocido**: el nombre del repositorio en GitHub
+(`juandiegorodri/Ageofempires`) y la URL de GitHub Pages que depende de él
+(`https://juandiegorodri.github.io/Ageofempires/`) **no se cambiaron** —no
+hay herramienta disponible en esta sesión para renombrar el repositorio; debe
+hacerse manualmente desde GitHub (Settings → repositorio → Rename) por
+alguien con acceso, sabiendo que eso también cambiaría la URL pública.
+
+**Verificado headless** (Chromium, Playwright): carga de `index.html` sin
+errores de consola, título/menú/pantalla de carga muestran "iMperios",
+`localStorage` usa las claves `imperios_*` nuevas, y una partida de un
+jugador arranca y funciona con normalidad.
+
+**Documentación actualizada en la misma tanda**: `README.md`, `DESIGN.md`,
+`PLAN.md`, `CLAUDE.md`, `filemap.md`, `iOS.md`, `assets/ART.md`, este
+archivo.

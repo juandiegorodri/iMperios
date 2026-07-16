@@ -1,4 +1,4 @@
-# CLAUDE.md — Guía del proyecto Mini-AoE
+# CLAUDE.md — Guía del proyecto iMperios
 
 Este archivo da contexto a Claude (y a cualquier desarrollador) sobre el
 proyecto. **Léelo al empezar cualquier sesión** y respeta las normas de abajo.
@@ -7,7 +7,7 @@ proyecto. **Léelo al empezar cualquier sesión** y respeta las normas de abajo.
 
 ## 1. Qué es el proyecto
 
-**Mini-AoE**: una versión *ultra básica* de Age of Empires para jugarse con
+**iMperios**: una versión *ultra básica* de un RTS clásico para jugarse con
 **pantalla táctil desde el navegador del iPad** (Safari). Todo el juego vive en
 un único archivo **`index.html`** (Canvas 2D + JavaScript puro, sin
 dependencias, sin servidor, sin proceso de compilación).
@@ -252,7 +252,7 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
   `https://`.
 - **PLAN.md: hoja de ruta por fases** (2026-07-06): plan maestro con principios
   de diseño, reglas del ejecutor y 8 fases (F1 vida → F8 rendimiento) para que
-  el juego "se sienta un AoE real"; cada fase se ejecuta en su propio PR.
+  el juego "se sienta un RTS real"; cada fase se ejecuta en su propio PR.
 - **FASE 1 — Está vivo: animación, proyectiles y sonido** (PR #10): ver
   `PLAN.md` §4 F1. Cambios:
   - **Animación procedural de unidades** (sin sprites nuevos): bamboleo vertical
@@ -386,7 +386,7 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     (`separate`) ya no puede empujar a nadie dentro de una muralla/puerta que
     le bloquee (antes solo se protegía contra el río/riscos); esto evitaba
     que el apiñamiento en las esquinas "colara" unidades a través del muro.
-- **FASE 5 — Profundidad AoE: líneas de unidad, asedio, guarnición y mercado**
+- **FASE 5 — Profundidad RTS: líneas de unidad, asedio, guarnición y mercado**
   (PR #14): ver `PLAN.md` §4 F5. Cambios:
   - **Líneas de mejora por Era** (`UNIT_LINES`, investigables en el edificio de
     entrenamiento — Cuartel/Galería/Establo): Milicia → Espadachín (Era II) →
@@ -437,8 +437,8 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
 - **FASE 6 — Partidas con memoria: guardar, ajustes y tutorial** (PR #15): ver
   `PLAN.md` §4 F6. Cambios:
   - **Guardar/cargar** (un solo jugador): partida completa serializada a
-    `localStorage` en **3 ranuras** (`miniaoe_save_1/2/3`) + **autoguardado**
-    (`miniaoe_autosave`) cada 2 minutos (`setInterval`, fuera del bucle de
+    `localStorage` en **3 ranuras** (`imperios_save_1/2/3`) + **autoguardado**
+    (`imperios_autosave`) cada 2 minutos (`setInterval`, fuera del bucle de
     render) y al ocultar la pestaña (`visibilitychange`). Reutiliza
     `serEntity`/`serSide` del bloque multijugador pero **sin el flip de
     bandos** (`serEntity(e, false)`: el guardado local es de un único
@@ -457,7 +457,7 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     entidades → autoguardado en <1ms y ~20KB (muy por debajo del límite
     típico de ~5MB de `localStorage`).
   - **Ajustes** ⚙️ (botón en el menú y en `#util`, panel `#settingsScreen`,
-    persisten en `localStorage` como `miniaoe_settings`): volumen de SFX y de
+    persisten en `localStorage` como `imperios_settings`): volumen de SFX y de
     ambiente por separado (sliders 0-100 aplicados en `playTone`/`playNoise`/
     `startAmbient`, independientes del interruptor 🔊/🔇 de silencio general
     de la Fase 1), velocidad de cámara (Lenta/Normal/Rápida, multiplica el
@@ -476,7 +476,7 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     temporizador fijo): si el jugador ya cumplió la condición de un paso —p.
     ej. al cargar una partida guardada a medias— la máquina lo salta sola sin
     bloquear. Botón "Saltar tutorial" siempre visible. Recuerda en
-    `localStorage` (`miniaoe_tutorial_done`) que ya se completó o se saltó,
+    `localStorage` (`imperios_tutorial_done`) que ya se completó o se saltó,
     para no repetirlo. Deshabilitado por completo en multijugador.
   - **Línea de tiempo del resumen**: durante la partida se muestrean cada 30s
     (de juego, afectados por la velocidad de partida) los recursos totales y
@@ -497,7 +497,7 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     pulsar un botón "Online" — en frío el juego sigue sin dependencias
     (verificado: 0 peticiones de red no-`file://` al cargar en SP).
   - **Multijugador Online con código de sala**: el anfitrión pulsa "Crear
-    sala" (`netOnlineHostStart`) y PeerJS le asigna un id (`miniaoe7-XXXXXX`);
+    sala" (`netOnlineHostStart`) y PeerJS le asigna un id (`imperios7-XXXXXX`);
     se muestra un código de 6 caracteres grande + botón "📋 Copiar código". El
     invitado escribe el código (`netOnlineJoinStart`) y `peer.connect(...)`
     abre un DataChannel fiable/ordenado. Funciona desde `https:` (a diferencia

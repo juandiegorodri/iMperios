@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Relé WebSocket para el multijugador de Mini-AoE (escritorio / desarrollo).
+/* Relé WebSocket para el multijugador de iMperios (escritorio / desarrollo).
    Uso: `node server.js` en el computador del ANFITRIÓN. Acepta exactamente 2
    jugadores y reenvía cada mensaje de uno al otro (tubería tonta, sin lógica).
    En la app iOS este mismo papel lo cumple RelayServer.swift dentro del
@@ -89,6 +89,6 @@ const server = net.createServer(sock => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[relé] Mini-AoE escuchando en el puerto ${PORT}`);
+  console.log(`[relé] iMperios escuchando en el puerto ${PORT}`);
   console.log('[relé] Anfitrión: pulsa "Crear partida". El otro jugador se une con la IP de esta máquina.');
 });
