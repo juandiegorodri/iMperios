@@ -256,7 +256,7 @@ Asedio/Mercado pendientes de generar (emoji de respaldo esta sesión, ver
 
 ---
 
-### FASE 6 — Partidas con memoria: guardar, ajustes y tutorial ⬜
+### FASE 6 — Partidas con memoria: guardar, ajustes y tutorial ✅
 **Alcance**
 1. **Guardar/cargar**: serializar partida completa (reutilizar
    `serEntity`+`serSide` sin flip + terrain/bridge/config/edad/fog explorada) a
@@ -274,6 +274,22 @@ Asedio/Mercado pendientes de generar (emoji de respaldo esta sesión, ver
 
 **Criterios**: guardar→recargar página→cargar = misma partida (test headless
 compara entidades/recursos); tutorial completable y saltable; ajustes persisten.
+
+**Resultado (2026-07-15, PR #15)**: implementado según el alcance. La única
+sorpresa fue la guarnición: el formato de `serEntity` pensado para el
+snapshot MP solo lleva el CONTEO de guarnecidos por edificio (al cliente le
+basta, no simula), así que el guardado local necesitó una serialización
+aparte con los ids reales (`save.garrisons`) para poder restaurar/expulsar
+correctamente tras cargar — documentado como decisión de diseño en
+`progress.md`. Ciclo guardar→recargar→cargar verificado con `localStorage`
+real y `page.reload()` de verdad (no en memoria): 76 entidades, recursos,
+Era, mapa y la posición exacta de un aldeano coinciden tras el ciclo
+completo. Autoguardado de una partida de 194 entidades: 0.7ms y ~20KB.
+Tutorial de 10 pasos verificado paso a paso simulando cada evento real
+(gather, construir, entrenar, explorar, avanzar de Era, «Todo el ejército»);
+saltable y no reaparece tras completarse/saltarse. Regresión de multijugador
+(`server.js` + 2 páginas): 0 errores, y guardado/tutorial confirmados
+inertes en MP. Detalle completo de las pruebas en `progress.md`.
 
 ---
 
@@ -354,6 +370,6 @@ F6 Guardar+tutorial ──► F7 MP web (WebRTC) ──► F8 Rendimiento final
 | F3 Manos RTS | ✅ | #12 | Grupos de control ①②③ (locales del cliente, limpian muertos); ataque-mover (estado `amove`, comando MP propio, auto-aggro continuo sin perder el destino); "Todo el ejército" + chips de filtro por tipo + doble toque en edificio; inercia de cámara con clamp elástico (sin temblor); rally encadenable sobre recurso con línea+bandera. Ver `progress.md` 2026-07-15. |
 | F4 Pathfinding | ✅ | #13 | A* en rejilla gruesa (40px, cachada por bando, invalidada solo al construir/destruir muralla o alternar puerta), formaciones (filas de 6, melee delante/arqueros detrás, asignación greedy), Puerta 🚪 como tramo central de muralla (bloquea siempre al rival; cerrada manualmente bloquea también al dueño), repath a los 0.6s atascado, separación consciente de murallas. MP: A* solo en el host. Ver `progress.md` 2026-07-15. |
 | F5 Profundidad | ✅ | #14 | Líneas de mejora por Era (chevrons ▲, tier en `side.upg`, gratis en MP); Catapulta + Taller de Asedio (daño de área ×4 vs edificios, proyectil parabólico); guarnición de torres/castillo/Centro Urbano (+1 flecha/arquero guarnecido); Mercado (100 recurso ↔ 70/130 oro); pasada de balance con arena 20v20 headless (tabla arriba). Sprites de catapulta/taller/mercado pendientes de generar. Ver `progress.md` 2026-07-15. |
-| F6 Memoria+tutorial | ⬜ | — | |
+| F6 Memoria+tutorial | ✅ | #15 | Guardado local en 3 ranuras + autoguardado (2min/`visibilitychange`), reutiliza `serEntity`/`serSide` sin flip de bandos, guarnición reparada aparte con ids reales; ajustes (volumen SFX/ambiente, velocidad de cámara, fps, reiniciar tutorial) persistentes; tutorial de 10 pasos por sondeo de estado real (no temporizador), saltable, no se repite; línea de tiempo (recursos+valor militar cada 30s) en el resumen. Todo deshabilitado limpiamente en MP. Ver `progress.md` 2026-07-15. |
 | F7 MP web | ⬜ | — | (transporte WS ya abstraíble; PeerJS pendiente) |
 | F8 Rendimiento | ⬜ | — | |

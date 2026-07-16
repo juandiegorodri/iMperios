@@ -256,10 +256,67 @@ El archivo se organiza en estas secciones (en orden de aparición):
     todos los militares vivos propios (excluye guarnecidos — Fase 5).
 13. **Barra superior y utilidades de UI**: `updateTopbar` (contador de inactivos
     y tasa de producción por recurso), `idleVillagers`, `selectNextIdle`,
-    `showHint`, `endGame` y `renderSummary` (tabla del resumen final).
+    `showHint`, `endGame` y `renderSummary` (tabla del resumen final; Fase 6:
+    también llama a `drawTimelineChart`).
 14. **Menú principal y arranque**: `MAP_DESC`, `refreshMenu` y listeners de las
     opciones del menú; botón Empezar; **prueba gráfica** (`openGfxTest` + botón);
     listeners de fin/centrar (doble toque → `lastAlert`, Fase 3)/pausa/inactivos/
     ejército (`#btnArmy`)/grupos de control (`#btnGrp1-3`); bloqueo de gestos
-    del navegador; refresco periódico del panel; `loadSprites()` + `resize()` +
+    del navegador; refresco periódico del panel; listeners de guardado/ajustes/
+    tutorial (Fase 6, ver 15-17); `loadSprites()` + `resize()` +
     `requestAnimationFrame(loop)`.
+15. **Guardado local** (Fase 6, un solo jugador, bloque `GUARDADO LOCAL`
+    justo después de `hostWall` — reutiliza `serEntity`/`deserEntity`/
+    `serSide` del bloque MP de arriba): `SAVE_VERSION`/`SAVE_SLOT_KEY`/
+    `AUTOSAVE_KEY`/`AUTOSAVE_INTERVAL_MS`, `fogToString`/`fogFromString`
+    (empaqueta `fogExplored`, un `Uint8Array` de 0/1, como cadena de dígitos),
+    `rebuildModsFromUpg` (reconstruye la caché `side.mods` a partir de los
+    flags `side.upg` guardados, igual que hacen `buyUpgrade`/`buyEcon` al
+    comprar), `buildSaveObject`/`applySaveObject` (serializa/restaura
+    entidades **sin flip de bandos** vía `serEntity(e,false)`, más terreno/
+    puente/config/edad/recursos/niebla explorada/grupos de control/línea de
+    tiempo; la guarnición se guarda aparte con ids reales exactos —
+    `save.garrisons` — porque el formato de `serEntity` para el snapshot MP
+    solo lleva el conteo), `saveToSlot`/`loadFromSlot` (3 ranuras),
+    `autosave`/`loadAutosave` (cada 2 min por `setInterval` fuera del bucle
+    de render, y en `visibilitychange`), `refreshSaveUI` (rellena el botón
+    "Continuar" del menú y las listas de ranuras del menú/panel `#saveScreen`
+    abierto con el botón 💾 de `#util`). Todas las funciones empiezan con
+    `if(inMP()) return`: deshabilitado por completo en multijugador (también
+    se apaga explícitamente en `clientStartFromInit`).
+16. **Ajustes** (Fase 6, sección `AJUSTES` justo antes del bloque de Sonido,
+    porque el volumen se aplica ahí): `SETTINGS_KEY`, `loadSettings`/
+    `saveSettings`/`applySettingsToUI` (persisten en `localStorage` como un
+    único objeto: `sfxVol`/`ambVol`/`camSpeed`/`showFps`), `setAmbientVolumeLive`.
+    `playTone`/`playNoise` multiplican su `vol` por `settings.sfxVol/100`;
+    `startAmbient` usa `settings.ambVol/100`; `settings.camSpeed` multiplica
+    el paneo táctil de 2 dedos (`pointermove`) y el paneo por flechas
+    (`keydown`); `settings.showFps` activa `#fpsHud` (EMA de fps sobre el
+    delta real, actualizada desde `loop`). Panel `#settingsScreen` (botón ⚙️
+    en el menú y en `#util`) con sliders de volumen, botones Lenta/Normal/
+    Rápida, botones Sí/No de fps y "🔄 Reiniciar tutorial" (`tutorialReset`).
+17. **Tutorial guiado** (Fase 6, bloque `TUTORIAL GUIADO` antes de
+    `// ---------- Actualización ----------`): `TUTORIAL_DONE_KEY`, estado
+    `tutorial` (`active`/`step`/`baseline`/`flags`), `TUTORIAL_STEPS` (10
+    pasos, cada uno con `msg`, `target()` —punto de mundo a resaltar, o
+    null— y `check()` —condición real de avance, sondeada por `tutorialCheck`
+    desde `loop` a ~3Hz—; `onEnter` opcional captura una línea base, p.ej.
+    cuántos aldeanos hay ya). Helpers de consulta: `firstPlayerVillager`,
+    `playerTown`, `nearestResourceToTown`, `playerGathering`,
+    `countPlayerVillagers`, `fogExploredCount`. `tutorialShouldStart`/
+    `tutorialArm` (se llama desde `startGame` y `applySaveObject`; una
+    partida cargada a medias puede ya cumplir pasos, la máquina los salta
+    sola), `tutorialEnterStep`/`tutorialCheck`/`tutorialFinish`/
+    `tutorialSkip`/`tutorialReset`, `updateTutUI`/`hideTutBox` (panel
+    `#tutBox`, con el botón "Saltar tutorial"), `drawTutorialTarget` (anillo
+    pulsante en mundo, llamado desde `render`). El paso final ("Todo el
+    ejército") se detecta con un flag puesto por el propio listener de
+    `#btnArmy`, no por sondeo de estado. Deshabilitado por completo en
+    multijugador.
+18. **Línea de tiempo del resumen** (Fase 6.4, bloque `LÍNEA DE TIEMPO` junto
+    al del tutorial): `gameTimeline`/`timelineT`/`TIMELINE_INTERVAL`/
+    `TIMELINE_MAX_SAMPLES`, `totalRes`/`costTotal`/`militaryValue` (coste
+    total invertido en tropas vivas de un bando), `sampleTimeline` (llamado
+    desde `loop` cada 30s de juego, solo host/partida local — no en el
+    cliente MP, que no simula), `drawTimelineChart` (dibuja `#tlChart` en
+    `#endScreen`, llamado desde `renderSummary`).

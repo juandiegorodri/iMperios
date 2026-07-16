@@ -692,3 +692,137 @@ funcionalidad. Resumen de cambios en `index.html`:
   - Estrés: ~246 entidades (incluye 20 catapultas y murallas) en combate
     activo, `update()+render()` medio 3.39ms/cuadro (pico 12.7ms), muy por
     debajo del presupuesto de 16.7ms/cuadro.
+
+## 2026-07-15 — PR #15: Fase 6 — Partidas con memoria: guardar, ajustes y tutorial
+Ver `PLAN.md` §4 F6. Resumen de cambios (detalle funcional en `CLAUDE.md` §6 y
+estructura de código en `filemap.md`, secciones 15-18):
+
+- **Guardar/cargar** (un solo jugador, 3 ranuras + autoguardado): reutiliza
+  `serEntity`/`serSide` del bloque MP **sin el flip de bandos**
+  (`serEntity(e, false)` — nuevo segundo parámetro, por defecto `true` para no
+  tocar el protocolo de red existente). Incluye terreno/puente, `gameConfig`,
+  edad/recursos/tecnologías/`stats`, niebla YA EXPLORADA (`fogExplored`
+  empaquetada como cadena de dígitos, no como array JSON — más compacto), y la
+  línea de tiempo. La guarnición necesitó un cuidado aparte: el formato de
+  `serEntity` pensado para el snapshot MP solo lleva el CONTEO de guarnecidos
+  por edificio (le basta al cliente, que no simula), así que `deserEntity`
+  deja `u.garrisonedIn=true` (booleano) y `b.garrison` con placeholders — para
+  el guardado LOCAL eso habría dejado unidades guarnecidas "perdidas" e
+  inexpulsables tras cargar. Se guarda aparte `save.garrisons` (ids reales
+  exactos, estables en un guardado de un jugador) y `applySaveObject` hace una
+  pasada de reparación que reconstruye el mapeo id-a-edificio real. Autoguardado
+  cada 2 minutos por `setInterval` (fuera del bucle de `render`, cero coste por
+  cuadro) y en `visibilitychange`. Deshabilitado con guardas `if(inMP()) return`
+  en cada función; también se apaga explícitamente en `clientStartFromInit`.
+- **Ajustes** ⚙️: volumen de SFX y de ambiente por separado (antes solo había
+  un interruptor 🔊/🔇 de silencio total; ahora los sliders escalan el `vol` en
+  `playTone`/`playNoise` y la ganancia de `startAmbient`), velocidad de cámara
+  (multiplica el paneo táctil de 2 dedos y el paneo por flechas), mostrar fps
+  (EMA sobre el delta REAL, sin escalar por velocidad de partida, para que el
+  contador no mienta en partidas "Rápidas") y reiniciar tutorial. Persisten en
+  `localStorage` como un único objeto (`miniaoe_settings`).
+- **Tutorial guiado**: máquina de estados de 10 pasos con `check()` por
+  SONDEO (~3/s desde `loop`) sobre el estado real del juego, no por
+  temporizador — decisión deliberada para que una partida cargada a medias
+  (o un jugador que ya sabe jugar) salte solo los pasos ya cumplidos sin
+  bloquear. Anillo pulsante (`drawTutorialTarget`) sobre el objetivo en el
+  mundo cuando el paso lo tiene; el paso final ("Todo el ejército") se marca
+  con un flag puesto por el propio listener de `#btnArmy` en vez de sondeo de
+  estado (no hay una condición de "estado del mundo" limpia para "el jugador
+  pulsó este botón"). Saltable; recuerda en `localStorage`
+  (`miniaoe_tutorial_done`) que se completó o se saltó.
+- **Línea de tiempo del resumen**: muestreo cada 30s de juego (recursos
+  totales + "valor militar" = coste total invertido en tropas vivas, de cada
+  bando) en `gameTimeline`, dibujado en `#tlChart` dentro de `renderSummary`
+  con `drawTimelineChart`. Solo corre en host/partida local (`net.mode!=='client'`
+  en `loop`), igual que el resto de la simulación.
+- **Sin cambios en el protocolo multijugador**: `serEntity`/`serSide`/
+  `makeSnap`/`hostHandleCmd` no ganaron ningún campo ni comando nuevo; el
+  único cambio a `serEntity` es el parámetro `flip` (por defecto `true`, así
+  que todas las llamadas existentes del bloque MP siguen produciendo
+  exactamente el mismo payload que antes).
+- **Verificación headless** (Playwright, scripts en el scratchpad de la
+  sesión, no en el repo; `localStorage` REAL, con `page.reload()` real entre
+  pasos, no simulado en memoria):
+  - **Ciclo guardar → recargar la página → cargar** (criterio clave): partida
+    con 76 entidades, recursos no triviales, Era II, una Casa y una Milicia
+    añadidas a mano, y la posición exacta de un aldeano movido a
+    `(555.5, 444.5)`. Tras `saveToSlot(1)` + `page.reload()` (vuelve al menú,
+    `running===false`, `entities.length===0`, confirma que NO quedó nada en
+    memoria) + `loadFromSlot(1)`: 76 entidades, recursos idénticos, Era 2,
+    mapa igual, posición del aldeano a <0.6px, Casa y Milicia presentes,
+    `running===true`. Coincide en los 8 campos comparados.
+  - **Autoguardado + "Continuar"**: `autosave()` forzado (en vez de esperar 2
+    minutos reales) escribe `miniaoe_autosave`; tras `page.reload()`, el botón
+    "▶ Continuar (autoguardado)" del menú aparece visible y, al pulsarlo,
+    restaura la partida (`running===true`, 76 entidades).
+  - **Ajustes**: volumen SFX 25, volumen ambiente 10, cámara "Lenta" (0.6) y
+    "Mostrar FPS" activado, todo vía clics/eventos reales en el panel; tras
+    `page.reload()`, `settings` refleja los 4 valores y `#fpsHud` ya aparece
+    visible sin necesidad de abrir Ajustes (se aplica en el arranque).
+    "Reiniciar tutorial" limpia `miniaoe_tutorial_done` de `localStorage`.
+  - **Tutorial**: se ejercitaron los 10 pasos simulando cada evento real
+    (seleccionar aldeano, `state='gather'` de comida/madera, construir Casa y
+    Cuartel, entrenar aldeano/Milicia, `recomputeFog()` tras mover visión a
+    una esquina lejana del mapa, avanzar de Era, pulsar `#btnArmy`) y
+    llamando a `tutorialCheck()` tras cada uno: avanzó paso a paso hasta
+    completarse (`tutorial.active===false`, `miniaoe_tutorial_done==='1'`).
+    Confirmado que NO se rearma en una partida nueva tras completarse, que
+    "Saltar tutorial" también deja el flag puesto y tampoco reaparece, y que
+    borrar el flag + `startGame` sí lo rearma.
+  - **Línea de tiempo**: 3 muestras manuales (`sampleTimeline()`) con cambios
+    de recursos/tropas entre ellas, luego `endGame(true)`: `drawTimelineChart`
+    no lanza excepción, el `<canvas>` del resumen queda con contenido (no en
+    blanco) y `#endScreen` se muestra.
+  - **Regresión multijugador** (`server.js` + 2 páginas reales, host y
+    cliente conectados y `running===true` en ambos): confirmado que
+    `tutorial.active===false` en los dos, que "Continuar" queda oculto, y que
+    pulsar el botón 💾 NO abre el panel de guardado (`#saveScreen` sigue
+    oculto) — Fase 6 completamente inerte en MP, sin afectar la partida en
+    red. 0 `pageerror`/`console.error` en host y cliente.
+  - **Rendimiento del autoguardado**: partida sintética de 194 entidades
+    (dentro del presupuesto de "~200 entidades" del enunciado) →
+    `autosave()` completo (serializar + `JSON.stringify` + escribir en
+    `localStorage`) tarda **0.7ms** y pesa **~20.2KB**; con 76 entidades
+    (partida real de prueba) el guardado pesa **9.2KB**. Ambos muy por debajo
+    del límite típico de ~5MB de `localStorage`, y el autoguardado corre en
+    `setInterval` fuera del bucle de `render`, así que no puede causar
+    tirones de fps aunque tardara más.
+- **Caveats honestos** (limitaciones conocidas, aceptadas como la opción más
+  simple que preserva los principios del `PLAN.md`):
+  - Una unidad guardada a mitad de una orden de `move`/`amove` (con destino y
+    ruta A* en curso) se queda "congelada" en ese estado tras cargar: la
+    posición exacta SÍ se conserva (por eso el criterio de aceptación pasa),
+    pero `e.move`/`e.path` no se serializan (nunca formaron parte de
+    `serEntity`, ni siquiera para MP) y el motor no reanuda el desplazamiento
+    solo; la unidad queda como inactiva hasta la próxima orden del jugador.
+    Los proyectiles en vuelo tampoco se guardan (se limpian a `[]` al
+    cargar, igual que en `clientStartFromInit`): es una simplificación menor,
+    sin impacto en recursos/edificios/unidades ni en el resultado de la
+    partida.
+  - El tutorial no comprueba explícitamente que el aldeano que recolecta sea
+    el que el jugador "seleccionó" en el paso 1 (el `check()` de cada paso
+    consulta el estado global, no encadena qué unidad concreta cumplió el
+    paso anterior); es deliberado para que la máquina también avance sola al
+    cargar una partida ya avanzada, pero significa que un jugador podría
+    completar un paso con una unidad distinta a la sugerida sin que el
+    tutorial lo note (no se considera un problema: el objetivo pedagógico —
+    "ya sabes recolectar madera"— igual se cumple).
+
+### Arreglo tras validación del orquestador — regresión del snapshot MP (Fase 6)
+- La validación independiente detectó que el nuevo 2º parámetro `flip` de
+  `serEntity` (introducido para el guardado local, con `flip=true` por defecto)
+  **rompía el snapshot multijugador**: `makeSnap` hacía `entities.map(serEntity)`,
+  y `Array.map` invoca el callback con `(elemento, índice, array)`, así que la
+  entidad del **índice 0** (siempre el Centro Urbano propio, id=1, creado primero
+  en `startGame`) recibía `flip=0` — *falsy pero no `undefined`*, con lo que el
+  guard `if(flip===undefined) flip=true` no saltaba y esa entidad viajaba **sin
+  voltear el bando**. Efecto: el cliente veía DOS edificios como propios (su base
+  y el Centro Urbano rival), contaminando niebla, selección y toda lógica de
+  `owner==='player'`.
+- Arreglo: envolver el callback → `entities.map(e=>serEntity(e))` (así `flip`
+  queda `undefined` y toma el valor por defecto `true`). El guardado local no
+  estaba afectado porque ya usaba una arrow explícita (`serEntity(e,false)`).
+- Verificado headless con relé real (`server.js` + host + cliente `127.0.0.1`):
+  el cliente ahora ve exactamente 1 Centro Urbano propio y 1 rival (bandos 4/4),
+  cero errores de consola; regresión de un jugador (combate) OK.

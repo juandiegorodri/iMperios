@@ -434,3 +434,54 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     contras del cuadrilátero dominen claramente (~92-100%) y los 2 matchups
     neutrales (Arquero-Piquetero, Milicia-Caballo) queden por debajo del 55%
     de dominancia. Detalle y tabla resultante en `PLAN.md` §4 F5 y §6.
+- **FASE 6 — Partidas con memoria: guardar, ajustes y tutorial** (PR #15): ver
+  `PLAN.md` §4 F6. Cambios:
+  - **Guardar/cargar** (un solo jugador): partida completa serializada a
+    `localStorage` en **3 ranuras** (`miniaoe_save_1/2/3`) + **autoguardado**
+    (`miniaoe_autosave`) cada 2 minutos (`setInterval`, fuera del bucle de
+    render) y al ocultar la pestaña (`visibilitychange`). Reutiliza
+    `serEntity`/`serSide` del bloque multijugador pero **sin el flip de
+    bandos** (`serEntity(e, false)`: el guardado local es de un único
+    jugador, no hay a quién voltearle el bando — a diferencia del snapshot de
+    red). Incluye terreno/puente, `gameConfig`, edad/recursos/tecnologías,
+    niebla YA EXPLORADA (`fogExplored` empaquetada como cadena de dígitos),
+    grupos de control y la línea de tiempo (ver más abajo). La guarnición
+    (torres/castillo/Centro Urbano) se guarda aparte con los ids reales
+    exactos (`save.garrisons`), porque el formato de `serEntity` pensado para
+    el snapshot MP solo lleva el CONTEO, no sirve para restaurar de verdad
+    quién estaba dentro de qué edificio. En el menú aparece "▶ Continuar
+    (autoguardado)" si hay uno disponible, y una lista de las 3 ranuras con
+    su fecha/mapa/era. **Deshabilitado por completo en multijugador**
+    (`if(inMP()) return` en cada función de guardar/cargar/autoguardar); el
+    botón 💾 en `#util` no abre el panel en MP. Medido: partida de ~194
+    entidades → autoguardado en <1ms y ~20KB (muy por debajo del límite
+    típico de ~5MB de `localStorage`).
+  - **Ajustes** ⚙️ (botón en el menú y en `#util`, panel `#settingsScreen`,
+    persisten en `localStorage` como `miniaoe_settings`): volumen de SFX y de
+    ambiente por separado (sliders 0-100 aplicados en `playTone`/`playNoise`/
+    `startAmbient`, independientes del interruptor 🔊/🔇 de silencio general
+    de la Fase 1), velocidad de cámara (Lenta/Normal/Rápida, multiplica el
+    paneo táctil de 2 dedos y el paneo por flechas de teclado), mostrar fps
+    (contador `#fpsHud`, EMA sobre el delta real sin escalar por velocidad de
+    partida) y "🔄 Reiniciar tutorial" (borra el flag de completado/saltado y
+    lo rearma si hay una partida en curso).
+  - **Tutorial guiado** (primera partida de un jugador, `#tutBox` con anillo
+    pulsante `drawTutorialTarget` sobre el objetivo en el mundo cuando
+    aplica): máquina de estados de **10 pasos** (seleccionar aldeano →
+    recolectar madera → recolectar comida → construir Casa → entrenar
+    aldeano → explorar una zona oscura → construir Cuartel → entrenar
+    Milicia → avanzar de Era → «Todo el ejército»), cada uno con un
+    `check()` que consulta el estado REAL del juego (selección, entidades,
+    niebla explorada, era…) por sondeo (~3/s desde `loop`, no por
+    temporizador fijo): si el jugador ya cumplió la condición de un paso —p.
+    ej. al cargar una partida guardada a medias— la máquina lo salta sola sin
+    bloquear. Botón "Saltar tutorial" siempre visible. Recuerda en
+    `localStorage` (`miniaoe_tutorial_done`) que ya se completó o se saltó,
+    para no repetirlo. Deshabilitado por completo en multijugador.
+  - **Línea de tiempo del resumen**: durante la partida se muestrean cada 30s
+    (de juego, afectados por la velocidad de partida) los recursos totales y
+    el "valor militar" (coste total invertido en tropas vivas) de cada bando
+    en `gameTimeline` (solo host/partida local, no en el cliente MP, que no
+    simula); se dibuja en `renderSummary` sobre un `<canvas id="tlChart">`
+    del resumen final: 2 líneas sólidas (recursos tú/rival) y 2 discontinuas
+    (valor militar tú/rival), o un aviso si la partida fue muy corta.
