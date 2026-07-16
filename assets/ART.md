@@ -134,9 +134,18 @@ de "cero errores de consola" de `CLAUDE.md` §4). Cuando se generen, añadir el
 nombre correspondiente a `SPRITE_FILES` en `index.html`:
 | Sprite | Archivo (a crear) | Emoji de respaldo actual | Notas |
 |---|---|---|---|
-| Catapulta | `unit_siege.png` | 🎯 | vista cenital, muy grande/pesada, ruedas de madera, brazo de lanzamiento visible |
-| Taller de Asedio | `bld_siegeworkshop.png` | 🏭 | cobertizo abierto con vigas de madera, similar tamaño a Cuartel |
+| Catapulta | `unit_siege.png` | 🎯 (respaldo procedural, ver abajo) | vista cenital, muy grande/pesada, ruedas de madera, brazo de lanzamiento visible |
+| Taller de Asedio | `bld_siegeworkshop.png` | 🏭 (respaldo con silueta) | cobertizo abierto con vigas de madera, similar tamaño a Cuartel |
 | Mercado | `bld_market.png` | 🏪 | toldo/puesto con mercancías apiladas, distinto de Casa/Granja |
+
+**Respaldo mejorado sin sprite** (2026-07-16, tras feedback de juego real: el
+emoji solo se veía pequeño y "sin gráfica"): mientras no exista `unit_siege.png`,
+la Catapulta se dibuja con una forma **vectorial propia** (`drawCatapultIcon`
+en `index.html`: ruedas, chasis de madera, brazo lanzador con contrapeso) en
+vez de un emoji; el Taller de Asedio usa una silueta con tejado a dos aguas
+(triángulo + cuerpo) con el emoji 🏭 dentro, en vez de un cuadro plano. Cuando
+se generen los PNG reales, estos respaldos procedurales dejan de usarse solos
+(el motor siempre prueba primero el sprite/atlas).
 
 ### Atlas de sprites (Fase 8, PR #17)
 Para reducir peticiones de red y el coste de reescalar sprites cada cuadro, 30
@@ -175,17 +184,20 @@ entero como patrón, y con solo 4 archivos de 256×256 cacheados una vez
 (`_patterns`) el ahorro sería nulo frente al riesgo de un patrón mal
 recortado.
 
-### Murallas y Puerta (PR #7 / Fase 4)
+### Murallas y Puerta (PR #7 / Fase 4; actualizado en la corrección post-lanzamiento del 2026-07-16)
 Sprites ya integrados fuera de la tabla anterior: `bld_wall.png`/
 `bld_wall_h.png`/`bld_wall_v.png` (muro, con variantes horizontal/vertical
 según `e.dir`), `bld_wall_tower.png` (Torre de Muralla) y `obj_mountain.png`
-(montañas decorativas de los riscos). La **Puerta** (Fase 4, edificio `gate`)
-reutiliza el sprite `obj_gate.png` que ya existía en `assets/sprites/` sin
-usar (no tiene variantes h/v propias, se dibuja igual en cualquier
-orientación de la línea de muralla). Único elemento visual nuevo de la Fase 4:
-un pequeño candado 🔒 (cerrada) / 🔓 (abierta) en emoji dibujado sobre la
-Puerta (no un sprite nuevo), siempre visible —no solo al seleccionarla— para
-que se note su estado de un vistazo.
+(montañas decorativas de los riscos). La **Puerta** (edificio `gate`) usaba
+originalmente `obj_gate.png` (una puerta de madera grande, sin variantes h/v,
+que desentonaba con el resto de la muralla de piedra). Tras feedback de juego
+real se cambió a dibujarse con el **mismo sprite que un tramo de muralla
+normal** (`bld_wall_h`/`bld_wall_v` según `e.dir`, concordancia visual total)
+más una pequeña marca oscura en la parte de arriba (dibujada por código, no
+un sprite nuevo) para diferenciarla, además del candado 🔒 (cerrada) / 🔓
+(abierta) en emoji, siempre visible —no solo al seleccionarla— para que se
+note su estado de un vistazo. `obj_gate.png` queda sin uso en el motor
+(se conserva en `assets/sprites/` por si se retoma en el futuro).
 
 ---
 
