@@ -1285,3 +1285,97 @@ de Era, la tregua expiró a tiempo, 82 entidades vivas, sin errores ni cuelgues.
 
 **Documentación actualizada en la misma tanda**: `CLAUDE.md` §6 (nueva
 entrada), `filemap.md` (§19), este archivo.
+
+## 2026-07-16 (2) — Segunda ronda de correcciones tras juego real
+
+Nuevo feedback tras probar la primera ronda de correcciones. Se abordaron 6
+problemas más, incluida una corrección de diseño importante en murallas.
+
+1. **Murallas: bloquean también al DUEÑO (corrección de diseño)**. Desde la
+   Fase 4, una muralla normal nunca bloqueaba a su propio dueño (`w.owner !==
+   moverSide`), solo al rival — así que "atravesar la propia muralla" era el
+   comportamiento previsto, no un bug, pero el jugador lo reportó como un
+   error de fondo: si hay muralla, nadie debería poder cruzarla salvo por una
+   puerta. Se cambió `wallBlocksSide`: una muralla normal ahora bloquea a
+   TODOS (propios y rivales); solo una Puerta abierta deja pasar al dueño.
+   - **Efecto colateral descubierto y corregido**: al bloquear también al
+     dueño, el hueco de paso de una Puerta se volvió geométricamente
+     demasiado angosto — los dos tramos de muralla INMEDIATAMENTE vecinos a
+     la puerta (separados solo `WALL_SP`≈28px) también bloqueaban ahora al
+     dueño, dejando un pasillo real de ~4px, insuficiente para que la física
+     de movimiento lo cruzara de forma fiable (verificado: con una puerta
+     abierta, la unidad propia se quedaba atascada justo en el umbral,
+     `x≈1297` sin cruzar `x=1300`). Solución: nuevo `frameOpenGates` (subcaché
+     de `frameWalls`, recalculado una vez por cuadro) — un tramo de muralla
+     normal vecino a una puerta ABIERTA del MISMO dueño dentro de `WALL_SP*1.6`
+     deja de bloquear a ESE dueño (pasillo real de paso), pero sigue
+     bloqueando al rival siempre (el rival solo puede cruzar por el hueco
+     exacto de la puerta). Verificado tras el arreglo: dueño cruza limpio
+     (`x: 1397`, antes se atascaba en `1297`), rival sigue bloqueado
+     (`x:1270`), puerta cerrada sigue bloqueando a todos (incl. dueño) en un
+     anillo borde-a-borde del mapa (sin forma de rodear).
+   - Se añadió una excepción en `blockedByWall` para `state==='build'` sobre
+     ESE mismo tramo: un aldeano reparando/recargando su propia muralla
+     (incluida una Torre de Muralla) puede acercarse lo suficiente para
+     trabajar, aunque ahora la muralla bloquee.
+   - Regresión completa re-verificada tras el cambio: A*/formaciones/rodeo de
+     extremos (Fase 4) intactos, combate/proyectiles (Fase 1) intactos,
+     multijugador LAN (bandos correctos) intacto, cruce del puente intacto,
+     partida de 300s con IA Difícil sin errores.
+
+2. **Torres de Muralla gratis eliminadas (trampa de recursos)**. Antes,
+   `wallSegmentType` insertaba una Torre de Muralla GRATIS cada
+   `WALL_TOWER_EVERY=6` tramos al trazar una línea (mismo coste que un tramo
+   normal, 🪨5, pero con ataque) — mucho más barato que una Torre real
+   (🪵50+🪨125) con estadísticas similares o mejores (hp 1100 vs 900). Ahora
+   `wallSegmentType` solo distingue Puerta (tramo central) o muralla normal;
+   la Torre de Muralla se **construye explícitamente** sobre un tramo de
+   muralla normal YA EN PIE, pagando su coste real (`BLD.wall_tower.cost`),
+   vía un nuevo botón "🏯 Construir Torre de Muralla" en el panel del tramo
+   seleccionado (`upgradeWallToTower`, con comando MP `wallUpgrade`). Convierte
+   la entidad EN EL SITIO (mismo id/posición/bando), así sigue formando parte
+   de la misma línea sin dejar hueco. Verificado: una muralla trazada con el
+   herramienta real ya no genera ninguna Torre de Muralla automática (antes
+   sí); seleccionar un tramo normal muestra el botón (con su coste 🪨20);
+   pagarlo convierte el tramo (hp 700→1100) y le da capacidad de auto-disparo
+   real contra un enemigo pegado.
+3. **Puerta con concordancia visual real con la muralla**. El intento anterior
+   (Fase de corrección previa) rotaba `obj_gate.png` 90° para muralla
+   vertical, pero seguía siendo una puerta de madera grande que desentonaba
+   con la piedra del resto de la muralla. Ahora la Puerta se dibuja con el
+   MISMO sprite que un tramo de muralla normal (`bld_wall_h`/`bld_wall_v`
+   según `e.dir`, igual que un tramo cualquiera) y se le añade solo una
+   pequeña marca oscura en la parte de ARRIBA (un pequeño dintel/marca, en
+   ambas orientaciones, sin rotar) para diferenciarla de un tramo normal,
+   además del candado 🔒/🔓 que ya existía. Se quitó `drawWallOrientedSprite`
+   (quedó sin uso). Verificado visualmente con una línea horizontal y otra
+   vertical, cada una con su puerta: ambas se integran con la textura de
+   piedra de la muralla, con la marca+candado arriba en ambos casos.
+4. **Catapulta y Taller de Asedio con dibujo procedural** (sin acceso a
+   Ideogram esta sesión tampoco). El intento anterior (emoji 🎯 agrandado +
+   plataforma) seguía sin leer como una máquina de asedio real. Ahora:
+   - **Catapulta** (`drawCatapultIcon`): dibujo 100% vectorial en el espacio
+     local ya transformado de `drawUnit` — dos ruedas con radios, un chasis
+     de madera (rectángulo redondeado) y un brazo lanzador diagonal con un
+     contrapeso/cangilón al final. Se reconoce como catapulta a simple vista,
+     sin depender de ningún emoji.
+   - **Taller de Asedio**: el respaldo genérico (rect + emoji) se sustituyó,
+     solo para este edificio, por una silueta con **tejado a dos aguas**
+     (triángulo + cuerpo rectangular) con el emoji 🏭 dentro — lee claramente
+     como un edificio en vez de un cuadro plano.
+   - Verificado visualmente (captura en el scratchpad de la sesión): ambas
+     catapultas (jugador y rival) y el taller se distinguen con claridad del
+     terreno y de otras unidades/edificios.
+5. **Sonido de construcción suavizado**: el "clic" (`case 'build'`) usaba una
+   onda cuadrada a volumen 0.10, con muchos armónicos y percibido como fuerte/
+   molesto en partidas largas. Cambiado a onda triangular (más suave) y
+   volumen 0.055 — un "toc" discreto en vez de un clic agudo.
+
+**Verificación de regresión** (headless, Chromium, cero errores en todos los
+casos): combate/proyectiles, multijugador LAN (1 base propia + 1 rival),
+cruce del puente, A*/formaciones/puertas/rodeo de extremos (Fase 4 completa),
+Centro Urbano/tregua/guarnición (ronda anterior), y una partida real simulada
+de 300s con IA Difícil sin errores.
+
+**Documentación actualizada en la misma tanda**: `CLAUDE.md` §6, `filemap.md`,
+este archivo.

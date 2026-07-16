@@ -390,9 +390,26 @@ El archivo se organiza en estas secciones (en orden de aparición):
     ramas de guarnición (`handleTap` y el caso `'garrison'` de `hostHandleCmd`)
     exigen `garrisonEnabled`. `snapWallEndpoint` (usado por `wallTap`/`hostWall`)
     ajusta los extremos de una muralla al borde del mapa o a otra muralla
-    cercana. `drawWallOrientedSprite` (junto a `drawSprite`) dibuja un sprite
-    girado 90° — usado para que la Puerta se vea orientada según `e.dir`.
-    `maybeShowQuickHelp`/`QUICKHELP_KEY` (overlay `#quickHelpScreen`, llamado
-    desde `startGame`). El bucle de recolección (`update`) ya no reproduce SFX
-    por cuadro y, al agotarse un edificio de producción, pasa a `build` sobre
-    el mismo edificio en vez de buscar otro (retoma `gather` al recargarse).
+    cercana. `maybeShowQuickHelp`/`QUICKHELP_KEY` (overlay `#quickHelpScreen`,
+    llamado desde `startGame`). El bucle de recolección (`update`) ya no
+    reproduce SFX por cuadro y, al agotarse un edificio de producción, pasa a
+    `build` sobre el mismo edificio en vez de buscar otro (retoma `gather` al
+    recargarse).
+20. **Segunda ronda de correcciones** (2026-07-16): `wallBlocksSide` ahora
+    bloquea SIEMPRE en una muralla normal (antes nunca al dueño); `frameOpenGates`
+    (subcaché de `frameWalls`, recalculado en `update`) da al dueño un pasillo
+    real de paso junto a una Puerta abierta (los tramos vecinos dejan de
+    bloquearlo a él, no al rival). `blockedByWall` tiene una excepción para
+    `state==='build'` sobre el propio tramo (reparar/recargar sin quedar
+    bloqueado por él mismo). `wallSegmentType` ya no inserta Torres de Muralla
+    automáticas (solo la Puerta central); `upgradeWallToTower` (con comando MP
+    `wallUpgrade`) construye una explícitamente sobre un tramo normal ya en
+    pie, pagando su coste real, y el panel de un tramo normal muestra el botón
+    correspondiente (`buildingButtons`, rama `b.btype==='wall'`). `drawBuilding`
+    dibuja la Puerta con el mismo sprite que la muralla (`bld_wall_h`/`_v`) más
+    una marca superior, y da al Taller de Asedio una silueta de tejado a dos
+    aguas en el respaldo sin sprite. `drawCatapultIcon` (junto a `drawUnit`)
+    sustituye el emoji de la Catapulta por un dibujo vectorial (ruedas, chasis,
+    brazo lanzador). `drawWallOrientedSprite` y `WALL_TOWER_EVERY` se quitaron
+    (sin uso tras estos cambios). El SFX `'build'` pasó de onda cuadrada a
+    triangular y menos volumen.

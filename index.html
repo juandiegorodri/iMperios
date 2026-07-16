@@ -684,6 +684,7 @@ const enemy  = { res:{food:300, wood:300, gold:200, stone:200}, age:1, mods:fres
 
 let bridge = null;          // {x0,x1,y0,y1} hueco transitable del río (puente)
 let frameWalls = [];        // murallas construidas (recalculado cada frame, reutilizando el array)
+let frameOpenGates = [];    // subconjunto de frameWalls: puertas ABIERTAS (para el pasillo de paso del dueño, ver wallBlocksSide)
 let pings = [];             // efectos de selección/deselección
 let projectiles = [];       // flechas en vuelo (arqueros, héroe arco, torres, castillo)
 let corpses = [];           // cadáveres visuales (fade + caída), fuera de `entities`
@@ -831,32 +832,6 @@ function drawSprite(name, cx, cy, targetH, anchorBottom){
   ctx.drawImage(img, cx - w/2, dy, w, h);
   return true;
 }
-// Dibuja un sprite girado 90° (feedback de juego real): la Puerta (`obj_gate`)
-// solo tiene una orientación de arte (pensada para muralla horizontal) y se
-// veía perpendicular/sin sentido en una muralla vertical. En vez de generar un
-// sprite nuevo, se gira el existente 90° con el mismo `thickness` (grosor,
-// perpendicular a la muralla) en ambos casos, para que se vea del mismo ancho
-// que un tramo de muralla normal, solo que orientado según `e.dir`.
-function drawWallOrientedSprite(name, cx, cy, thickness, vertical){
-  let img, fw, fh, sx=0, sy=0, sw, sh, fromAtlas=false;
-  if(atlasReady && atlasFrames && atlasFrames[name]){
-    const f = atlasFrames[name]; img=atlasImg; fw=f.w; fh=f.h; sx=f.x; sy=f.y; sw=f.w; sh=f.h; fromAtlas=true;
-  } else {
-    img = spr(name); if(!img) return false;
-    fw=img.naturalWidth; fh=img.naturalHeight; sw=fw; sh=fh;
-  }
-  const sc = thickness/fh, w = fw*sc, h = thickness;   // local: h siempre es el grosor
-  if(!vertical){
-    if(fromAtlas) ctx.drawImage(img, sx,sy,sw,sh, cx-w/2, cy-h/2, w, h);
-    else ctx.drawImage(img, cx-w/2, cy-h/2, w, h);
-  } else {
-    ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI/2);
-    if(fromAtlas) ctx.drawImage(img, sx,sy,sw,sh, -w/2, -h/2, w, h);
-    else ctx.drawImage(img, -w/2, -h/2, w, h);
-    ctx.restore();
-  }
-  return true;
-}
 // Transform local barato para la animación de unidades (traslado+rotación+
 // volteo) SIN usar ctx.save()/restore(): en Canvas 2D clonar todo el estado
 // (fillStyle, clip, alpha...) en cada unidad es mucho más caro que fijar la
@@ -997,7 +972,10 @@ function playSfx(name){
     case 'arrow':     if(sfxAllowed('arrow',60))  playTone(1500, 0.07, 'sine', 0.10); break;
     case 'chop':      if(sfxAllowed('chop',420))  playNoise(0.07, 0.18, 850, 'bandpass'); break;
     case 'mine':      if(sfxAllowed('mine',420))  playTone(300, 0.06, 'square', 0.11); break;
-    case 'build':     if(sfxAllowed('build',380)) playTone(680, 0.05, 'square', 0.10); break;
+    // Suavizado (feedback de juego real): el "clic" de construcción sonaba muy
+    // fuerte/molesto en partidas largas (onda cuadrada, muchos armónicos).
+    // Onda triangular (más suave) y menos volumen para un "toc" discreto.
+    case 'build':     if(sfxAllowed('build',380)) playTone(520, 0.05, 'triangle', 0.055); break;
     case 'ready':     playTone(880,0.10,'triangle',0.18); playTone(1180,0.12,'triangle',0.15,0.09); break;
     case 'destroyed': if(sfxAllowed('destroyed',150)){ playNoise(0.45,0.26,280,'lowpass'); playTone(85,0.45,'sawtooth',0.14); } break;
     case 'alert':     if(sfxAllowed('alert',5000)){ playTone(520,0.14,'square',0.22); playTone(520,0.14,'square',0.2,0.22); } break;
@@ -1473,6 +1451,7 @@ function hostHandleCmd(m){
     case 'expel': { const eb=find(m.b); if(eb && eb.owner===own) expelGarrison(eb); break; }
     case 'market': if(RES[m.r]) marketTrade(own, m.dir, m.r); break;
     case 'gate': { const g=find(m.b); if(g && g.owner===own && g.btype==='gate'){ g.closed=!!m.closed; invalidatePathGrid(); } break; }
+    case 'wallUpgrade': { const w=find(m.b); if(w && w.owner===own) upgradeWallToTower(w); break; }
     case 'rally': { const b=find(m.b); if(b && b.owner===own) b.rally = m.rtype ? {x:m.x,y:m.y,rtype:m.rtype} : {x:m.x,y:m.y}; break; }
     case 'place': hostPlace(m, units); break;
     case 'wall': hostWall(m); break;
@@ -1500,6 +1479,21 @@ function hostWall(m){
     const b=makeBuilding('enemy', bt, pt.x,pt.y,false);
     b.dir=dir; if(bt==='gate') b.closed=false;
     entities.push(b); });
+}
+// Mejora explícita: convierte un tramo de muralla NORMAL ya construido en una
+// Torre de Muralla, pagando su coste real (antes salían gratis cada N tramos
+// al trazar la línea — una trampa, ver `wallSegmentType`). Se hace EN EL SITIO
+// (misma posición/bando), así sigue formando parte de la misma línea de
+// muralla sin dejar un hueco.
+function upgradeWallToTower(w){
+  if(!w || w.btype!=='wall' || !w.built) return;
+  const s = side(w.owner);
+  if(!canAfford(s, BLD.wall_tower.cost)) return;
+  pay(s, BLD.wall_tower.cost);
+  w.btype = 'wall_tower';
+  w.maxHp = BLD.wall_tower.hp; w.hp = BLD.wall_tower.hp;
+  invalidatePathGrid();   // cambia el radio de colisión (tamaño distinto)
+  if(w.owner==='player') showHint('Torre de Muralla construida.');
 }
 
 /* ==================== GUARDADO LOCAL (Fase 6, un solo jugador) ====================
@@ -2740,7 +2734,11 @@ function update(dt){
   // el array (`.length=0` + `push`) en vez de `.filter()` para no crear un
   // array nuevo cada frame (Fase 8: menos presión sobre el GC).
   frameWalls.length = 0;
-  for(const e of entities){ if(e.kind==='building' && BLD[e.btype].wall && e.built) frameWalls.push(e); }
+  frameOpenGates.length = 0;
+  for(const e of entities){ if(e.kind==='building' && BLD[e.btype].wall && e.built){
+    frameWalls.push(e);
+    if(BLD[e.btype].gate && !e.closed) frameOpenGates.push(e);
+  } }
   // Proyectiles en vuelo de este frame (disparados el frame anterior)
   updateProjectiles(dt);
   // Unidades
@@ -3103,20 +3101,37 @@ function nearestBlockingWall(e){
   }
   return best;
 }
-// ¿Este muro/puerta bloquea el paso a unidades del bando `moverSide`? Las
-// murallas normales nunca bloquean a su propio dueño; las puertas tampoco
-// (dejan pasar al dueño y bloquean al rival, igual que una muralla), SALVO que
-// estén cerradas manualmente (`w.closed`), en cuyo caso bloquean a TODOS,
+// ¿Este muro/puerta bloquea el paso a unidades del bando `moverSide`?
+// Corrección tras feedback de juego real: antes una muralla normal NUNCA
+// bloqueaba a su propio dueño (solo al rival), lo que permitía a las propias
+// unidades atravesarla libremente — nada bloqueaba de verdad. Ahora una
+// muralla normal bloquea a TODOS, propios y rivales: la única forma de pasar
+// es por una Puerta. La Puerta deja pasar al dueño y bloquea al rival, SALVO
+// que esté cerrada manualmente (`w.closed`), en cuyo caso bloquea a TODOS,
 // incluido el dueño.
 function wallBlocksSide(w, moverSide){
-  if(BLD[w.btype].gate && w.closed) return true;
-  return w.owner !== moverSide;
+  if(BLD[w.btype].gate) return w.closed || w.owner !== moverSide;
+  // Un tramo de muralla NORMAL vecino a una puerta ABIERTA del mismo dueño
+  // no bloquea al DUEÑO (le da un pasillo real de paso, no solo el hueco
+  // exacto de la puerta — geométricamente demasiado angosto entre los dos
+  // tramos vecinos, spaciados a WALL_SP, para que la física de movimiento lo
+  // cruce de forma fiable). Sigue bloqueando al rival: solo puede cruzar por
+  // el hueco exacto de la puerta abierta, nunca por sus vecinos.
+  if(w.owner===moverSide){
+    for(const g of frameOpenGates){
+      if(g.owner===w.owner && dist(w,g) < WALL_SP*1.6) return false;
+    }
+  }
+  return true;
 }
 // ¿La posición choca con una muralla/puerta que bloquea a este bando?
 function blockedByWall(e, x, y){
   for(const w of frameWalls){
     if(!wallBlocksSide(w, e.owner)) continue;
     if(e.state==='attack' && e.target && e.target.id===w.id) continue;
+    // Reparando/recargando su propia muralla (incl. Torre de Muralla): puede
+    // acercarse lo suficiente para trabajar en ella aunque ahora bloquee.
+    if(e.state==='build' && e.build===w.id) continue;
     const r = radiusOf(w) + 11;
     if((x-w.x)*(x-w.x)+(y-w.y)*(y-w.y) < r*r) return true;
   }
@@ -3597,8 +3612,8 @@ function render(){
         const a=worldToScreen(placement.start.x,placement.start.y), b=worldToScreen(w.x,w.y);
         ctx.strokeStyle='rgba(202,164,106,.6)'; ctx.lineWidth=2;
         ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
-        pts.forEach((pt,i)=>{ const sp=worldToScreen(pt.x,pt.y); const tower=i%WALL_TOWER_EVERY===0;
-          ctx.fillStyle = onObstacle(pt.x,pt.y) ? 'rgba(208,90,90,.7)' : (tower?'rgba(120,160,210,.85)':'rgba(180,180,170,.85)');
+        pts.forEach((pt,i)=>{ const sp=worldToScreen(pt.x,pt.y); const isGate=wallSegmentType(pts,i)==='gate';
+          ctx.fillStyle = onObstacle(pt.x,pt.y) ? 'rgba(208,90,90,.7)' : (isGate?'rgba(120,160,210,.85)':'rgba(180,180,170,.85)');
           ctx.fillRect(sp.x-6*cam.zoom, sp.y-6*cam.zoom, 12*cam.zoom, 12*cam.zoom); });
       } else {
         const s=worldToScreen(w.x,w.y);
@@ -3736,32 +3751,52 @@ function drawBuilding(e){
   const s=worldToScreen(e.x,e.y); const d=BLD[e.btype];
   const sz=d.size*cam.zoom;
   const sel = e.owner==='player' && selection.includes(e.id);
-  const img = spr(d.gate ? 'obj_gate' : ('bld_'+e.btype));
+  const img = spr(d.gate ? 'bld_wall' : ('bld_'+e.btype));
   const scale = d.wall ? 1.45 : 1.7;
   const spriteH = d.size*scale*cam.zoom;
   ctx.globalAlpha = e.built?1:0.55;
   if(img){
-    if(e.btype==='wall'){
+    if(e.btype==='wall' || d.gate){
+      // La Puerta ahora usa el MISMO sprite que la muralla —concordancia
+      // visual total, en ambas orientaciones— con una pequeña marca en la
+      // parte de arriba para distinguirla de un tramo normal (feedback de
+      // juego real: antes usaba `obj_gate.png`, una puerta de madera grande
+      // que desentonaba con el resto de la muralla de piedra).
       const wn = e.dir==='v' ? 'bld_wall_v' : 'bld_wall_h';
       if(!drawSprite(wn, s.x, s.y, d.size*1.2*cam.zoom, false))
         drawSprite('bld_wall', s.x, s.y, d.size*1.05*cam.zoom, false);   // respaldo
-    } else if(d.gate){
-      // obj_gate.png solo tiene una orientación de arte (pensada para muralla
-      // horizontal); en muralla vertical se gira 90° para que no se vea
-      // perpendicular/sin sentido (feedback de juego real, sin sprite nuevo).
-      drawWallOrientedSprite('obj_gate', s.x, s.y, d.size*1.3*cam.zoom, e.dir==='v');
+      if(d.gate){
+        const markW=d.size*0.5*cam.zoom, markH=7*cam.zoom, my=s.y-d.size*0.62*cam.zoom;
+        ctx.fillStyle='#2a2a30'; ctx.strokeStyle='#111114'; ctx.lineWidth=1.2*cam.zoom;
+        roundRect(s.x-markW/2, my-markH/2, markW, markH, 3*cam.zoom); ctx.fill(); ctx.stroke();
+      }
     } else {
       drawSprite('bld_'+e.btype, s.x, s.y + sz*0.12, spriteH, true);
     }
   } else {
-    // respaldo: rect + emoji (la Puerta usa 🚪 si falta `obj_gate.png`)
+    // respaldo: rect + emoji. El Taller de Asedio (sin sprite propio) usa una
+    // silueta con tejado a dos aguas en vez de un cuadro plano, para que lea
+    // claramente como un edificio (feedback de juego real).
     ctx.fillStyle = e.owner==='player' ? '#26384f' : '#4a2630';
     ctx.strokeStyle = e.owner==='player' ? '#5b86c4' : '#c46a6a';
     ctx.lineWidth = sel?3:1.5;
-    roundRect(s.x-sz/2, s.y-sz/2, sz, sz, 8*cam.zoom); ctx.fill(); ctx.stroke();
-    ctx.font=`${Math.floor(d.size*0.55*cam.zoom)}px serif`;
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(d.emoji, s.x, s.y);
+    if(e.btype==='siegeworkshop'){
+      const roofH=sz*0.3;
+      roundRect(s.x-sz/2, s.y-sz/2+roofH, sz, sz*0.5, 6*cam.zoom); ctx.fill(); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(s.x-sz*0.56, s.y-sz/2+roofH);
+      ctx.lineTo(s.x, s.y-sz/2-roofH*0.25);
+      ctx.lineTo(s.x+sz*0.56, s.y-sz/2+roofH);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.font=`${Math.floor(d.size*0.42*cam.zoom)}px serif`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(d.emoji, s.x, s.y+sz*0.14);
+    } else {
+      roundRect(s.x-sz/2, s.y-sz/2, sz, sz, 8*cam.zoom); ctx.fill(); ctx.stroke();
+      ctx.font=`${Math.floor(d.size*0.55*cam.zoom)}px serif`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(d.emoji, s.x, s.y);
+    }
   }
   ctx.globalAlpha=1;
   // Puerta: candado abierto/cerrado siempre visible (no solo al seleccionar),
@@ -3825,6 +3860,28 @@ function drawBuilding(e){
   }
 }
 
+// Respaldo procedural de la Catapulta (sin sprite propio, Fase 5): ruedas +
+// chasis de madera + brazo lanzador con contrapeso, dibujado en el espacio
+// local ya transformado de `drawUnit` (origen = pivote de la unidad).
+function drawCatapultIcon(sz){
+  const cy = sz*0.42;
+  ctx.fillStyle='#2b2018';
+  ctx.beginPath(); ctx.arc(-sz*0.34, cy+sz*0.14, sz*0.22, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(sz*0.34, cy+sz*0.14, sz*0.22, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#6b5a48'; ctx.lineWidth=sz*0.03;
+  for(const wx of [-sz*0.34, sz*0.34]){
+    ctx.beginPath(); ctx.moveTo(wx-sz*0.16, cy+sz*0.14); ctx.lineTo(wx+sz*0.16, cy+sz*0.14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(wx, cy); ctx.lineTo(wx, cy+sz*0.28); ctx.stroke();
+  }
+  ctx.fillStyle='#6b4a2f'; ctx.strokeStyle='#3a2818'; ctx.lineWidth=sz*0.05;
+  roundRect(-sz*0.44, cy-sz*0.16, sz*0.88, sz*0.3, sz*0.05); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle='#4a3320'; ctx.lineWidth=sz*0.1; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(-sz*0.12, cy-sz*0.08); ctx.lineTo(sz*0.36, cy-sz*0.82); ctx.stroke();
+  ctx.fillStyle='#211a12';
+  ctx.beginPath(); ctx.arc(sz*0.36, cy-sz*0.82, sz*0.15, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#3a2818'; ctx.lineWidth=sz*0.02; ctx.stroke();
+}
+
 function drawUnit(e){
   if(!onScreen(e)) return;
   const s=worldToScreen(e.x,e.y); const d=UNIT[e.type];
@@ -3874,20 +3931,17 @@ function drawUnit(e){
       ctx.beginPath(); ctx.arc(0, sz*0.1, sz*0.7, 0, Math.PI*2);
       ctx.fillStyle='rgba(230,190,90,.28)'; ctx.fill();
     }
-    // Unidades de asedio sin sprite (catapulta, Fase 5): sin esta "plataforma"
-    // de madera detrás, el emoji quedaba pequeño y se perdía entre el terreno
-    // (parecía "sin gráfica"). Se dibuja más grande y con una base sólida para
-    // que se note como una máquina de asedio pesada, no una unidad más.
-    const isSiege = d.cat==='siege' && !d.hero;
-    const emojiSz = isSiege ? sz*1.6 : sz;
-    if(isSiege){
-      ctx.beginPath(); ctx.ellipse(0, sz*0.42, sz*0.85, sz*0.4, 0, 0, Math.PI*2);
-      ctx.fillStyle='#5b4632'; ctx.fill();
-      ctx.strokeStyle='#2e2318'; ctx.lineWidth=1.5; ctx.stroke();
+    // Catapulta sin sprite (Fase 5): el emoji de respaldo (🎯) no lee como una
+    // máquina de asedio y se perdía en el terreno ("sin gráfica"). En vez de
+    // emoji, un dibujo procedural (ruedas + chasis + brazo lanzador) que se
+    // reconoce como catapulta a simple vista (feedback de juego real).
+    if(d.cat==='siege' && !d.hero){
+      drawCatapultIcon(sz);
+    } else {
+      ctx.font=`${sz}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(d.emoji, 0, 0);
+      if(d.hero){ ctx.font=`${12*cam.zoom}px serif`; ctx.fillText('⭐', sz*0.45, -sz*0.45); }
     }
-    ctx.font=`${emojiSz}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(d.emoji, 0, 0);
-    if(d.hero){ ctx.font=`${12*cam.zoom}px serif`; ctx.fillText('⭐', sz*0.45, -sz*0.45); }
   }
   // flash blanco al recibir daño
   if(e.hurtT){
@@ -4396,13 +4450,17 @@ function tryPlaceBuilding(p){
 
 // --- Murallas: primer toque = inicio, segundo toque = fin de la línea ---
 const WALL_SP = 28;          // separación entre segmentos
-const WALL_TOWER_EVERY = 6;  // un segmento de cada N es Torre de Muralla
 // Tipo de construcción para el tramo `i` de una muralla de `pts.length` puntos:
 // el tramo CENTRAL es una Puerta 🚪 (si hay al menos 3 tramos, para que tenga
-// sentido); si no, Torre de Muralla cada N tramos; si no, muralla normal.
+// sentido); el resto son muralla normal. Antes cada `WALL_TOWER_EVERY` tramos
+// salía una Torre de Muralla GRATIS (mismo coste que un tramo normal, pero con
+// ataque) — una trampa que hacía más barato "amurallar" que construir Torres
+// de verdad. Ahora una Torre de Muralla se CONSTRUYE explícitamente sobre un
+// tramo de muralla normal ya en pie (ver `upgradeWallToTower`), pagando su
+// coste real.
 function wallSegmentType(pts, i){
   if(pts.length>=3 && i===Math.floor(pts.length/2)) return 'gate';
-  return (i%WALL_TOWER_EVERY===0) ? 'wall_tower' : 'wall';
+  return 'wall';
 }
 function wallTap(p){
   const w=screenToWorld(p.x,p.y);
@@ -4491,7 +4549,7 @@ function updateActionPanel(){
     if(placement.wall){
       selinfoEl.innerHTML = placement.start
         ? 'Muralla: toca el <b>punto final</b>.'
-        : 'Muralla: toca el <b>punto inicial</b> (🪨5 por tramo, torre cada '+WALL_TOWER_EVERY+').';
+        : 'Muralla: toca el <b>punto inicial</b> (🪨5 por tramo, puerta central si hay 3+).';
     } else {
       selinfoEl.innerHTML = `Colocando <b>${BLD[placement.btype].name}</b> — toca el mapa.`;
     }
@@ -4672,6 +4730,17 @@ function buildingButtons(b){
   else if(BLD[b.btype].produces){
     const ico={food:'🍖',wood:'🪵',gold:'🪙',stone:'🪨'}[BLD[b.btype].produces];
     actionsEl.appendChild(btnEl('ℹ️ Producción', ico+' renovable', '', false, ()=>{}));
+  }
+  else if(b.btype==='wall'){
+    // Torre de Muralla como MEJORA explícita de un tramo ya en pie (feedback de
+    // juego real: antes salían gratis cada N tramos al trazar la muralla, más
+    // barato que construir una Torre de verdad — una trampa). Paga el coste
+    // real de la Torre de Muralla y convierte ESTE tramo, en su sitio.
+    const canUp = b.built && canAfford(player, BLD.wall_tower.cost);
+    actionsEl.appendChild(btnEl('🏯 Construir Torre de Muralla', costStr(BLD.wall_tower.cost), '', canUp, ()=>{
+      if(net.mode==='client'){ netSend({t:'cmd', c:'wallUpgrade', b:b.id}); return; }
+      upgradeWallToTower(b);
+    }));
   }
   else if(b.btype==='gate'){
     // Puerta: abierta (por defecto) deja pasar al dueño y bloquea al rival, como

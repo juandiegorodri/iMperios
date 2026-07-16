@@ -634,3 +634,39 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     con IA Difícil y tregua (sin errores, sin fugas). Detalle completo,
     incluidas las cifras de cada prueba, en `progress.md` (entrada
     2026-07-16, sección de correcciones post-lanzamiento).
+- **Segunda ronda de correcciones tras juego real** (2026-07-16): 6 problemas
+  más reportados tras probar la primera ronda:
+  - **Las murallas ahora bloquean también al DUEÑO**: antes una muralla
+    normal nunca bloqueaba a su propio bando (solo al rival) — comportamiento
+    de diseño de la Fase 4, mal percibido en juego real como "las murallas no
+    sirven de nada". Ahora una muralla normal bloquea a TODOS; solo una
+    Puerta abierta deja pasar al dueño. Al hacerlo, el hueco de una Puerta se
+    volvía geométricamente demasiado angosto para cruzarlo (los dos tramos
+    vecinos, a solo `WALL_SP`≈28px, también bloqueaban al dueño) — corregido
+    con `frameOpenGates`: los tramos normales vecinos a una Puerta ABIERTA del
+    mismo dueño dejan de bloquearlo a ÉL (pasillo real de paso), sin dar esa
+    cortesía al rival, que solo puede cruzar por el hueco exacto de la
+    Puerta. Excepción añadida en `blockedByWall` para que un aldeano pueda
+    acercarse a reparar/recargar su propia muralla aunque ahora bloquee.
+  - **Torres de Muralla gratis eliminadas**: antes salía una Torre de Muralla
+    GRATIS cada 6 tramos al trazar una línea (mismo coste que un tramo normal
+    pero con ataque, más barata que una Torre real) — una trampa de recursos.
+    Ahora la Torre de Muralla se construye EXPLÍCITAMENTE sobre un tramo de
+    muralla normal ya en pie (botón "🏯 Construir Torre de Muralla", paga su
+    coste real, `upgradeWallToTower`), convirtiendo la entidad en el sitio.
+  - **Puerta con concordancia visual real**: ahora usa el MISMO sprite que un
+    tramo de muralla normal (piedra, orientado según `e.dir`) con solo una
+    pequeña marca oscura arriba para diferenciarla (más el candado 🔒/🔓 ya
+    existente), en vez de una puerta de madera grande que desentonaba.
+  - **Catapulta y Taller de Asedio con dibujo procedural**: sin sprites
+    propios (Ideogram no disponible tampoco esta sesión), ahora se dibujan
+    con formas vectoriales reconocibles en vez de solo un emoji — la
+    Catapulta con ruedas+chasis+brazo lanzador (`drawCatapultIcon`), el
+    Taller con una silueta de tejado a dos aguas.
+  - **Sonido de construcción suavizado**: onda triangular y menos volumen en
+    vez de una onda cuadrada fuerte, para que el "clic" de construir sea
+    discreto en partidas largas.
+  - Verificado headless: regresión completa de Fase 4 (A*/formaciones/
+    puertas/rodeo de extremos), combate/proyectiles, MP LAN, puente del río,
+    y partida real de 300s con IA Difícil, sin errores. Detalle en
+    `progress.md` (entrada 2026-07-16, segunda ronda).
