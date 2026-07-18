@@ -1436,3 +1436,87 @@ jugador arranca y funciona con normalidad.
 **Documentación actualizada en la misma tanda**: `README.md`, `DESIGN.md`,
 `PLAN.md`, `CLAUDE.md`, `filemap.md`, `iOS.md`, `assets/ART.md`, este
 archivo.
+
+## 2026-07-18 — Repositorio renombrado en GitHub y PR #20 fusionado a `main`
+
+El usuario renombró manualmente el repositorio en GitHub Settings de
+`juandiegorodri/Ageofempires` a **`juandiegorodri/iMperios`** (cerrando el
+límite conocido registrado en la entrada anterior). GitHub Pages ahora sirve
+desde `https://juandiegorodri.github.io/iMperios/`. GitHub redirige de forma
+transparente el nombre antiguo tanto en la API como en clones/remotos git ya
+existentes, así que no hizo falta cambiar ningún remoto local.
+
+Con el repo ya renombrado, se fusionó a `main` (squash) la PR #20
+"Renombrar el proyecto a iMperios + cerrar el plan maestro" (commit
+`651388f`), que reunía en la misma rama:
+- El renombrado en código Mini-AoE → iMperios (título, `localStorage`,
+  prefijo de salas PeerJS, `manifest.webmanifest`, `server.js`, toda la
+  documentación y la app iOS) descrito en la entrada anterior.
+- El commit de cierre de documentación del plan maestro (secciones nuevas en
+  `PLAN.md` resumiendo F1-F8 + las dos rondas de correcciones
+  post-lanzamiento).
+
+Antes de fusionar se corrió de nuevo la prueba headless de humo (300s
+simulados, IA Difícil, `node`+Playwright/Chromium) directamente sobre el
+código ya renombrado: 0 errores de consola, progresión normal de recursos/
+era, y se confirmó por `grep` que no quedan restos de `miniaoe`/`MiniAoE` en
+`index.html`. Tras el merge, la rama de desarrollo
+`claude/mini-aoe-browser-game-k5vf3r` se resincronizó con el nuevo `main`
+(`git fetch` + `git checkout -B` + `git push --force-with-lease`), dejando
+ambas ramas alineadas.
+
+Se corrigió también la única referencia desactualizada que quedaba en
+`CLAUDE.md` (§3, URL de GitHub Pages con el nombre antiguo del repo), y se
+dejó anotado ahí mismo que el repo se renombró el 2026-07-18.
+
+**Estado actual del proyecto**: plan maestro completo (F1-F8), dos rondas de
+correcciones post-lanzamiento, y el renombrado a iMperios (código +
+repositorio) ya fusionados en `main` y desplegados. Pendientes conocidos sin
+resolver (ver `PLAN.md` §7): verificar una conexión WebRTC/PeerJS real fuera
+del sandbox (sin egreso de red), QA en dispositivo físico (iPad real), y
+sprites propios de Ideogram para Catapulta/Taller de Asedio/Mercado (hoy
+usan dibujo procedural/emoji de respaldo). Para retomar el proyecto en una
+sesión nueva: leer `CLAUDE.md` → `filemap.md` → estas últimas entradas de
+`progress.md`.
+
+---
+
+## 2026-07-18 — Corrección de selección, rally y deselección (reporte de juego real)
+
+Tres problemas de usabilidad reportados tras jugar una partida real:
+
+- **Área de toque de unidades/edificios corregida** (`hitBox`, nueva función
+  en el bloque de hit-testing): el `pickAt` anterior usaba un círculo
+  centrado en `e.x,e.y`, pero unidades y edificios (salvo murallas/puertas)
+  se dibujan con el sprite **anclado por abajo** (`e.x,e.y` = la base/pies,
+  el sprite crece hacia arriba, ver `drawUnit`/`drawBuilding`). El círculo
+  solo cubría la mitad inferior del dibujo: tocar la cabeza de un aldeano o
+  el tejado de un edificio no lo seleccionaba, solo tocar cerca de los pies
+  funcionaba. `hitBox(e)` reproduce en coordenadas de mundo la misma
+  geometría que usa el render (altura/ancla del sprite según tipo de unidad
+  o `size`/escala del edificio) y `pickAt` ahora comprueba el toque contra
+  esa caja completa en vez de un círculo. Las murallas/puertas (dibujadas
+  centradas, no ancladas por abajo) mantienen el círculo de siempre.
+  Verificado headless: un toque cerca de la cabeza de un aldeano y uno cerca
+  de los pies seleccionan la misma unidad (antes solo el segundo).
+- **Punto de reunión (rally) solo en edificios que entrenan unidades**: antes
+  cualquier edificio propio seleccionado aceptaba un rally al tocar el mapa,
+  incluida una Granja, una Mina o la Herrería — edificios que no producen
+  unidades y no deberían mostrar ese guía. Nueva constante `TRAIN_BLD`
+  (`town`, `barracks`, `range`, `stable`, `siegeworkshop`, `castle`) y
+  `handleTap` solo fija `selBuild.rally` si `TRAIN_BLD.has(selBuild.btype)`.
+  Verificado headless: tocar el mapa con el Centro Urbano seleccionado fija
+  el rally; con una Granja seleccionada, no.
+- **Deseleccionar con 2 dedos**: gesto táctil habitual en iPad, en vez de
+  depender solo del botón "✕ Deseleccionar" del panel (que se mantiene como
+  alternativa para ratón/escritorio). Un toque con 2 dedos que NO se mueve
+  (ni paneo ni pinch, umbral 12px) y se suelta en <400ms deselecciona todo
+  (`input.twoFinger`/`twoFingerMoved`/`twoFingerTime`, revisado en
+  `pointerdown`/`pointermove`/`pointerup` del canvas); si el gesto se
+  convierte en un paneo o pinch real, se cancela automáticamente y no
+  deselecciona.
+
+Verificado headless (`node`+Playwright/Chromium, `startGame(cfg)` directo sin
+pasar por el menú): 0 errores de consola/`pageerror` en los tres escenarios,
+y las tres correcciones probadas por separado con `pickAt`/`handleTap`
+llamados directamente contra el estado del motor.

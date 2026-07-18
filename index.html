@@ -578,6 +578,9 @@ const BLD = {
 // volea); el Centro Urbano acepta aldeanos como refugio (no disparan). Máximo
 // de unidades guarnecidas por tipo de edificio.
 const GARRISON_MAX = { tower:4, wall_tower:4, castle:8, town:10 };
+// Edificios que entrenan unidades: los únicos donde tiene sentido un punto de
+// reunión (rally), ver `handleTap`.
+const TRAIN_BLD = new Set(['town','barracks','range','stable','siegeworkshop','castle']);
 function canGarrison(btype, utype){
   if(GARRISON_MAX[btype]===undefined) return false;
   if(btype==='town') return utype==='villager';
@@ -4125,6 +4128,7 @@ const input = {
   lastTapTime:0, lastTapPos:{x:0,y:0},
   pinchDist:0, downTime:0,
   panVelX:0, panVelY:0, lastPanT:0,   // velocidad reciente del paneo de 2 dedos (para la inercia)
+  twoFinger:false, twoFingerMoved:false, twoFingerStart:{x:0,y:0}, twoFingerTime:0,   // toque con 2 dedos = deseleccionar (gesto táctil habitual en iPad)
 };
 
 function getPos(ev){
@@ -4148,6 +4152,11 @@ canvas.addEventListener('pointerdown', (ev)=>{
     input.panMid = { x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 };
     // Un nuevo gesto de 2 dedos "agarra" la cámara: corta cualquier inercia previa.
     cam.vx=0; cam.vy=0; input.panVelX=0; input.panVelY=0; input.lastPanT=0;
+    // Toque con 2 dedos = deseleccionar (gesto táctil habitual en iPad, en vez
+    // de un botón en el menú). Si el gesto termina siendo un paneo/pinch real
+    // (se mueve), `pointermove` marca `twoFingerMoved` y se cancela.
+    input.twoFinger=true; input.twoFingerMoved=false;
+    input.twoFingerStart={...input.panMid}; input.twoFingerTime=performance.now();
   }
 }, {passive:false});
 
@@ -4161,6 +4170,11 @@ canvas.addEventListener('pointermove', (ev)=>{
     const pts=[...input.pointers.values()];
     const mid={ x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 };
     const d = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+    if(input.twoFinger && !input.twoFingerMoved){
+      const moved = Math.hypot(mid.x-input.twoFingerStart.x, mid.y-input.twoFingerStart.y);
+      const pinchMoved = input.pinchDist>0 && Math.abs(d-input.pinchDist)>12;
+      if(moved>12 || pinchMoved) input.twoFingerMoved=true;
+    }
     if(input.panMid){
       // Ajustes → velocidad de cámara: multiplicador aplicado al paneo táctil
       // (y heredado por la inercia, que se calcula a partir del mismo ddx/ddy).
@@ -4206,6 +4220,15 @@ canvas.addEventListener('pointerup', (ev)=>{
   }
 
   // Último dedo levantado
+  // Toque con 2 dedos (sin mover, y soltado rápido) = deseleccionar: gesto
+  // táctil habitual en iPad, en vez de obligar a usar el botón del panel.
+  if(input.twoFinger && !input.twoFingerMoved && (performance.now()-input.twoFingerTime)<400){
+    input.twoFinger=false; input.panning=false; input.panMid=null; input.pinchDist=0;
+    input.panVelX=0; input.panVelY=0; input.lastPanT=0;
+    if(selection.length) deselectAll();
+    return;
+  }
+  input.twoFinger=false;
   if(input.dragSelect){
     finishBoxSelect();
     input.dragSelect=false; input.panMid=null; input.pinchDist=0;
@@ -4232,7 +4255,7 @@ canvas.addEventListener('pointerup', (ev)=>{
 
 canvas.addEventListener('pointercancel', (ev)=>{ input.pointers.delete(ev.pointerId);
   input.dragSelect=false; input.panning=false; input.panMid=null; input.pinchDist=0;
-  input.panVelX=0; input.panVelY=0; input.lastPanT=0; });
+  input.panVelX=0; input.panVelY=0; input.lastPanT=0; input.twoFinger=false; input.twoFingerMoved=false; });
 
 // Rueda = zoom (escritorio)
 canvas.addEventListener('wheel', (ev)=>{
@@ -4252,6 +4275,28 @@ window.addEventListener('keydown',(e)=>{
 });
 
 // ---------- Hit testing ----------
+// Caja de impacto en coordenadas de mundo. Las unidades y los edificios (salvo
+// murallas/puertas) se dibujan con el sprite ANCLADO POR ABAJO (el punto `e.x,e.y`
+// es la base/pies, el sprite crece hacia arriba) — un círculo centrado en ese
+// punto solo cubría la mitad inferior del dibujo y dejaba la cabeza/tejado sin
+// zona táctil. Aquí se reproduce la misma geometría que usa el render
+// (`drawUnit`/`drawBuilding`, en unidades de mundo, sin `cam.zoom`) para que el
+// área de toque cubra el sprite completo.
+function hitBox(e){
+  if(e.kind==='unit'){
+    const bottom = e.y + 7.7, top = bottom - 40;   // ver drawUnit: sz*0.35, uH=40
+    return {x1:e.x-14, x2:e.x+14, y1:top-6, y2:bottom+6};
+  }
+  if(e.kind==='building'){
+    const d=BLD[e.btype];
+    if(d.wall || d.gate){ const r=radiusOf(e)+8; return {x1:e.x-r,x2:e.x+r,y1:e.y-r,y2:e.y+r}; }
+    const spriteH = d.size*1.7, bottom = e.y + d.size*0.12, top = bottom - spriteH;
+    const halfW = d.size*0.55;
+    return {x1:e.x-halfW, x2:e.x+halfW, y1:top-8, y2:bottom+8};
+  }
+  const r = radiusOf(e)+8;
+  return {x1:e.x-r, x2:e.x+r, y1:e.y-r, y2:e.y+r};
+}
 function pickAt(p){
   const w=screenToWorld(p.x,p.y);
   let best=null, bd=1e9;
@@ -4259,9 +4304,10 @@ function pickAt(p){
     if(e.kind==='resource'||e.kind==='unit'||e.kind==='building'){
       if(e.garrisonedIn) continue;    // unidad guarnecida (Fase 5): no se puede tocar
       if(!fogRenderOk(e)) continue;   // no se puede tocar lo que la niebla oculta
-      const r = radiusOf(e)+8;
+      const b = hitBox(e);
+      if(w.x<b.x1||w.x>b.x2||w.y<b.y1||w.y>b.y2) continue;
       const dd=dist({x:w.x,y:w.y}, e);
-      if(dd<r && dd<bd){ bd=dd; best=e; }
+      if(dd<bd){ bd=dd; best=e; }
     }
   }
   return {ent:best, world:w};
@@ -4353,10 +4399,14 @@ function handleTap(p){
   }
 
   // Si hay un edificio propio seleccionado → fijar punto de reunión (rally).
+  // Solo tiene sentido en edificios que ENTRENAN unidades (de donde saldrán
+  // unidades nuevas hacia ese punto); una Granja, una Mina o la Herrería no
+  // producen unidades y no deben mostrar/aceptar un rally (feedback de juego
+  // real: confundía, parecía que esos edificios también "mandaban" tropas).
   // Vale tocar terreno vacío, un recurso o un edificio de producción propio;
   // en estos dos últimos casos se guarda el TIPO de recurso, así los aldeanos
   // entrenados van derechos a recolectarlo (rally encadenable, ver `spawnTrained`).
-  if(selBuild && (!ent || ent.kind==='resource' || (ent.kind==='building' && ent.owner==='player' && BLD[ent.btype].produces))){
+  if(selBuild && TRAIN_BLD.has(selBuild.btype) && (!ent || ent.kind==='resource' || (ent.kind==='building' && ent.owner==='player' && BLD[ent.btype].produces))){
     const rtype = ent ? srcRtype(ent) : null;
     selBuild.rally = rtype ? {x:world.x, y:world.y, rtype} : {x:world.x, y:world.y};
     if(isCli) netSend({t:'cmd', c:'rally', b:selBuild.id, x:world.x, y:world.y, rtype});

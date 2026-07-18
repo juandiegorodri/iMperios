@@ -41,8 +41,10 @@ dependencias, sin servidor, sin proceso de compilación).
   otra rama sin permiso explícito.
 - Cada tanda de cambios: commit claro → push → **PR en borrador** hacia `main`.
 - `main` es la rama que sirve **GitHub Pages**:
-  `https://juandiegorodri.github.io/Ageofempires/`. Al fusionar a `main`, la
-  web se actualiza sola.
+  `https://juandiegorodri.github.io/iMperios/`. Al fusionar a `main`, la
+  web se actualiza sola. El repositorio se renombró de `Ageofempires` a
+  `iMperios` el 2026-07-18 (GitHub redirige automáticamente el nombre
+  antiguo, tanto en la API como en clones/remotos git existentes).
 - Tras fusionar una PR con *squash*, **sincroniza la rama con `main`**
   (`git fetch origin main` + `git reset --hard origin/main`) antes de la
   siguiente tanda, para que el próximo PR tenga un diff limpio.
@@ -670,3 +672,15 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     puertas/rodeo de extremos), combate/proyectiles, MP LAN, puente del río,
     y partida real de 300s con IA Difícil, sin errores. Detalle en
     `progress.md` (entrada 2026-07-16, segunda ronda).
+- **Corrección de selección, rally y deselección** (2026-07-18): tres ajustes
+  de usabilidad tras jugar una partida real. El área táctil de unidades/
+  edificios (`hitBox`) ahora sigue la geometría real del sprite (anclado por
+  abajo, crece hacia arriba) en vez de un círculo centrado en la base —
+  tocar la cabeza de un aldeano o el tejado de un edificio ya lo selecciona,
+  no solo cerca de los pies. El punto de reunión (rally) solo se puede fijar
+  en edificios que ENTRENAN unidades (`TRAIN_BLD`: Centro Urbano, Cuartel,
+  Galería de Tiro, Establo, Taller de Asedio, Castillo); Granja/Minas/
+  Herrería/etc. ya no lo aceptan. Tocar la pantalla con 2 dedos SIN mover
+  (ni paneo ni pinch) y soltar rápido deselecciona todo — gesto táctil
+  habitual en iPad, además del botón "✕ Deseleccionar" del panel (que se
+  mantiene para ratón/escritorio).
