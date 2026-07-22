@@ -1639,3 +1639,162 @@ los casos:
   anclaje por pieza, posible mosaico de piso de pasto con textura en vez del
   patrón actual — ya existe `tile_grass` pero podría regenerarse con el
   estilo v2 usando `P5_ground_tiles` del JSON).
+
+## 2026-07-22 — Ajustes al spec de arte tras revisar la parrilla de unidades
+
+El usuario entregó la primera parrilla de unidades generada con Gemini (4×3,
+no 3×3 como pedía el spec original) describiéndola celda por celda. Se
+confirmó el mapeo real: fila 3 son los HÉROES del Castillo (no una tercera
+mejora de línea), y se decidió explícitamente usar **arte distinto por cada
+tier de mejora de línea** en vez de solo la insignia de estrellas ("arte es
+más pro, con este tipo de unidades nos lo podemos permitir") — esto implica
+un cambio de motor real (buscar sprite por tipo+tier, no solo por tipo).
+
+- `board_sprites.json` actualizado: la hoja `P1_units` ahora documenta la
+  rejilla 4×3 REAL con el mapeo confirmado; nueva hoja `P1b_unit_tiers_missing`
+  (2×2) con los 4 tiers que faltaban para cobertura completa (Campeón,
+  Alabardero, Caballero, Paladín); nota de revisión en la celda de la
+  catapulta (parecía un carromato) — luego el usuario confirmó que la
+  catapulta se entendía bien y se retiró esa nota.
+- A pedido del usuario, faltaba también una hoja de murallas (el usuario la
+  pidió al notar que solo había torre independiente, no tramo de muro ni
+  Torre de Muralla): nueva hoja `P6_walls` (1×3: muralla horizontal, muralla
+  vertical, Torre de Muralla). La Puerta NO necesita imagen propia: el motor
+  ya la dibuja reutilizando el sprite de muralla + una marca que pinta el
+  propio código (decisión de diseño de una corrección anterior).
+- Los prompts de Centro Urbano y Castillo se reescribieron con mucho más
+  detalle tras feedback directo ("le falta detalle y épicidad"): el Centro
+  Urbano ahora pide torreones laterales, campanario con campana y reloj,
+  banderines y vigas decorativas; el Castillo pide doble anillo de almenas,
+  cuatro torreones, rastrillo reforzado y torre del homenaje central —
+  ambos con la instrucción explícita de ser los edificios más detallados e
+  imponentes del set.
+- Se exportó además el mismo contenido como **6 (luego 7) archivos
+  independientes** (`assets/board/group_1_units.json` ...
+  `group_7_walls.json`), uno por hoja, con las normas de estilo YA
+  incrustadas dentro del `full_prompt` de cada celda (autocontenido) — a
+  pedido explícito del usuario, para poder pegar un grupo a la vez en Gemini
+  sin tener que copiar el bloque de estilo global por separado. Generados con
+  un script Python de la sesión a partir de `board_sprites.json` (fuente de
+  verdad; los `group_*.json` se regeneran desde ahí si cambia el spec
+  maestro).
+
+## 2026-07-22 — FASE 9B: integración del arte real generado con Gemini
+
+El usuario generó las 7 hojas completas con Gemini y las subió como un único
+`.zip` (7 PNG). Se investigó primero si las imágenes pegadas directamente en
+el chat quedaban accesibles como archivo — **no**: solo son visibles para
+evaluación visual, no hay un archivo real en el sistema de esta sesión hasta
+que el usuario las sube como adjunto (confirmado con `find` buscando PNG
+recientes: solo aparecían capturas propias de Playwright). Tras pedirle el
+`.zip`, se extrajo y se identificó cada una de las 7 imágenes por inspección
+visual (dimensiones + contenido), confirmando que cubrían las 7 hojas
+completas del spec (incluida la de tiers ya vista antes por separado).
+
+### Recorte y quitado de fondo
+Script Python de la sesión (`Pillow`+`numpy`, no forma parte del repo):
+recorte por celda + quitado de fondo por **flood-fill** desde los bordes de
+cada celda sobre píxeles casi-blancos (conserva intactos los blancos
+internos de la propia ilustración, como brillos de armadura, a diferencia de
+un simple "todo lo blanco es transparente"), más un auto-recorte final al
+bounding box de lo no-transparente.
+
+La división pareja (N filas × M columnas iguales) solo funcionó para 3 de
+las 7 hojas (tiers de unidad, edificios militares — ambas con línea
+divisoria negra real y personajes centrados). Las otras 4 necesitaron un
+enfoque distinto, cada una por una razón distinta, verificadas por prueba
+visual (contact sheet con miniaturas etiquetadas) tras encontrar recortes
+rotos:
+- **Murallas y recursos/props**: sin línea divisoria, pero con separación
+  pareja entre elementos — división pareja sin ajuste extra fue suficiente.
+- **Unidades** (la hoja 4×3): los personajes NO están centrados
+  uniformemente en su celda nominal — el piquetero, por ejemplo, tiene el
+  cuerpo desplazado hacia la celda vecina para dejarle sitio a la lanza
+  larga que "sobresale del borde" (tal como pedía su prompt), así que una
+  división pareja recortaba solo la lanza y dejaba el cuerpo fuera. Se
+  detectan los huecos de tinta reales entre personajes (perfil de densidad
+  de píxeles no-blancos por columna, dentro de la franja de cada fila) y se
+  usa el punto medio de cada hueco como límite de columna real.
+- **Edificios económicos**: Gemini reorganizó la rejilla para darle
+  protagonismo al Centro Urbano y al Castillo — cada uno ocupa una columna
+  ENTERA de dos "filas" de alto (no una celda 3×4 pareja), con las 10
+  celdas restantes acomodadas en las dos columnas sobrantes a 6 filas
+  (incluyendo 2 variantes sin usar de Torre y de un cobertizo, además de la
+  bandera y el carromato ya previstos como celdas libres). Esto no es un
+  simple desalineamiento sino una rejilla genuinamente IRREGULAR, así que se
+  detectaron las líneas divisorias reales (sí tenía línea negra) y se
+  hardcodearon las 10 cajas de recorte a mano.
+- **Texturas de piso**: cada una de las 4 texturas tiene su propio margen
+  blanco asimétrico dentro de su cuadrante (no lo llena parejo), y encima
+  agua/roca son más anchas que pasto/tierra. La detección automática de
+  bbox por fracción de píxeles no-blancos resultó CONSISTENTEMENTE poco
+  fiable en esta hoja concreta (ruido de antialiasing disperso a lo largo de
+  toda la fila hacía que hasta un umbral por fracción, no solo "existe algún
+  píxel", diera rangos incorrectos dos veces seguidas) — se hardcodearon las
+  4 cajas a mano tras verificar los bordes reales por muestreo directo de
+  píxeles.
+
+### Cambios de motor
+- **`SPRITE_FILES`** (índice 760): se añadieron `unit_siege`, `bld_market`,
+  `bld_siegeworkshop` (antes excluidos a propósito por no tener PNG, per
+  comentario de la Fase 5) y los 6 nombres de arte por tier
+  (`unit_infantry_t1`, `unit_infantry_t2`, `unit_pike_t1`, `unit_archer_t1`,
+  `unit_cavalry_t1`, `unit_cavalry_t2`).
+- **`drawUnit`**: antes de dibujar, si la unidad no es héroe y su categoría
+  tiene un tier de línea investigado (`lineTierCount`), intenta primero
+  `drawSprite('unit_'+cat+'_t'+tier, ...)`; si `drawSprite` devuelve `false`
+  (ni el atlas ni el PNG suelto lo tienen), cae al sprite de tipo base de
+  siempre — sin disparar ninguna petición de red nueva, porque los nombres
+  de tier ya están pre-registrados en `SPRITE_FILES` (el chequeo de "existe
+  o no" lo hace el propio `drawSprite`/`spr()` ya existente, no hizo falta
+  ningún mecanismo nuevo). El tier es del BANDO (no de la unidad individual),
+  así que funciona igual en host y cliente MP sin tocar el protocolo — ya
+  viajaba gratis en `serSide`. La insignia de estrellas de la Fase 5 se
+  mantiene sobre la ficha igual que antes (el arte cambia la apariencia
+  general, la insignia sigue precisando el tier exacto de un vistazo).
+- **Atlas regenerado por completo** (`assets/atlas.png`+`assets/atlas.json`):
+  imprescindible — `drawSprite` prueba el atlas ANTES que el PNG suelto, así
+  que sin regenerarlo el juego habría seguido mostrando el pixel-art viejo
+  para los ~30 sprites que ya estaban empaquetados, sin importar que se
+  reemplazaran los PNG de `assets/sprites/`. Script Python de la sesión
+  (empaquetado tipo estantería/"shelf", cada sprite reescalado a ≤240px de
+  lado mayor antes de empaquetar). Antes: 30 sprites, 2.59MB. Ahora: 38
+  sprites, 2.4MB (similar peso total pese a sumar 8 sprites nuevos, gracias
+  al reescalado).
+
+### Verificación
+Se sirvió el juego por **HTTP real** (servidor Node mínimo de la sesión, NO
+`file://`) para que el atlas cargara de verdad tal como en producción
+(`file://` se salta el intento de red a propósito, ver comentario de
+`loadAtlas` en el código):
+- Atlas cargado con éxito: `atlasReady=true`, 38 sprites en `atlasFrames`.
+- 0 errores de consola/`pageerror` en carga, partida, y 300s simulados con
+  IA Difícil.
+- Compra de un tier de mejora en vivo (`buyLineTier('player','infantry',0)`
+  tras fijar la Era del jugador a 2): `lineTierCount` pasó de 0 a 1, el hp de
+  una Milicia recién creada subió de 55 a 74 (`55×1.35≈74`, coincide con
+  `LINE_TIER_MULT`), y la captura de pantalla confirma que la unidad cambia
+  visualmente al sprite de Espadachín (chainmail completo + emblema de cruz
+  en el escudo) en cuanto se investiga, con el hint "Espadachín investigado"
+  visible.
+- Captura con 3 tramos de muralla + puerta central (candado visible) + los 3
+  héroes del Castillo (Espada/Arco/Jinete) renderizados juntos: todo legible,
+  0 errores.
+- Capturas generales de una partida normal confirmando visualmente: terreno
+  de pasto con textura real, árboles/arbustos/vetas de oro y piedra con arte
+  real, Centro Urbano con el nuevo diseño épico, población y recursos
+  funcionando con normalidad.
+
+### Pendiente
+- `obj_bush_unused` (prop decorativo de la hoja de recursos) se recortó pero
+  no se integró al motor (nada lo usa hoy); queda en `assets/sprites/` como
+  posible prop suelto para el futuro.
+- La textura `tile_dirt` tiene un ligero viñeteado más oscuro en el borde
+  (el artista la dibujó como una "mancha" en vez de un cuadrado perfectamente
+  edge-to-edge) — funciona pero no es 100% perfecta al repetirse en mosaico;
+  no bloquea el uso, se puede regenerar más adelante si se nota en juego
+  real.
+- Integrar el arte de `obj_gate`/`bld_wall` (nombres de respaldo legado) no
+  hizo falta tocarlo: siguen con el pixel-art viejo pero son rutas de
+  respaldo que en la práctica no se usan (la Puerta ya reutiliza
+  `bld_wall_h`/`bld_wall_v` nuevos).

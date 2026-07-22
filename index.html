@@ -759,16 +759,18 @@ function side(owner){ return owner==='player'?player:enemy; }
 // sería nulo frente al riesgo de un patrón mal recortado.
 const SPRITE_FILES = [
   'res_food','res_wood','res_gold','res_stone',
-  'unit_villager','unit_infantry','unit_pike','unit_archer','unit_cavalry',
+  'unit_villager','unit_infantry','unit_pike','unit_archer','unit_cavalry','unit_siege',
   'unit_hero_sword','unit_hero_archer','unit_hero_cav',
+  // FASE 9B: arte propio por TIER de línea de mejora (Fase 5) — ver
+  // `unitSpriteName()`. Si falta alguno (p.ej. no se generó todavía), cae
+  // solo al de tipo base, nunca a un 404 (comprobado con spr() antes de usar).
+  'unit_infantry_t1','unit_infantry_t2','unit_pike_t1','unit_archer_t1',
+  'unit_cavalry_t1','unit_cavalry_t2',
   'bld_town','bld_house','bld_barracks','bld_range','bld_stable','bld_blacksmith',
   'bld_tower','bld_castle','bld_farm','bld_goldmine','bld_quarry','bld_lumbercamp',
+  'bld_market','bld_siegeworkshop',
   'bld_wall','bld_wall_h','bld_wall_v','bld_wall_tower',
   'tile_grass','tile_water','tile_mountain','tile_dirt','obj_mountain','obj_gate',
-  // Fase 5: catapulta, taller de asedio y mercado usan emoji de respaldo esta
-  // sesión (Ideogram no disponible) — NO se registran aquí a propósito para
-  // evitar peticiones 404 (que Chromium reporta como console.error); cuando
-  // se generen los PNG, añadir 'unit_siege','bld_siegeworkshop','bld_market'.
 ];
 const SPRITE_SET = new Set(SPRITE_FILES);   // para no pedir por red nombres no registrados (p.ej. bld_market/bld_siegeworkshop, Fase 5: sin PNG, solo emoji)
 const sprites = {};       // PNG sueltos cargados (perezoso): sprites[name] = {img, ready}
@@ -3996,7 +3998,15 @@ function drawUnit(e){
   ctx.moveTo(0, -sz*0.62); ctx.lineTo(-sz*0.11, -sz*0.46); ctx.lineTo(sz*0.11, -sz*0.46);
   ctx.closePath(); ctx.fill();
   const uH = 40*cam.zoom * (e.anim>0?1.12:1);
-  if(!drawSprite('unit_'+e.type, 0, 0, uH, false)){
+  // FASE 9B: arte propio por TIER de línea de mejora (Fase 5) si existe,
+  // igual en host y cliente MP (el tier es del BANDO, viaja gratis en
+  // `serSide`). Los héroes siempre usan su propia ficha fija, nunca la de
+  // un tier. Si el sprite del tier concreto no está (todavía sin generar),
+  // `drawSprite` devuelve false y se reintenta con el de tipo base — sin
+  // volver a pedir nada por red gracias al registro previo en SPRITE_FILES.
+  const tier = d.hero ? 0 : lineTierCount(e.owner, d.cat);
+  const drewTiered = tier>0 && drawSprite('unit_'+d.cat+'_t'+tier, 0, 0, uH, false);
+  if(!drewTiered && !drawSprite('unit_'+e.type, 0, 0, uH, false)){
     // respaldo: aura + emoji + estrella de héroe
     if(d.hero){
       ctx.beginPath(); ctx.arc(0, 0, sz*0.7, 0, Math.PI*2);

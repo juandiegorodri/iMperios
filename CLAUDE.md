@@ -684,7 +684,7 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
   (ni paneo ni pinch) y soltar rápido deselecciona todo — gesto táctil
   habitual en iPad, además del botón "✕ Deseleccionar" del panel (que se
   mantiene para ratón/escritorio).
-- **FASE 9 (en curso) — Vista de tablero: fichas tipo sticker** (2026-07-21):
+- **FASE 9 — Vista de tablero: fichas tipo sticker** (2026-07-21/22):
   pivote de dirección de arte hacia un RTS con cámara **cenital estricta**
   (90°, sin perspectiva) y estética de **juego de mesa** (fichas planas tipo
   sticker/cartón sobre un tablero de pasto, estilo Carcassonne), pensado para
@@ -742,3 +742,53 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     centro y borde de ficha confirmada, y regresión completa (pathfinding/
     formaciones/puertas, flip de bandos MP, cruce de puente, 300s con IA
     Difícil) sin errores.
+  - **FASE 9B — Integración del arte real** (2026-07-22): el usuario generó
+    con Gemini las 7 hojas completas de `assets/board/board_sprites.json` (34
+    de 42 celdas útiles, tras corregir el mapeo de la parrilla de unidades y
+    añadir la hoja de murallas que faltaba) y las subió como un `.zip`.
+    Reemplazan por completo el set pixel-art v1 (unidades, los 12 edificios,
+    4 recursos, `obj_mountain`, muralla horizontal/vertical/Torre de Muralla y
+    las 4 texturas de piso) — la Puerta no necesitó imagen propia, hereda el
+    sprite de muralla ya existente en el motor.
+    - **Recorte automático** (script Python de la sesión, no forma parte del
+      repo): cada hoja se recorta celda por celda y se le quita el fondo
+      blanco por flood-fill (deja intactos los blancos internos, como brillos
+      de armadura). Dos hojas necesitaron manejo especial en vez de división
+      pareja: la de unidades (los personajes NO están centrados uniformemente
+      —el piquetero, p. ej., tiene su cuerpo corrido hacia la celda vecina
+      para dejarle sitio a la lanza larga— así que se detectan los huecos de
+      tinta reales entre personajes por fila) y la de edificios económicos
+      (el Centro Urbano y el Castillo ocupan una columna ENTERA de dos celdas
+      de alto cada uno, no una celda 3×4 pareja —Gemini reorganizó la
+      rejilla para darles protagonismo—, así que sus 10 celdas reales se
+      recortaron con coordenadas verificadas a mano).
+    - **Arte por TIER de línea de mejora** (pedido explícito del usuario:
+      "arte es más pro, con este tipo de unidades nos lo podemos permitir"):
+      además del set base (Fase 5 ya tenía Milicia/Piquetero/Arquero/Caballo/
+      Héroes), ahora Espadachín, Campeón, Alabardero, Arquero de Tiro Largo,
+      Caballero y Paladín tienen su PROPIA ficha (antes: mismo sprite base +
+      insignia de estrellas encima). Nueva convención de nombre de archivo
+      `unit_<categoría>_t<tier>` (p. ej. `unit_infantry_t1`); `drawUnit`
+      intenta primero el sprite del tier investigado (`lineTierCount`, nunca
+      para héroes) y si no existe cae al de tipo base — nunca dispara una
+      petición de red nueva porque los nombres de tier ya están pre-
+      registrados en `SPRITE_FILES`. La insignia de estrellas se mantiene
+      encima igualmente (refuerzo visual, no redundante: el arte cambia la
+      apariencia, la insignia sigue marcando el número exacto de tier).
+    - **Atlas regenerado por completo** (`assets/atlas.png`+`atlas.json`,
+      script Python de la sesión, empaquetado tipo estantería/shelf, cada
+      sprite pre-escalado a ≤240px de lado mayor): imprescindible, porque
+      `drawSprite` prioriza el atlas sobre el PNG suelto — sin regenerarlo,
+      el juego habría seguido mostrando el arte viejo aunque se
+      reemplazaran los PNG de `assets/sprites/`. Antes: 30 sprites, 2.59MB.
+      Ahora: 38 sprites (suma el arte de tier, mercado, taller de asedio y
+      catapulta que antes no tenían PNG), 2.4MB.
+    - `bld_market`, `bld_siegeworkshop` y `unit_siege` pasan a tener sprite
+      real (antes usaban emoji/dibujo procedural de respaldo, que se
+      mantiene como red de seguridad si el PNG llegara a fallar).
+    - Verificado headless sirviendo por HTTP real (no `file://`, para que el
+      atlas cargue de verdad como en producción): atlas cargado con sus 38
+      sprites, 0 errores de consola, compra de un tier de mejora en vivo
+      confirmada visualmente (la Milicia cambia al sprite de Espadachín al
+      investigarlo), murallas+puerta+3 héroes renderizados juntos sin
+      errores, y regresión de 300s con IA Difícil sin errores.
