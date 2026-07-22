@@ -2096,3 +2096,63 @@ rotar) en vez de solo revisar el código:
   cardinales para aldeano y Héroe Espada, más las 6 líneas de mejora
   restantes moviéndose a la derecha; regresión de ~300s con IA Difícil — 0
   errores de consola.
+
+## 2026-07-22 — FASE 10: rediseño del menú principal (pantalla de título)
+Pedido explícito del usuario: "rediseñes el menú principal para que sea más
+de videojuego final... el usuario primero selecciona el tipo de juego, luego
+las características, botones grandes fáciles de leer... el de ahora parece
+una pantalla de debug, necesitamos uno que sea típico de videojuego, como
+los de Age of Empires, o Mario Kart". El menú anterior era un único
+formulario largo (todas las opciones de mapa/recursos/velocidad/IA/
+posición/tregua/guarnición + multijugador + partidas guardadas visibles a
+la vez, con botones de texto plano) — se rediseñó como una pantalla de
+título con navegación por pasos:
+- **4 paneles dentro del mismo `#startScreen`**: en vez de crear overlays
+  nuevos (que habría obligado a tocar los ~10 sitios del código que ya
+  ocultan/muestran `#startScreen` al empezar/terminar una partida o volver al
+  menú), los 4 paneles (`title`/`setup`/`mp`/`load`) viven como
+  `.menuPanel` dentro del overlay de siempre; solo se alterna cuál está
+  visible (`showMenuPanel(name)`, nueva función). Cero cambios en los sitios
+  existentes que hacían `startScreen.classList.add/remove('hidden')` —
+  siguen funcionando igual, y ahora además se fuerza `showMenuPanel('title')`
+  al volver al menú tras una partida (`btnRestart`).
+  - **Panel «title»**: pantalla de título real — banner con el sprite del
+    Castillo de fondo (semitransparente, `assets/sprites/bld_castle.png`),
+    título grande con sombra/resplandor, y 4-5 botones grandes tipo
+    videojuego (`.bigMenuBtn`, ≥64px de alto, icono+etiqueta+subtítulo):
+    ▶ Continuar (solo si hay autoguardado, promovido desde el fondo del
+    formulario anterior a botón principal — patrón estándar de menú de
+    videojuego), ⚔️ Jugar (destacado, borde dorado), 🌐 Multijugador,
+    💾 Partidas guardadas, ⚙️ Ajustes; un enlace pequeño "🎨 Prueba gráfica"
+    al pie, discreto (ya no es un botón grande como el resto, para no competir
+    con las opciones reales de juego).
+  - **Panel «setup»** (antes «Jugar»): las 7 características de la partida
+    contra la IA (mapa/recursos/velocidad/IA/posición/tregua/guarnición),
+    con cabecera de flecha "⬅ Configurar partida" para volver al título.
+  - **Panel «mp»**: el bloque de multijugador (pestañas Online/Red local)
+    extraído a su propia pantalla, con la misma cabecera de vuelta.
+  - **Panel «load»**: las 3 ranuras de guardado manual, en su propia
+    pantalla (el autoguardado ya no vive aquí, ver arriba).
+- **Fichas de opción rediseñadas** (`.opt-b`): antes un simple botón de
+  texto de una línea; ahora una ficha más grande (icono emoji arriba +
+  etiqueta abajo, `flex-direction:column`, min-height 60px) con una marca
+  ✓ dorada en la esquina cuando está seleccionada (antes solo un cambio de
+  borde/sombra, fácil de pasar por alto). Se añadió un icono temático a
+  cada valor (🌾 Llanura, 🏞️ Río, 🌲 Selva Negra, ⛰️ Riscos; 🟢/🟡/🔴 para
+  la dificultad; 🐢/🚶/🐇 para la velocidad; etc.) — mismo mecanismo de
+  clic de siempre (`data-val`/`data-opt`, sin cambios de JS en la lógica de
+  selección), solo cambia el marcado interno de cada botón.
+- **Estilo "botón grande de menú"** (`.bigMenuBtn`, nueva clase): degradado
+  oscuro con reborde, sombra inferior tipo "botón físico" que se hunde al
+  tocarlo (`:active{ transform:translateY(2px) }`), variante `.primary`
+  (borde dorado, para "Jugar") y `.continue` (borde verde, para "Continuar").
+- Verificado headless (servido por HTTP real): navegación completa entre
+  los 4 paneles y vuelta con la flecha; selección de opciones en el panel
+  «setup» (mapa=Río, dificultad=Difícil) confirmada en `gameConfig` antes de
+  pulsar «Empezar partida»; la partida arranca con esos valores; Ajustes y
+  Prueba gráfica siguen abriéndose desde el nuevo botón del título;
+  simulación de victoria + «Jugar de nuevo» confirma que se vuelve
+  exactamente al panel «title» (no al «setup» ni a un `#startScreen` a
+  medio configurar); capturas de pantalla en móvil estrecho (430px) y
+  ancho tipo iPad (1180px) revisadas visualmente; 0 errores de consola en
+  todos los pasos.

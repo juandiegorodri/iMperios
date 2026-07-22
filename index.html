@@ -100,9 +100,16 @@
   .opt{ margin:10px 0; }
   .opt-title{ font-size:13px; color:var(--accent); font-weight:700; margin-bottom:6px; }
   .opt-row{ display:flex; gap:6px; flex-wrap:wrap; }
-  .opt-b{ flex:1 1 auto; min-width:64px; min-height:44px; padding:8px 10px; border-radius:10px;
-    border:1px solid var(--line); background:var(--panel2); color:var(--txt); font-size:14px; font-weight:600; }
-  .opt-b.sel{ border-color:var(--accent); background:#33302410; box-shadow:0 0 0 2px #caa46a66; color:#fff; }
+  /* Fichas de opción (mapa/dificultad/etc.): icono grande + etiqueta, más
+     grandes y fáciles de leer que un simple botón de texto (pedido explícito
+     tras juego real: "el menú parece una pantalla de debug"). */
+  .opt-b{ position:relative; flex:1 1 auto; min-width:64px; min-height:60px; padding:8px 10px; border-radius:12px;
+    border:1px solid var(--line); background:linear-gradient(#20242c,#181b21); color:var(--txt); font-size:14px; font-weight:600;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; }
+  .opt-b .obIcon{ font-size:20px; line-height:1; }
+  .opt-b .obLabel{ font-size:12.5px; font-weight:700; }
+  .opt-b.sel{ border-color:var(--accent); background:#33302430; box-shadow:0 0 0 2px #caa46a66; color:#fff; }
+  .opt-b.sel::after{ content:'✓'; position:absolute; top:3px; right:6px; font-size:11px; color:var(--accent); font-weight:900; }
   /* Pestañas Online/Red local (Fase 7): clase PROPIA (no `.opt-b`) a propósito
      — `.opt-b` dentro de `#startScreen .opt` recibe un listener genérico que
      recalcula `.sel` según `data-val` en CUALQUIER clic del menú; como estos
@@ -113,6 +120,43 @@
     border:1px solid var(--line); background:var(--panel2); color:var(--txt); font-size:14px; font-weight:600; }
   .mp-tab.active{ border-color:var(--accent); background:#33302410; box-shadow:0 0 0 2px #caa46a66; color:#fff; }
   .opt-desc{ font-size:12px; color:var(--muted); margin-top:5px; min-height:16px; }
+  /* Menú principal rediseñado (pantalla de título tipo videojuego): primero se
+     elige el TIPO de partida (jugar/multijugador/cargar/ajustes), y solo al
+     entrar a "Jugar" se ven las características (mapa/reglas). Los 4 paneles
+     viven dentro del mismo overlay `#startScreen` para no tocar los sitios
+     donde el código ya lo oculta/muestra al empezar o terminar una partida. */
+  .menuPanel.hidden{ display:none !important; }
+  .titleCard{ padding:0; overflow:hidden; }
+  .titleBanner{ position:relative; padding:28px 20px 20px; text-align:center; overflow:hidden;
+    background:radial-gradient(120% 140% at 50% -20%, #3a3324 0%, #1c1f26 60%, #14161b 100%);
+    border-bottom:1px solid var(--line); }
+  .titleBanner img{ position:absolute; top:-8%; left:50%; transform:translateX(-50%); width:280px; max-width:85%;
+    opacity:.24; filter:saturate(.7) brightness(.9); pointer-events:none; }
+  .gameTitle{ position:relative; margin:0; font-size:32px; letter-spacing:.5px; font-weight:800;
+    text-shadow:0 2px 0 #0008, 0 0 20px #caa46a55; color:#fff; }
+  .gameTitle .gtIcon{ filter:drop-shadow(0 2px 2px #000a); }
+  .gameSubtitle{ position:relative; margin-top:6px; font-size:13px; color:var(--accent); font-weight:700; letter-spacing:.3px; }
+  .titleMenu{ display:flex; flex-direction:column; gap:10px; padding:18px 20px 6px; }
+  .bigMenuBtn{ display:flex; align-items:center; gap:14px; width:100%; min-height:64px; padding:10px 16px;
+    border-radius:14px; border:1px solid var(--line); background:linear-gradient(#23272f,#181b21);
+    color:var(--txt); text-align:left; box-shadow:0 3px 0 #0006, inset 0 1px 0 #ffffff0f; }
+  .bigMenuBtn:active{ transform:translateY(2px); box-shadow:0 1px 0 #0006; }
+  .bigMenuBtn.primary{ border-color:var(--accent); background:linear-gradient(#3a3018,#241d10);
+    box-shadow:0 3px 0 #0006, 0 0 0 2px #caa46a33; }
+  .bigMenuBtn.continue{ border-color:var(--good); box-shadow:0 3px 0 #0006, 0 0 0 2px #5fb15f44; }
+  .bigMenuBtn .bmIcon{ font-size:26px; width:34px; text-align:center; flex:0 0 auto; }
+  .bigMenuBtn .bmLabel{ font-size:16.5px; font-weight:800; line-height:1.3; }
+  .bigMenuBtn .bmLabel small{ display:block; font-size:11.5px; font-weight:500; color:var(--muted); }
+  .bigMenuBtn[disabled]{ opacity:.4; }
+  .titleFooter{ text-align:center; padding:4px 20px 18px; }
+  .linkBtn{ background:none; border:none; color:var(--muted); font-size:12px; text-decoration:underline;
+    padding:8px; min-height:32px; }
+  /* Cabecera de los paneles secundarios (Jugar/Multijugador/Cargar): flecha
+     de volver + título, mismo patrón en los tres. */
+  .panelHead{ display:flex; align-items:center; gap:10px; margin:0 0 10px; }
+  .backBtn{ width:40px; height:40px; min-width:40px; border-radius:20px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--txt); font-size:18px; display:flex; align-items:center; justify-content:center; }
+  .panelHead h1{ margin:0; font-size:19px; flex:1; text-align:left; }
   #joinIp{ flex:2 1 auto; min-width:180px; min-height:44px; border-radius:10px; border:1px solid var(--line);
     background:#0c0d10; color:var(--txt); padding:0 10px; font-size:16px; }
   #endStats{ width:100%; border-collapse:collapse; margin:6px 0 16px; font-size:14px; }
@@ -254,20 +298,68 @@
   </div>
 </div>
 
-<!-- Pantalla de inicio / menú principal -->
+<!-- Pantalla de inicio / menú principal: rediseño tipo videojuego (pedido
+     explícito tras juego real: "el menú parece una pantalla de debug"). Se
+     elige primero el TIPO de partida (título) y solo después sus
+     características (paneles secundarios) — el mismo patrón de Age of
+     Empires/Mario Kart. Los 4 paneles conviven dentro de un único overlay
+     `#startScreen` (mismo id de siempre) para no tocar los sitios del código
+     que ya lo ocultan/muestran al empezar o terminar una partida; solo cambia
+     cuál `.menuPanel` está visible por dentro, ver `showMenuPanel()`. -->
 <div id="startScreen" class="overlay">
-  <div class="card menu">
-    <h1>⚔️ iMperios</h1>
-    <p>Configura tu partida. Destruye el Centro Urbano enemigo. Cuadrilátero:
+
+  <!-- Panel 1: título — elige el TIPO de partida -->
+  <div class="card titleCard menuPanel" data-panel="title">
+    <div class="titleBanner">
+      <img src="assets/sprites/bld_castle.png" alt="" onerror="this.remove()">
+      <h1 class="gameTitle"><span class="gtIcon">⚔️</span> iMperios <span class="gtIcon">⚔️</span></h1>
+      <div class="gameSubtitle">RTS táctico en tiempo real — para iPad</div>
+    </div>
+    <div class="titleMenu">
+      <div class="opt hidden" id="continueRow">
+        <button class="bigMenuBtn continue" id="btnContinue">
+          <span class="bmIcon">▶</span>
+          <span class="bmLabel">Continuar<br><small>Retoma tu autoguardado</small></span>
+        </button>
+      </div>
+      <button class="bigMenuBtn primary" id="btnGoSetup">
+        <span class="bmIcon">⚔️</span>
+        <span class="bmLabel">Jugar<br><small>1 jugador contra la IA</small></span>
+      </button>
+      <button class="bigMenuBtn" id="btnGoMp">
+        <span class="bmIcon">🌐</span>
+        <span class="bmLabel">Multijugador<br><small>Código online o red local</small></span>
+      </button>
+      <button class="bigMenuBtn" id="btnGoLoad">
+        <span class="bmIcon">💾</span>
+        <span class="bmLabel">Partidas guardadas<br><small>3 ranuras locales</small></span>
+      </button>
+      <button class="bigMenuBtn" id="btnSettingsMenu">
+        <span class="bmIcon">⚙️</span>
+        <span class="bmLabel">Ajustes</span>
+      </button>
+    </div>
+    <div class="titleFooter">
+      <button class="linkBtn" id="btnGfx">🎨 Prueba gráfica</button>
+    </div>
+  </div>
+
+  <!-- Panel 2: características de la partida contra la IA -->
+  <div class="card menu menuPanel hidden" data-panel="setup">
+    <div class="panelHead">
+      <button class="backBtn" data-back>⬅</button>
+      <h1>⚔️ Configurar partida</h1>
+    </div>
+    <p>Destruye el Centro Urbano enemigo. Cuadrilátero:
     Arquero &gt; Milicia &gt; Piquetero &gt; Caballo &gt; Arquero.</p>
 
     <div class="opt" data-opt="map">
       <div class="opt-title">🗺️ Mapa</div>
       <div class="opt-row">
-        <button class="opt-b" data-val="plains">Llanura</button>
-        <button class="opt-b" data-val="river">Río</button>
-        <button class="opt-b" data-val="forest">Selva Negra</button>
-        <button class="opt-b" data-val="cliffs">Riscos</button>
+        <button class="opt-b" data-val="plains"><span class="obIcon">🌾</span><span class="obLabel">Llanura</span></button>
+        <button class="opt-b" data-val="river"><span class="obIcon">🏞️</span><span class="obLabel">Río</span></button>
+        <button class="opt-b" data-val="forest"><span class="obIcon">🌲</span><span class="obLabel">Selva Negra</span></button>
+        <button class="opt-b" data-val="cliffs"><span class="obIcon">⛰️</span><span class="obLabel">Riscos</span></button>
       </div>
       <div class="opt-desc" id="mapDesc"></div>
     </div>
@@ -275,60 +367,70 @@
     <div class="opt" data-opt="res">
       <div class="opt-title">💰 Recursos iniciales</div>
       <div class="opt-row">
-        <button class="opt-b" data-val="low">Bajo</button>
-        <button class="opt-b" data-val="standard">Estándar</button>
-        <button class="opt-b" data-val="high">Alto</button>
+        <button class="opt-b" data-val="low"><span class="obIcon">🥄</span><span class="obLabel">Bajo</span></button>
+        <button class="opt-b" data-val="standard"><span class="obIcon">⚖️</span><span class="obLabel">Estándar</span></button>
+        <button class="opt-b" data-val="high"><span class="obIcon">💰</span><span class="obLabel">Alto</span></button>
       </div>
     </div>
 
     <div class="opt" data-opt="speed">
       <div class="opt-title">⏱️ Velocidad</div>
       <div class="opt-row">
-        <button class="opt-b" data-val="slow">Lenta</button>
-        <button class="opt-b" data-val="normal">Normal</button>
-        <button class="opt-b" data-val="fast">Rápida</button>
+        <button class="opt-b" data-val="slow"><span class="obIcon">🐢</span><span class="obLabel">Lenta</span></button>
+        <button class="opt-b" data-val="normal"><span class="obIcon">🚶</span><span class="obLabel">Normal</span></button>
+        <button class="opt-b" data-val="fast"><span class="obIcon">🐇</span><span class="obLabel">Rápida</span></button>
       </div>
     </div>
 
     <div class="opt" data-opt="diff">
       <div class="opt-title">🧠 Inteligencia de la IA</div>
       <div class="opt-row">
-        <button class="opt-b" data-val="easy">Fácil</button>
-        <button class="opt-b" data-val="normal">Normal</button>
-        <button class="opt-b" data-val="hard">Difícil</button>
+        <button class="opt-b" data-val="easy"><span class="obIcon">🟢</span><span class="obLabel">Fácil</span></button>
+        <button class="opt-b" data-val="normal"><span class="obIcon">🟡</span><span class="obLabel">Normal</span></button>
+        <button class="opt-b" data-val="hard"><span class="obIcon">🔴</span><span class="obLabel">Difícil</span></button>
       </div>
     </div>
 
     <div class="opt" data-opt="pos">
       <div class="opt-title">📍 Tu posición</div>
       <div class="opt-row">
-        <button class="opt-b" data-val="left">Izquierda</button>
-        <button class="opt-b" data-val="right">Derecha</button>
-        <button class="opt-b" data-val="random">Aleatoria</button>
+        <button class="opt-b" data-val="left"><span class="obIcon">⬅️</span><span class="obLabel">Izquierda</span></button>
+        <button class="opt-b" data-val="right"><span class="obIcon">➡️</span><span class="obLabel">Derecha</span></button>
+        <button class="opt-b" data-val="random"><span class="obIcon">🎲</span><span class="obLabel">Aleatoria</span></button>
       </div>
     </div>
 
     <div class="opt" data-opt="peace">
       <div class="opt-title">🕊️ Tiempo de tregua</div>
       <div class="opt-row">
-        <button class="opt-b" data-val="0">Sin tregua</button>
-        <button class="opt-b" data-val="60">1 min</button>
-        <button class="opt-b" data-val="120">2 min</button>
-        <button class="opt-b" data-val="300">5 min</button>
+        <button class="opt-b" data-val="0"><span class="obIcon">⚔️</span><span class="obLabel">Sin tregua</span></button>
+        <button class="opt-b" data-val="60"><span class="obIcon">🕊️</span><span class="obLabel">1 min</span></button>
+        <button class="opt-b" data-val="120"><span class="obIcon">🕊️</span><span class="obLabel">2 min</span></button>
+        <button class="opt-b" data-val="300"><span class="obIcon">🕊️</span><span class="obLabel">5 min</span></button>
       </div>
     </div>
 
     <div class="opt" data-opt="garrison">
       <div class="opt-title">🛡️ Guarnición de unidades</div>
       <div class="opt-row">
-        <button class="opt-b" data-val="off">Deshabilitada</button>
-        <button class="opt-b" data-val="on">Habilitada</button>
+        <button class="opt-b" data-val="off"><span class="obIcon">🚫</span><span class="obLabel">Deshabilitada</span></button>
+        <button class="opt-b" data-val="on"><span class="obIcon">🛡️</span><span class="obLabel">Habilitada</span></button>
       </div>
       <div class="opt-desc">Deshabilitada por defecto: tocar el Centro Urbano/Castillo/Torre con unidades seleccionadas no las mete dentro por accidente.</div>
     </div>
 
+    <div class="row" style="margin-top:14px">
+      <button class="btn big" id="btnStart">▶ Empezar partida</button>
+    </div>
+  </div>
+
+  <!-- Panel 3: multijugador en tiempo real -->
+  <div class="card menu menuPanel hidden" data-panel="mp">
+    <div class="panelHead">
+      <button class="backBtn" data-back>⬅</button>
+      <h1>🌐 Multijugador</h1>
+    </div>
     <div class="opt">
-      <div class="opt-title">🎮 Multijugador en tiempo real</div>
       <div class="opt-row">
         <button class="mp-tab active" id="mpTabOnline" data-tab="online">🌐 Online (código)</button>
         <button class="mp-tab" id="mpTabLan" data-tab="lan">📶 Red local (IP)</button>
@@ -336,8 +438,8 @@
 
       <div id="mpOnlineTab" class="mp-pane" style="margin:8px 0 0">
         <div class="opt-row">
-          <button class="opt-b" id="btnOnlineHost">Crear sala</button>
-          <button class="opt-b" id="btnOnlineJoin">Unirse con código</button>
+          <button class="opt-b" id="btnOnlineHost"><span class="obIcon">🏠</span><span class="obLabel">Crear sala</span></button>
+          <button class="opt-b" id="btnOnlineJoin"><span class="obIcon">🔑</span><span class="obLabel">Unirse con código</span></button>
         </div>
         <div class="hidden" id="onlineCodeBox" style="margin-top:8px; text-align:center;">
           <div style="font-size:11px;opacity:.75">Código de sala — compártelo con el otro jugador:</div>
@@ -352,8 +454,8 @@
 
       <div id="mpLanTab" class="mp-pane hidden" style="margin:8px 0 0">
         <div class="opt-row">
-          <button class="opt-b" id="btnHost">Crear partida (anfitrión)</button>
-          <button class="opt-b" id="btnJoin">Unirse a una partida</button>
+          <button class="opt-b" id="btnHost"><span class="obIcon">🏠</span><span class="obLabel">Crear partida (anfitrión)</span></button>
+          <button class="opt-b" id="btnJoin"><span class="obIcon">🔗</span><span class="obLabel">Unirse a una partida</span></button>
         </div>
         <div class="opt-row hidden" id="joinRow" style="margin-top:6px">
           <input id="joinIp" inputmode="decimal" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="IP del anfitrión (ej. 192.168.1.50)">
@@ -363,22 +465,21 @@
 
       <div class="opt-desc" id="mpStatus"></div>
     </div>
+  </div>
 
-    <div class="opt hidden" id="continueRow">
-      <div class="row"><button class="btn big" id="btnContinue">▶ Continuar (autoguardado)</button></div>
+  <!-- Panel 4: partidas guardadas (3 ranuras manuales; el autoguardado se
+       promueve como botón "Continuar" directo en la pantalla de título) -->
+  <div class="card menu menuPanel hidden" data-panel="load">
+    <div class="panelHead">
+      <button class="backBtn" data-back>⬅</button>
+      <h1>💾 Partidas guardadas</h1>
     </div>
-
     <div class="opt">
-      <div class="opt-title">💾 Partidas guardadas (un jugador)</div>
+      <div class="opt-title">Un jugador — 3 ranuras locales</div>
       <div id="menuSlots"></div>
     </div>
-
-    <div class="row">
-      <button class="btn big" id="btnStart">▶ Empezar partida</button>
-      <button class="btn big" id="btnGfx">🎨 Prueba gráfica</button>
-      <button class="btn big" id="btnSettingsMenu">⚙️ Ajustes</button>
-    </div>
   </div>
+
 </div>
 
 <!-- Guardado local (Fase 6): 3 ranuras, solo un jugador (deshabilitado en MP) -->
@@ -5112,6 +5213,22 @@ function renderSummary(){
   drawTimelineChart();   // Fase 6.4: línea de tiempo de recursos/valor militar muestreada durante la partida
 }
 
+// ---------- Menú principal: navegación entre paneles (título/jugar/mp/cargar) ----------
+// Los 4 paneles viven dentro del mismo `#startScreen` de siempre (ver el HTML);
+// solo se alterna cuál `.menuPanel` está visible, sin tocar los sitios donde el
+// código ya oculta/muestra `#startScreen` completo al empezar o terminar una partida.
+function showMenuPanel(name){
+  document.querySelectorAll('#startScreen .menuPanel').forEach(p=>{
+    p.classList.toggle('hidden', p.getAttribute('data-panel')!==name);
+  });
+}
+document.getElementById('btnGoSetup').addEventListener('click', ()=>showMenuPanel('setup'));
+document.getElementById('btnGoMp').addEventListener('click', ()=>showMenuPanel('mp'));
+document.getElementById('btnGoLoad').addEventListener('click', ()=>{ refreshSaveUI(); showMenuPanel('load'); });
+document.querySelectorAll('#startScreen .backBtn[data-back]').forEach(b=>{
+  b.addEventListener('click', ()=>showMenuPanel('title'));
+});
+
 // ---------- Menú principal: selección de opciones ----------
 const MAP_DESC = {
   plains:'Terreno abierto y equilibrado. Ideal para aprender.',
@@ -5205,6 +5322,7 @@ document.getElementById('btnRestart').addEventListener('click',()=>{
   if(inMP()){ location.reload(); return; }   // en multijugador se recarga para reconectar limpio
   document.getElementById('endScreen').classList.add('hidden');
   document.getElementById('startScreen').classList.remove('hidden');
+  showMenuPanel('title');
 });
 // Centrar (⌂): toque simple = base propia; doble toque = última alerta (Fase 2).
 let centerTapT=0;

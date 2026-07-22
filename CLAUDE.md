@@ -937,3 +937,35 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
       cardinales para Aldeano y Héroe Espada, más las 6 fichas de tier
       restantes moviéndose a la derecha; regresión de ~300s con IA Difícil
       — 0 errores de consola.
+- **FASE 10 — Rediseño del menú principal** (2026-07-22): pedido explícito
+  ("el menú de ahora parece una pantalla de debug, necesitamos uno típico de
+  videojuego, como los de Age of Empires o Mario Kart"). El menú pasó de ser
+  un único formulario largo con todas las opciones a la vez, a una pantalla
+  de título con navegación por pasos: primero se elige el TIPO de partida,
+  luego sus características.
+  - **4 paneles dentro del mismo `#startScreen`** (`showMenuPanel(name)`):
+    `title` (pantalla de título con banner del Castillo de fondo y 4-5
+    botones grandes — ▶ Continuar si hay autoguardado, ⚔️ Jugar destacado,
+    🌐 Multijugador, 💾 Partidas guardadas, ⚙️ Ajustes, más un enlace
+    pequeño "🎨 Prueba gráfica" al pie), `setup` (las 7 características de
+    la partida contra la IA: mapa/recursos/velocidad/IA/posición/tregua/
+    guarnición, antes mezcladas con todo lo demás), `mp` (multijugador,
+    pestañas Online/Red local) y `load` (las 3 ranuras de guardado manual).
+    Los 4 viven dentro del overlay `#startScreen` de siempre —cero cambios
+    en los ~10 sitios del código que ya lo ocultan/muestran al empezar o
+    terminar una partida—, solo se alterna cuál panel está visible; al
+    volver al menú tras jugar se fuerza el panel `title`.
+  - **Fichas de opción más grandes y claras** (`.opt-b`): icono emoji arriba
+    + etiqueta abajo (antes solo texto) y una marca ✓ dorada al estar
+    seleccionada (antes solo un cambio sutil de borde). Mismo mecanismo de
+    clic de siempre (`data-val`/`data-opt`), sin cambios de lógica.
+  - **Botones grandes tipo videojuego** (`.bigMenuBtn`, nueva clase): icono +
+    título + subtítulo, con una sombra inferior que se hunde al tocarlo y
+    variantes de color para "Jugar" (borde dorado) y "Continuar" (borde
+    verde).
+  - Verificado headless: navegación completa entre los 4 paneles y vuelta;
+    selección de opciones (mapa/dificultad) confirmada en `gameConfig` antes
+    de empezar; Ajustes y Prueba gráfica siguen accesibles desde el nuevo
+    título; ciclo completo jugar → victoria → «Jugar de nuevo» vuelve
+    exactamente al panel `title`; capturas en móvil estrecho y ancho tipo
+    iPad revisadas visualmente; 0 errores de consola.

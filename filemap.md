@@ -348,10 +348,21 @@ El archivo se organiza en estas secciones (en orden de aparición):
     y tasa de producción por recurso), `idleVillagers`, `selectNextIdle`,
     `showHint`, `endGame` y `renderSummary` (tabla del resumen final; Fase 6:
     también llama a `drawTimelineChart`).
-14. **Menú principal y arranque**: `MAP_DESC`, `refreshMenu` y listeners de las
-    opciones del menú; botón Empezar; **prueba gráfica** (`openGfxTest` + botón,
-    usa `<img>` directos sobre los 34 nombres de `SPRITE_FILES`, no pasa por el
-    atlas); listeners de fin/centrar (doble toque → `lastAlert`, Fase 3)/pausa/
+14. **Menú principal y arranque**: FASE 10 — pantalla de título con navegación
+    por pasos: `#startScreen` contiene 4 `.menuPanel` (`title`/`setup`/`mp`/
+    `load`), alternados con `showMenuPanel(name)` (nunca se crean overlays
+    nuevos, así los ~10 sitios que ya ocultan/muestran `#startScreen` entero
+    siguen intactos). `title` = banner + botones grandes (`.bigMenuBtn`):
+    Continuar/Jugar/Multijugador/Partidas guardadas/Ajustes; `setup` = las 7
+    características de la partida contra la IA (antes todo junto en un único
+    formulario); `mp` = pestañas Online/Red local; `load` = 3 ranuras
+    manuales. `MAP_DESC`, `refreshMenu` y los listeners de las fichas de
+    opción (`.opt-b`, ahora icono+etiqueta+marca ✓) siguen igual, solo
+    cambió el marcado HTML alrededor; botón Empezar (`#btnStart`, dentro de
+    `setup`); **prueba gráfica** (`openGfxTest` + enlace pequeño en el pie
+    del panel `title`, usa `<img>` directos sobre los 34 nombres de
+    `SPRITE_FILES`, no pasa por el atlas); listeners de fin/centrar (doble
+    toque → `lastAlert`, Fase 3)/pausa/
     inactivos/ejército (`#btnArmy`)/grupos de control (`#btnGrp1-3`); bloqueo de
     gestos del navegador; refresco periódico del panel; listeners de
     guardado/ajustes/tutorial (Fase 6, ver 15-17). **Arranque + pantalla de
