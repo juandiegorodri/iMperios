@@ -267,9 +267,14 @@ El archivo se organiza en estas secciones (en orden de aparición):
    (mismos proyectiles/pings, mismos campos).
 10. **Render**: `render` (culling `onScreen` + filtro de niebla `fogRenderOk`,
     y `drawFogOverlay` al final de la escena — ver 2.55.5), `drawTerrain`
-    (río/puente/riscos), `drawGround`, `drawCorpses` (cadáveres: fade + caída,
-    también filtrados por niebla), `onScreen`, `drawResource`/`drawBuilding`
-    (con `drawDamageFx`: humo/fuego por hp) /`drawUnit` (animación procedural
+    (río/puente/riscos), `drawGround`, `drawFootprints` (huellas de unidades a
+    pie, `footprints[]`/`_footPool`, mismo patrón de pool+purga por edad que
+    `corpses`/`pings`; se generan desde `drawUnit` acumulando `fx.trailDist`
+    cada `FOOT_STEP`=15px, tope `FOOT_MAX`=500 para batallas masivas),
+    `drawCorpses` (cadáveres: fade + caída, también filtrados por niebla),
+    `onScreen`, `drawResource`/`drawBuilding` (con `drawDamageFx`: humo/fuego
+    por hp, escala de forma CONTINUA con el % de vida perdido —no por
+    escalones— y suma chispas cerca del colapso) /`drawUnit` (animación procedural
     — bamboleo, lunge, volteo — y flash `hurtT`; dibujan **sprite** con anillo
     de bando y sombra, respaldo de emoji; el lunge también cubre el estado
     `amove` — Fase 3; Fase 5: chevrons ▲ por tier de línea investigado sobre

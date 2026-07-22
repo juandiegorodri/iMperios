@@ -2235,3 +2235,43 @@ descuadrada con mucho zoom out, y pantalla de título poco épica.
   (línea dorada + ❖) bajo el título, y un marco doble color oro en toda la
   tarjeta (antes borde plano gris) con sombra de profundidad. Verificado
   con capturas en móvil estrecho y escritorio ancho.
+
+## 2026-07-22 — Efectos visuales: humo/fuego más intenso y huellas en el suelo
+Pedido explícito del usuario: humo más intenso en edificios atacados (según
+% de vida, con sensación de urgencia) y huellas que van dejando las unidades
+al moverse, desvaneciéndose con el tiempo.
+
+- **Humo/fuego reescrito para escalar de forma continua** (`drawDamageFx`):
+  antes eran solo 2 escalones fijos (2-3 columnas casi transparentes desde
+  <50% hp, un triángulo de fuego estático desde <25%) — "muy suave" según el
+  reporte. Ahora la intensidad (nº de columnas de humo, opacidad, velocidad
+  de ascenso, tamaño de las llamas) escala de forma continua con `dmg =
+  (0.7-frac)/0.7` (0 al 70% de vida, 1 al 0%): humo desde <70% (2 a 6
+  columnas más oscuras y rápidas cuanto peor está el edificio), fuego desde
+  <35% (llama más grande y con parpadeo más rápido), y CHISPAS ascendentes
+  cerca del colapso (nuevas, refuerzan la sensación de "apuro" pedida
+  explícitamente). El flash blanco al recibir un golpe (`e.hurtT`) ya
+  existía para edificios y no se tocó.
+- **Huellas en el suelo** (`footprints[]`, nuevo array fuera de `entities`,
+  mismo patrón que `corpses`/`pings`: objetos con pool `_footPool`, purga por
+  edad con `performance.now()`): cada unidad a pie (`d.cat!=='siege'`, la
+  Catapulta tiene ruedas) suelta una marca cada `FOOT_STEP`=15px de mundo
+  recorrido (acumulado en `fx.trailDist` dentro de `drawUnit`, que ya
+  recalculaba el desplazamiento cuadro a cuadro por igual en host y cliente
+  MP — sin protocolo nuevo). Cada huella se desvanece en `FOOT_LIFE`=5.5s con
+  una curva suave (aparece rápido, se apaga lento). Se dibuja con un aro
+  claro (tierra removida) alrededor de un centro oscuro para que contraste
+  con el moteado propio de la textura del césped — la primera versión (solo
+  un óvalo oscuro a 0.3 de opacidad) se perdía casi por completo en ese
+  ruido visual, verificado comparando capturas antes/después con zoom. Tope
+  de seguridad `FOOT_MAX`=500 (deja de crear nuevas hasta que expiren las
+  viejas) para batallas masivas — medido con 120 unidades marchando sin
+  parar durante 30s simulados: sin tope, ~12.75ms/cuadro con hasta 6127
+  huellas vivas; con el tope, ~3.5ms/cuadro con 500 como máximo.
+- Verificado headless: huellas creadas correctamente detrás de una unidad en
+  movimiento (capturas con zoom mostrando el rastro), purgadas del todo tras
+  esperar el tiempo real de vida (`waitForTimeout` real, no `update()`
+  simulado — el desvanecimiento usa `performance.now()`, igual que
+  corpses/pings); comparación visual de humo/fuego en 3 edificios a 65%/30%/
+  8% de vida mostrando intensidad claramente creciente; regresión de ~300s
+  con IA Difícil — 0 errores de consola.

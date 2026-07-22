@@ -1015,3 +1015,21 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     antes/después en ambas esquinas del mapa; título revisado en móvil y
     escritorio ancho; regresión de ~300s con IA Difícil sin errores de
     consola.
+- **Efectos visuales: humo/fuego más intenso y huellas en el suelo**
+  (2026-07-22): pedido explícito de más efectos visuales.
+  - **Humo/fuego escala de forma continua** con el % de vida perdido (antes
+    2 escalones fijos y muy sutiles): más columnas de humo, más oscuras y
+    rápidas cuanto peor está el edificio (desde <70% hp), fuego más grande
+    desde <35%, y chispas ascendentes cerca del colapso para reforzar la
+    sensación de urgencia pedida explícitamente.
+  - **Huellas en el suelo** (`footprints[]`, mismo patrón de pool que
+    `corpses`/`pings`): cada unidad a pie deja una marca cada 15px
+    recorridos, que se desvanece en 5.5s con un aro claro alrededor para
+    contrastar con la textura del césped. Tope de seguridad de 500 huellas
+    vivas para batallas masivas (medido: ~12.75ms/cuadro sin tope con 120
+    unidades marchando sin parar → ~3.5ms/cuadro con el tope).
+  - Verificado headless: rastro de huellas visible tras una unidad en
+    movimiento, desvanecimiento real confirmado esperando su tiempo de vida
+    real (no simulado); comparación de intensidad de humo/fuego en 3
+    edificios a 65%/30%/8% de vida; regresión de ~300s con IA Difícil sin
+    errores de consola.

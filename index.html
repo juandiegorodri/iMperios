@@ -862,6 +862,7 @@ let frameOpenGates = [];    // subconjunto de frameWalls: puertas ABIERTAS (para
 let pings = [];             // efectos de selección/deselección
 let projectiles = [];       // flechas en vuelo (arqueros, héroe arco, torres, castillo)
 let corpses = [];           // cadáveres visuales (fade + caída), fuera de `entities`
+let footprints = [];        // huellas en el suelo (fade), fuera de `entities` — puramente decorativo
 const unitFace = new Map(); // id → {x,y,face,walking}: animación procedural (bamboleo/volteo)
 // --- Object pools (Fase 8): evitan crear un objeto nuevo por cada disparo o
 // ping (que en combates grandes son decenas por segundo) reutilizando los
@@ -874,6 +875,7 @@ const _projPool = [];
 function allocProjectile(){ return _projPool.pop() || {}; }
 function freeProjectile(p){ _projPool.push(p); }
 const _pingPool = [];
+const _footPool = [];
 let alertFlags = { player:false, enemy:false };  // "me atacan" pendiente de sonido/snapshot
 
 // Niebla de guerra (SOLO render/cliente: no afecta la simulación ni a la IA,
@@ -1576,7 +1578,7 @@ function clientStartFromInit(m){
   mapTheme = m.cfg.map; gameSpeed = 1;
   terrain = m.terrain||[]; bridge = m.bridge||null;
   entities=[]; selection=[]; placement=null; pings=[]; frameWalls=[];
-  projectiles=[]; corpses=[]; unitFace.clear(); alertFlags={player:false,enemy:false}; invalidatePathGrid();
+  projectiles=[]; corpses=[]; footprints=[]; unitFace.clear(); alertFlags={player:false,enemy:false}; invalidatePathGrid();
   orderMode=null; controlGroups=[[],[],[]]; for(let gi=0;gi<3;gi++) updateGroupBadge(gi);
   cam.vx=0; cam.vy=0;
   player.mods=freshMods(); enemy.mods=freshMods();
@@ -1767,7 +1769,7 @@ function applySaveObject(save){
     }
   }
   selection=[]; placement=null; pings=[]; frameWalls=[];
-  projectiles=[]; corpses=[]; unitFace.clear(); alertFlags={player:false,enemy:false};
+  projectiles=[]; corpses=[]; footprints=[]; unitFace.clear(); alertFlags={player:false,enemy:false};
   orderMode=null;
   controlGroups = save.groups || [[],[],[]];
   for(let gi=0;gi<3;gi++) cleanControlGroup(gi);
@@ -2003,7 +2005,7 @@ function startGame(cfg){
   garrisonEnabled = cfg.garrison === 'on';
   peaceTimer = Number(cfg.peace)||0;
   entities = []; selection = []; nextId = 1; placement = null; terrain = []; bridge = null;
-  frameWalls = []; pings = []; projectiles = []; corpses = []; unitFace.clear();
+  frameWalls = []; pings = []; projectiles = []; corpses = []; footprints = []; unitFace.clear();
   alertFlags = {player:false, enemy:false}; invalidatePathGrid();
   orderMode = null; controlGroups = [[],[],[]]; for(let gi=0;gi<3;gi++) updateGroupBadge(gi);
   cam.vx = 0; cam.vy = 0;
@@ -3871,6 +3873,7 @@ function render(){
   ctx.fillStyle=(MAPS[mapTheme]&&MAPS[mapTheme].ground)||'#1a1d16'; ctx.fillRect(0,0,viewW(),viewH());
   drawGround();
   drawTerrain();
+  drawFootprints();
   drawCorpses();
 
   // Solo entidades visibles (culling + niebla de guerra), ordenadas por Y
@@ -4065,31 +4068,52 @@ function drawResource(e){
   ctx.fillStyle=d.color; ctx.fillRect(s.x-w/2, s.y+sz*0.6, w*frac, 3);
 }
 
-// Humo (hp<50%) y fuego (hp<25%) sobre un edificio dañado; puramente decorativo,
-// derivado del hp/maxHp actual (ya sincronizado por snapshot en el cliente MP).
+// Humo/fuego sobre un edificio dañado; puramente decorativo, derivado del
+// hp/maxHp actual (ya sincronizado por snapshot en el cliente MP). Pedido
+// explícito tras juego real: "antes teníamos algo así pero era muy suave...
+// me gustaría que se vea que se está haciendo daño y que el efecto genere
+// apuro". Reescrito para escalar de forma CONTINUA con el % de vida perdido
+// (antes eran 2 escalones fijos con 2-3 columnas casi transparentes) y para
+// sumar chispas ascendentes cerca del colapso, más urgentes que un simple
+// triángulo de fuego estático.
 function drawDamageFx(e, cx, cy, sz){
   const frac = e.maxHp ? e.hp/e.maxHp : 1;
-  if(frac >= 0.5) return;
+  if(frac >= 0.7) return;
   const now = performance.now();
-  const n = frac < 0.25 ? 3 : 2;
+  const dmg = clamp((0.7-frac)/0.7, 0, 1);   // 0 al 70% de vida, 1 al 0%
+  const n = 2 + Math.round(dmg*4);            // 2 a 6 columnas de humo
   for(let i=0;i<n;i++){
-    const ph = ((now/900 + i*0.6 + (e.id%7)*0.3) % 1);
-    const px = cx + Math.sin(e.id*1.3+i)*sz*0.22;
-    const py = cy - ph*26*cam.zoom;
-    const r = (3+ph*5)*cam.zoom;
+    const speed = 780 - dmg*300;   // más rápido/agitado cuanto más dañado
+    const ph = ((now/speed + i*0.5 + (e.id%7)*0.3) % 1);
+    const px = cx + Math.sin(e.id*1.3+i*2.1)*sz*0.28;
+    const py = cy - ph*(24+dmg*22)*cam.zoom;
+    const r = (3+ph*6)*(0.7+dmg*0.9)*cam.zoom;
+    const shade = 50+Math.floor(dmg*20);
     ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2);
-    ctx.fillStyle = `rgba(120,120,120,${(1-ph)*0.35})`;
+    ctx.fillStyle = `rgba(${shade},${shade},${shade},${(1-ph)*(0.28+dmg*0.44)})`;
     ctx.fill();
   }
-  if(frac < 0.25){
-    const fl = 0.5+0.5*Math.sin(now/90 + e.id);
+  if(frac < 0.35){
+    const fireT = clamp((0.35-frac)/0.35, 0, 1);   // 0 al 35% de vida, 1 al 0%
+    const fl = 0.5+0.5*Math.sin(now/(150-fireT*80) + e.id);
+    const fh = (5+fireT*7)*cam.zoom;
     ctx.beginPath();
-    ctx.moveTo(cx, cy-6*cam.zoom);
-    ctx.lineTo(cx-5*cam.zoom, cy+4*cam.zoom);
-    ctx.lineTo(cx+5*cam.zoom, cy+4*cam.zoom);
+    ctx.moveTo(cx, cy-fh*1.3);
+    ctx.lineTo(cx-fh*0.8, cy+fh*0.6);
+    ctx.lineTo(cx+fh*0.8, cy+fh*0.6);
     ctx.closePath();
-    ctx.fillStyle = `rgba(255,${Math.floor(120+fl*60)},40,0.85)`;
+    ctx.fillStyle = `rgba(255,${Math.floor(110+fl*70)},30,${0.75+fireT*0.2})`;
     ctx.fill();
+    // Chispas ascendentes: refuerzan la sensación de "apuro" cerca del colapso.
+    const sparks = Math.round(fireT*3);
+    for(let i=0;i<sparks;i++){
+      const sph = ((now/500 + i*0.37 + (e.id%5)*0.2) % 1);
+      const sx = cx + Math.sin(e.id*2+i*3)*fh*1.4*sph;
+      const sy = cy - sph*fh*3;
+      ctx.beginPath(); ctx.arc(sx, sy, 1.4*cam.zoom, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(255,${180+Math.floor(fl*50)},80,${(1-sph)*0.9})`;
+      ctx.fill();
+    }
   }
 }
 
@@ -4178,7 +4202,7 @@ function drawBuilding(e){
       ctx.restore();
     }
   }
-  // humo/fuego cuando el edificio está dañado (<50% humo, <25% también fuego)
+  // humo/fuego cuando el edificio está dañado (<70% humo creciente, <35% también fuego+chispas)
   if(e.built) drawDamageFx(e, s.x, s.y-box*0.1, box);
   // progreso de construcción
   if(!e.built){
@@ -4265,6 +4289,14 @@ function drawUnit(e){
   }
   fx.x = e.x; fx.y = e.y;
   e.face = fx.face;
+
+  // Huellas en el suelo (pedido explícito de efectos visuales): se acumula la
+  // distancia recorrida y se suelta una marca cada FOOT_STEP px de mundo (no
+  // cada cuadro, para no saturar el array). La Catapulta tiene ruedas, no pies.
+  if(movedD>0.12 && d.cat!=='siege'){
+    fx.trailDist = (fx.trailDist||0) + movedD;
+    if(fx.trailDist >= FOOT_STEP){ fx.trailDist -= FOOT_STEP; addFootprint(e.x, e.y); }
+  }
 
   let lungeX=0, lungeY=0;
   if(e.anim>0){
@@ -4500,6 +4532,52 @@ function drawCorpses(){
     ctx.restore();
   }
   ctx.globalAlpha=1;
+}
+
+// --- Huellas en el suelo (pedido explícito de efectos visuales): marcas que
+// van quedando por donde pasan las unidades y se desvanecen con el tiempo.
+// Puramente decorativo (fuera de `entities`, sin protocolo MP): se generan
+// desde `drawUnit`, que ya recalcula el desplazamiento cuadro a cuadro por
+// igual en host y cliente (a partir de `e.x/e.y`, siempre presentes en el
+// snapshot), así que cada cliente dibuja sus propias huellas sin simular
+// nada nuevo — mismo patrón que el `fx`/`unitFace` de la animación procedural.
+const FOOT_STEP = 15;       // px de mundo entre huellas
+const FOOT_LIFE = 5500;     // ms hasta desvanecerse del todo
+const FOOT_MAX = 500;       // tope de seguridad (batallas masivas): se dejan de crear más hasta que expiren las viejas
+function addFootprint(x, y){
+  if(footprints.length >= FOOT_MAX) return;
+  const f = _footPool.pop() || {};
+  f.x=x; f.y=y; f.t0=performance.now();
+  footprints.push(f);
+}
+function drawFootprints(){
+  const now=performance.now();
+  for(let i=footprints.length-1;i>=0;i--){
+    const f=footprints[i], age=now-f.t0;
+    if(age>FOOT_LIFE){
+      const last=footprints.length-1;
+      if(i!==last) footprints[i]=footprints[last];
+      footprints.pop(); _footPool.push(f);
+      continue;
+    }
+    const s=worldToScreen(f.x,f.y);
+    if(s.x<-20||s.x>viewW()+20||s.y<-20||s.y>viewH()+20) continue;
+    const t = age/FOOT_LIFE;
+    // Aparece rápido y se desvanece lento (curva suave, no lineal), para que
+    // se note el rastro reciente sin que parpadee al crearse. Un aro más claro
+    // (tierra removida) alrededor del centro oscuro (huella) para que
+    // contraste con el moteado propio de la textura del césped — si no, se
+    // perdía casi por completo en el ruido visual del suelo.
+    const alpha = (1-t*t)*0.5;
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, 4.2*cam.zoom, 2.9*cam.zoom, 0, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(210,190,150,${alpha*0.4})`;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, 3*cam.zoom, 2.1*cam.zoom, 0, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(35,28,20,${alpha})`;
+    ctx.fill();
+  }
 }
 
 function drawHpBar(cx, cy, w, frac, owner){
