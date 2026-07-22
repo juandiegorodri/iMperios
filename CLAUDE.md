@@ -901,3 +901,39 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
       diagonal con la herramienta real (`wallTap`) confirmado recto y en
       rejilla; regresión de ~90s de juego simulado con IA Difícil — 0
       errores de consola.
+  - **FASE 9E — Aldeanos (y Héroe Espada) caminaban de espaldas** (2026-07-22):
+    reporte de juego real tras la Fase 9D: "algunas unidades no tienen un
+    sentido correcto al moverse, no todos, algunos si se ven correctos, los
+    aldeanos van al revés". Investigado con capturas Playwright (zoom ×5.5
+    sobre una unidad moviéndose en las 4 direcciones cardinales) en vez de
+    solo revisar el código:
+    - **Causa raíz**: `UNIT.villager` y `UNIT.hero_sword` se habían quedado
+      con `faceOffset:0` (valor por defecto sin calibrar de verdad) mientras
+      el resto de unidades ya tenían un valor propio calibrado en la Fase 9D.
+      Son los dos únicos sprites dibujados "de frente" (cara/visor mirando a
+      cámara, herramienta o capa colgando hacia abajo) y ese parecido
+      engañó la calibración anterior a asumir "mirando hacia arriba" cuando
+      el arte en realidad mira hacia ABAJO — un desfase de 180°.
+    - `villager`: `faceOffset` 0 → `Math.PI`. Verificado: el pico ahora
+      queda por delante al moverse (mismo patrón "la herramienta lidera" que
+      Milicia/Piquetero); moviéndose hacia abajo se ve el sprite sin rotar,
+      coherente con que el arte ya nace mirando hacia abajo.
+    - `hero_sword`: `Math.PI` (misma lógica que el aldeano, por tener
+      también cara/capa visible) se probó primero pero dejaba la espada por
+      DETRÁS del movimiento — seguía mal, porque su composición real
+      (escudo a un lado, espada al otro) es la misma que la Milicia base,
+      no la del aldeano. Recalibrado a `-Math.PI/2` (el mismo valor que
+      Milicia); verificado que la espada ya lidera el movimiento.
+    - Se revisaron también las 6 fichas de línea de mejora (Espadachín,
+      Campeón, Alabardero, Caballero, Paladín, Arquero de Tiro Largo)
+      moviéndose a la derecha: las 6 ya mostraban su arma/cabeza de caballo
+      por delante del movimiento, sin necesitar cambios.
+    - **Lección**: `faceOffset` no se puede derivar solo de "¿hacia dónde
+      mira la cara?" — para sprites con arma/herramienta asimétrica clara
+      (Milicia, Piquetero, Arquero, Caballo y sus tiers, y también Héroe
+      Espada pese a tener cara visible) esa arma es la señal fiable; para
+      el aldeano, que no tiene ese par simétrico, hay que calibrar aparte.
+    - Verificado headless: capturas en zoom alto de las 4 direcciones
+      cardinales para Aldeano y Héroe Espada, más las 6 fichas de tier
+      restantes moviéndose a la derecha; regresión de ~300s con IA Difícil
+      — 0 errores de consola.

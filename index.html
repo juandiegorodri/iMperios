@@ -518,7 +518,7 @@ const STRONG_VS = { archer:'infantry', infantry:'pike', pike:'cavalry', cavalry:
 // pista clara de dirección se deja en 0 (el sentido que pedía el prompt).
 const UNIT = {
   villager: { name:'Aldeano',   emoji:'👷', cat:'villager', hp:40, atk:4, speed:58, range:16, cd:1.3, pop:1,
-              cost:{food:50}, train:11, faceOffset:0 },
+              cost:{food:50}, train:11, faceOffset:Math.PI },
   infantry: { name:'Milicia',   emoji:'⚔️', cat:'infantry', hp:55, atk:6, speed:56, range:16, cd:1.1, pop:1,
               cost:{food:60}, train:14, faceOffset:-Math.PI/2 },
   pike:     { name:'Piquetero', emoji:'🔱', cat:'pike',     hp:60, atk:6, speed:52, range:18, cd:1.2, pop:1,
@@ -529,7 +529,7 @@ const UNIT = {
               cost:{food:70,gold:40}, train:21, faceOffset:Math.PI/2 },
   // Héroes (Castillo): versiones potentes de cada categoría.
   hero_sword:  { name:'Héroe Espada', emoji:'🦸', cat:'infantry', hero:true, hp:200, atk:18, speed:60, range:18, cd:1.0, pop:2,
-                 cost:{food:120,gold:120}, train:30, faceOffset:0 },
+                 cost:{food:120,gold:120}, train:30, faceOffset:-Math.PI/2 },
   hero_archer: { name:'Héroe Arco',   emoji:'🏹', cat:'archer',   hero:true, hp:130, atk:14, speed:58, range:120, cd:1.3, pop:2,
                  cost:{wood:100,gold:140}, train:30, faceOffset:-Math.PI/2 },
   hero_cav:    { name:'Héroe Jinete', emoji:'🐎', cat:'cavalry',  hero:true, hp:280, atk:22, speed:100, range:18, cd:1.2, pop:2,
