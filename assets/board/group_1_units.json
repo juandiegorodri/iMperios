@@ -1,0 +1,112 @@
+{
+  "group_id": "P1_units",
+  "status": "RECIBIDO (2026-07-22) — Gemini entregó una parrilla de 4×3 (más grande que la especificada aquí originalmente en 3×3), reutilizando 'nivel 1/2/3' para nombrar lo que en el motor son: nivel base, tier de mejora de línea (Fase 5, mismo tipo con más armadura) y héroe del Castillo (fila 3, confirmado por el usuario). Mapeo confirmado en conversación — ver 'row'/'col' de cada celda abajo, ya ACTUALIZADOS a la rejilla real entregada (no a la 3×3 original). El motor necesita una extensión (Fase 9B) para buscar sprite por TIPO+TIER, no solo por tipo, ya que se decidió explícitamente usar arte distinto por nivel en vez de solo la insignia de estrellas.",
+  "grid": {
+    "cols": 4,
+    "rows": 3,
+    "cell_px": 512
+  },
+  "note": "IMPORTANT: this single image must be a 4x3 grid of 12 equal square cells, with NO gaps, NO borders, and NO visible seams between cells, and NO cell numbering/labels drawn in the image. Each described cell below goes in its exact row/column position, reading left-to-right then top-to-bottom.",
+  "how_to_use": "Copia el texto de 'full_prompt' de UNA celda a la vez y pegalo en Gemini para esa posicion exacta (fila/columna), o pega la nota 'note' de arriba una sola vez seguida de los 'full_prompt' de TODAS las celdas de este archivo en un unico mensaje para pedir la parrilla completa de una vez. Cada full_prompt ya trae TODAS las normas de estilo incluidas, no hace falta agregar nada mas.",
+  "cells": [
+    {
+      "row": 1,
+      "col": 1,
+      "id": "villager",
+      "name_es": "Aldeano",
+      "ingame_px": 44,
+      "full_prompt": "top-down flat sticker token of a peasant villager: round head with a simple cap, shoulders, one small farming tool (hoe or hand-axe) visible beside the body, seen strictly from above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "id": "infantry_tier1",
+      "name_es": "Milicia mejorada — Espadachín (tier 1)",
+      "ingame_px": 44,
+      "game_key": "UNIT_LINES.infantry.tiers[0] (Espadachín)",
+      "full_prompt": "top-down flat sticker token of an upgraded sword-and-shield infantry soldier (tier 1, 'Espadachín'): full chainmail with a cross emblem on the round helmet, larger round wooden shield with metal rivets, short sword blade poking forward, seen strictly from above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "id": "infantry",
+      "name_es": "Milicia (infantería base)",
+      "ingame_px": 44,
+      "full_prompt": "top-down flat sticker token of a base sword-and-shield infantry soldier: chainmail hood, plain round shield, short sword blade poking forward, seen strictly from above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 1,
+      "col": 4,
+      "id": "pike",
+      "name_es": "Piquetero",
+      "ingame_px": 44,
+      "full_prompt": "top-down flat sticker token of a pikeman: conical helmet, round shield, a long pike/spear clearly extending forward beyond the token edge, seen strictly from above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "id": "archer",
+      "name_es": "Arquero (base)",
+      "ingame_px": 44,
+      "full_prompt": "top-down flat sticker token of an archer: hooded head, curved bow visible to one side, quiver of arrows on the back, seen strictly from above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "id": "cavalry",
+      "name_es": "Caballo (caballería ligera, base)",
+      "ingame_px": 44,
+      "full_prompt": "top-down flat sticker token of light cavalry: elongated horse body seen from above with head at the top edge and haunches at the bottom edge, helmeted rider as an oval on the horse's back holding a short spear, seen strictly from above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "id": "siege",
+      "name_es": "Catapulta",
+      "ingame_px": 50,
+      "status": "APROBADA por el usuario (2026-07-22) — se integra tal cual, sin regenerar.",
+      "full_prompt": "top-down flat sticker token of a wooden catapult siege engine: rectangular wheeled chassis, and a clearly visible diagonal throwing arm with a counterweight box at one end and a sling/cup at the other end (the throwing arm is the single most important recognizable feature — do not omit it), seen strictly from above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 2,
+      "col": 4,
+      "id": null,
+      "name_es": "(no generada)",
+      "ingame_px": 0,
+      "full_prompt": null
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "id": "hero_sword",
+      "name_es": "Héroe Espada (Castillo)",
+      "ingame_px": 48,
+      "full_prompt": "top-down flat sticker token of an elite sword hero: like a sword-and-shield infantry token but with a burgundy cape and golden trim accents on helmet/shield, seen strictly from above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "id": "archer_tier1",
+      "name_es": "Arquero mejorado — Tiro Largo (tier 1)",
+      "ingame_px": 44,
+      "game_key": "UNIT_LINES.archer.tiers[0] (Arquero de Tiro Largo)",
+      "full_prompt": "top-down flat sticker token of an upgraded archer (tier 1, 'Arquero de Tiro Largo'): forest green hooded cloak, a longer/larger bow with a golden trim accent, quiver of arrows on the back, seen strictly from above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 3,
+      "col": 3,
+      "id": "hero_archer",
+      "name_es": "Héroe Arco (Castillo)",
+      "ingame_px": 48,
+      "full_prompt": "top-down flat sticker token of an elite archer hero: like the archer token but with a golden trim accent on the hood, seen strictly from above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 3,
+      "col": 4,
+      "id": "hero_cav",
+      "name_es": "Héroe Jinete (Castillo)",
+      "ingame_px": 48,
+      "full_prompt": "top-down flat sticker token of an elite cavalry hero: like the light cavalry token but on a black or white horse (distinct from the regular brown cavalry horse), with a short flowing dark cape, a golden helmet plume, and a long lance, seen strictly from above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    }
+  ]
+}

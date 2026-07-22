@@ -1,0 +1,61 @@
+{
+  "group_id": "P4_resources_props",
+  "status": null,
+  "grid": {
+    "cols": 3,
+    "rows": 2,
+    "cell_px": 384
+  },
+  "note": "IMPORTANT: this single image must be a 3x2 grid of 6 equal square cells, with NO gaps, NO borders, and NO visible seams between cells, and NO cell numbering/labels drawn in the image. Each described cell below goes in its exact row/column position, reading left-to-right then top-to-bottom.",
+  "how_to_use": "Copia el texto de 'full_prompt' de UNA celda a la vez y pegalo en Gemini para esa posicion exacta (fila/columna), o pega la nota 'note' de arriba una sola vez seguida de los 'full_prompt' de TODAS las celdas de este archivo en un unico mensaje para pedir la parrilla completa de una vez. Cada full_prompt ya trae TODAS las normas de estilo incluidas, no hace falta agregar nada mas.",
+  "cells": [
+    {
+      "row": 1,
+      "col": 1,
+      "id": "res_food",
+      "name_es": "Comida (arbusto de bayas)",
+      "ingame_px": 40,
+      "full_prompt": "top-down flat sticker icon of a round berry bush full of red berries, seen from directly above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "id": "res_wood",
+      "name_es": "Madera (árbol)",
+      "ingame_px": 40,
+      "full_prompt": "top-down flat sticker icon of a single round leafy tree canopy (seen as a circle from above, trunk hidden underneath), seen from directly above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "id": "res_gold",
+      "name_es": "Oro (veta)",
+      "ingame_px": 40,
+      "full_prompt": "top-down flat sticker icon of a small rocky outcrop with glittering golden ore veins, seen from directly above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "id": "res_stone",
+      "name_es": "Piedra (veta)",
+      "ingame_px": 40,
+      "full_prompt": "top-down flat sticker icon of a small rocky outcrop of plain grey stone (no gold), seen from directly above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "id": "obj_mountain",
+      "name_es": "Montaña decorativa (riscos)",
+      "ingame_px": 60,
+      "full_prompt": "top-down flat sticker icon of a small decorative rocky mountain peak cluster, seen from directly above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "id": "obj_bush",
+      "name_es": "Matojo decorativo",
+      "ingame_px": 30,
+      "full_prompt": "top-down flat sticker icon of a small decorative round grass/scrub bush, seen from directly above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    }
+  ]
+}
