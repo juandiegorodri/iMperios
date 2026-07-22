@@ -41,7 +41,7 @@
         { "row": 2, "col": 2, "id": "cavalry", "name_es": "Caballo (caballería ligera, base)", "ingame_px": 44,
           "prompt": "top-down flat sticker token of light cavalry: elongated horse body seen from above with head at the top edge and haunches at the bottom edge, helmeted rider as an oval on the horse's back holding a short spear, seen strictly from above" },
         { "row": 2, "col": 3, "id": "siege", "name_es": "Catapulta", "ingame_px": 50,
-          "review_note": "La imagen recibida se lee más como un carromato/cofre de madera con ruedas que como una catapulta con brazo lanzador — se recomienda REGENERAR esta celda sola con el prompt de abajo antes de integrarla, para que se reconozca claramente como máquina de asedio.",
+          "status": "APROBADA por el usuario (2026-07-22) — se integra tal cual, sin regenerar.",
           "prompt": "top-down flat sticker token of a wooden catapult siege engine: rectangular wheeled chassis, and a clearly visible diagonal throwing arm with a counterweight box at one end and a sling/cup at the other end (the throwing arm is the single most important recognizable feature — do not omit it), seen strictly from above" },
         { "row": 2, "col": 4, "id": null, "name_es": "(no generada)", "ingame_px": 0, "prompt": null },
         { "row": 3, "col": 1, "id": "hero_sword", "name_es": "Héroe Espada (Castillo)", "ingame_px": 48,
