@@ -863,6 +863,10 @@ let pings = [];             // efectos de selección/deselección
 let projectiles = [];       // flechas en vuelo (arqueros, héroe arco, torres, castillo)
 let corpses = [];           // cadáveres visuales (fade + caída), fuera de `entities`
 let footprints = [];        // huellas en el suelo (fade), fuera de `entities` — puramente decorativo
+let sparks = [];             // chispas cortas: recolección (madera/piedra/oro) e impacto cuerpo a cuerpo
+let dust = [];                // polvo bajo la caballería en movimiento rápido
+let bursts = [];              // destello dorado al avanzar de Era o completar una mejora/tecnología
+let shakeT = 0, shakeMag = 0; // sacudida de cámara (solo render, nunca toca cam.x/y "de verdad")
 const unitFace = new Map(); // id → {x,y,face,walking}: animación procedural (bamboleo/volteo)
 // --- Object pools (Fase 8): evitan crear un objeto nuevo por cada disparo o
 // ping (que en combates grandes son decenas por segundo) reutilizando los
@@ -876,6 +880,9 @@ function allocProjectile(){ return _projPool.pop() || {}; }
 function freeProjectile(p){ _projPool.push(p); }
 const _pingPool = [];
 const _footPool = [];
+const _sparkPool = [];
+const _dustPool = [];
+const _burstPool = [];
 let alertFlags = { player:false, enemy:false };  // "me atacan" pendiente de sonido/snapshot
 
 // Niebla de guerra (SOLO render/cliente: no afecta la simulación ni a la IA,
@@ -1466,12 +1473,20 @@ function applySnap(m){
   // Estado previo para reconstruir efectos puramente visuales (el cliente no
   // simula daño ni muertes): flash al bajar hp y cadáveres de unidades que
   // desaparecieron entre instantáneas.
-  const prevHp = {}, prevUnits = {};
+  const prevHp = {}, prevUnits = {}, prevTownCastle = {};
   for(const e of entities){
     if(e.hp!==undefined) prevHp[e.id] = e.hp;
     if(e.kind==='unit') prevUnits[e.id] = { x:e.x, y:e.y, type:e.type, owner:e.owner };
+    // Sacudida de cámara: para detectar en el cliente que un Centro Urbano/
+    // Castillo desapareció entre instantáneas (el cliente no simula muertes).
+    if(e.kind==='building' && (e.btype==='town'||e.btype==='castle')) prevTownCastle[e.id] = true;
   }
   const prevTrained = player.stats.trained, prevLostB = player.stats.lostB + enemy.stats.lostB, prevBuilt = player.stats.built;
+  // Destello dorado (Era/mejora): diff de antes/después sobre `player`/`enemy`
+  // (el cliente no ejecuta `tryAdvanceAge`/`buyUpgrade`/etc., así que no hay
+  // otro sitio donde enganchar esto en su lado).
+  const prevAge = { player: player.age, enemy: enemy.age };
+  const prevUpgN = { player: Object.keys(player.upg).length, enemy: Object.keys(enemy.upg).length };
   // Snapshot completo (`snap`) o delta (`snapd`, Fase 7): en el delta se
   // fusionan las entidades actualizadas/eliminadas sobre las que ya había,
   // así que el resultado final es EXACTAMENTE el mismo tipo de array
@@ -1503,6 +1518,11 @@ function applySnap(m){
       corpses.push({ x:u.x, y:u.y, type:u.type, owner:u.owner, face:1, t0:nowTs });
     }
   }
+  // Sacudida de cámara: un Centro Urbano/Castillo que existía antes de esta
+  // instantánea y ya no está entre las entidades vivas acaba de caer.
+  for(const id in prevTownCastle){
+    if(!liveIds.has(+id)) triggerShake(7, 0.4);
+  }
   projectiles = (m.shots||[]).map(o=>({ id:o.i, x0:o.x0, y0:o.y0, x1:o.x1, y1:o.y1, t:o.t, dur:o.dur, owner:o.o, kind:o.k||'arrow' }));
   // SFX de flecha: suena cuando aparece un proyectil NUEVO respecto a la
   // instantánea anterior (el cliente no ejecuta fireProjectile). El throttle de
@@ -1518,6 +1538,13 @@ function applySnap(m){
   if(player.stats.built > prevBuilt) playSfx('built');
   if(player.stats.lostB + enemy.stats.lostB > prevLostB) playSfx('destroyed');
   if(m.al) playSfx('alert');
+  // Destello dorado: el cliente no ejecuta las funciones de compra, así que
+  // detecta el logro comparando antes/después de `Object.assign` (misma idea
+  // que el resto de esta función con `stats.trained`/`built`/`lostB`).
+  if(player.age > prevAge.player) triggerAchievementBurst('player');
+  if(enemy.age > prevAge.enemy) triggerAchievementBurst('enemy');
+  if(Object.keys(player.upg).length > prevUpgN.player) triggerAchievementBurst('player');
+  if(Object.keys(enemy.upg).length > prevUpgN.enemy) triggerAchievementBurst('enemy');
   // Interpolación de posiciones (Fase 7 punto 4): guarda la posición de cada
   // unidad ANTES de esta instantánea (`ipPrev`, lo que ya se venía mostrando)
   // y la nueva posición autoritativa (`ipCur`), con la marca de tiempo real
@@ -1578,7 +1605,7 @@ function clientStartFromInit(m){
   mapTheme = m.cfg.map; gameSpeed = 1;
   terrain = m.terrain||[]; bridge = m.bridge||null;
   entities=[]; selection=[]; placement=null; pings=[]; frameWalls=[];
-  projectiles=[]; corpses=[]; footprints=[]; unitFace.clear(); alertFlags={player:false,enemy:false}; invalidatePathGrid();
+  projectiles=[]; corpses=[]; footprints=[]; sparks=[]; dust=[]; bursts=[]; shakeT=0; unitFace.clear(); alertFlags={player:false,enemy:false}; invalidatePathGrid();
   orderMode=null; controlGroups=[[],[],[]]; for(let gi=0;gi<3;gi++) updateGroupBadge(gi);
   cam.vx=0; cam.vy=0;
   player.mods=freshMods(); enemy.mods=freshMods();
@@ -1769,7 +1796,7 @@ function applySaveObject(save){
     }
   }
   selection=[]; placement=null; pings=[]; frameWalls=[];
-  projectiles=[]; corpses=[]; footprints=[]; unitFace.clear(); alertFlags={player:false,enemy:false};
+  projectiles=[]; corpses=[]; footprints=[]; sparks=[]; dust=[]; bursts=[]; shakeT=0; unitFace.clear(); alertFlags={player:false,enemy:false};
   orderMode=null;
   controlGroups = save.groups || [[],[],[]];
   for(let gi=0;gi<3;gi++) cleanControlGroup(gi);
@@ -1942,6 +1969,7 @@ function buyLineTier(owner, cat, idx){
       e.hp = Math.round(e.hp*LINE_TIER_MULT);
     }
   }
+  triggerAchievementBurst(owner);
   if(owner==='player'){ showHint(t.name+' investigado: unidades mejoradas (+'+Math.round((LINE_TIER_MULT-1)*100)+'% hp/atq).'); updateActionPanel(); }
 }
 // ---------- Guarnición (Fase 5) ----------
@@ -2005,7 +2033,7 @@ function startGame(cfg){
   garrisonEnabled = cfg.garrison === 'on';
   peaceTimer = Number(cfg.peace)||0;
   entities = []; selection = []; nextId = 1; placement = null; terrain = []; bridge = null;
-  frameWalls = []; pings = []; projectiles = []; corpses = []; footprints = []; unitFace.clear();
+  frameWalls = []; pings = []; projectiles = []; corpses = []; footprints = []; sparks = []; dust = []; bursts = []; shakeT = 0; unitFace.clear();
   alertFlags = {player:false, enemy:false}; invalidatePathGrid();
   orderMode = null; controlGroups = [[],[],[]]; for(let gi=0;gi<3;gi++) updateGroupBadge(gi);
   cam.vx = 0; cam.vy = 0;
@@ -2481,6 +2509,7 @@ function tryAdvanceAge(owner){
   const next = AGES[s.age+1];
   if(!canAfford(s, next.cost)){ if(owner==='player') showHint('Necesitas '+costStr(next.cost)+' para '+next.name+'.'); return; }
   pay(s, next.cost); s.age += 1;
+  triggerAchievementBurst(owner);
   if(owner==='player'){ showHint('¡'+AGES[s.age].name+'! Nuevas tecnologías disponibles.'); updateActionPanel(); }
 }
 
@@ -2492,6 +2521,7 @@ function buyEcon(owner, res, tierIdx){
   if(s.age < t.reqAge){ if(owner==='player') showHint('Requiere '+AGES[t.reqAge].name+'.'); return; }
   if(!canAfford(s, t.cost)){ if(owner==='player') showHint('Recursos insuficientes.'); return; }
   pay(s, t.cost); s.upg[t.key]=true; s.mods.resMult[res]+=t.add;
+  triggerAchievementBurst(owner);
   if(owner==='player'){ showHint(t.name+': +'+Math.round(t.add*100)+'% '+res+'.'); updateActionPanel(); }
 }
 // Devuelve el próximo tier no investigado de un recurso (o null).
@@ -2512,6 +2542,7 @@ function buyUpgrade(owner, key){
   if(key==='swords'){ s.mods.meleeAtk+=1; }
   if(key==='shields'){ s.mods.armor+=1; }
   if(key==='axes'){ s.mods.gather=1.25; }
+  triggerAchievementBurst(owner);
   if(owner==='player'){ showHint(u.name+' investigada.'); updateActionPanel(); }
 }
 
@@ -2918,6 +2949,10 @@ function loop(now){
     if(!paused && !inMP()){ tutT-=dt; if(tutT<=0){ tutT=0.33; tutorialCheck(); } }
     if(!paused && net.mode!=='client'){ timelineT-=dt; if(timelineT<=0){ timelineT=TIMELINE_INTERVAL; sampleTimeline(); } }
   }
+  // Sacudida de cámara: decae en tiempo REAL (no escalado por velocidad de
+  // partida ni pausable), para que se sienta igual de intensa sin importar
+  // el ajuste de velocidad — es un efecto de percepción, no de simulación.
+  if(shakeT>0) shakeT = Math.max(0, shakeT-realDt);
   render();
   // Contador de fps (Ajustes → Mostrar FPS): EMA barata sobre el delta REAL
   // (sin escalar por velocidad de partida), actualizado en pantalla a ~2.5Hz.
@@ -3243,6 +3278,11 @@ function update(dt){
     }
     else if(d.kind==='building'){
       own.stats.lostB++; playSfx('destroyed');
+      // Sacudida de cámara (pedido explícito de efectos visuales): solo para
+      // los edificios "grandes" (Centro Urbano/Castillo), un momento que
+      // define la partida — no se dispara por cualquier edificio menor para
+      // no volverse molesto.
+      if(d.btype==='town' || d.btype==='castle') triggerShake(7, 0.4);
       // Guarnición (Fase 5): al caer el edificio, las unidades dentro salen ilesas.
       if(d.garrison && d.garrison.length){
         for(const gid of d.garrison){ const gu=find(gid); if(gu){ gu.garrisonedIn=null; gu.state='idle'; } }
@@ -3869,11 +3909,21 @@ function pickWaveTarget(army, mode){
 // ============================ RENDER ============================
 function render(){
   ctx.clearRect(0,0,viewW(),viewH());
+  // Sacudida de cámara (Centro Urbano/Castillo destruido, Fase de efectos
+  // visuales): un desplazamiento aleatorio puramente de dibujo, restaurado al
+  // final de esta función — nunca toca `cam.x`/`cam.y`, así que no afecta al
+  // mapeo pantalla↔mundo que usan los toques (procesados fuera de `render`).
+  const shaking = shakeT>0;
+  if(shaking){
+    ctx.save();
+    ctx.translate((Math.random()*2-1)*shakeMag, (Math.random()*2-1)*shakeMag);
+  }
   // Fondo (color según el mapa) → suelo con textura → terreno (río/riscos) encima
   ctx.fillStyle=(MAPS[mapTheme]&&MAPS[mapTheme].ground)||'#1a1d16'; ctx.fillRect(0,0,viewW(),viewH());
   drawGround();
   drawTerrain();
   drawFootprints();
+  drawDust();
   drawCorpses();
 
   // Solo entidades visibles (culling + niebla de guerra), ordenadas por Y
@@ -3887,6 +3937,8 @@ function render(){
   for(const e of sorted){ if(e.kind==='building') drawBuilding(e); }
   for(const e of sorted){ if(e.kind==='unit') drawUnit(e); }
   drawProjectiles();
+  drawSparks();
+  drawBursts();
   drawFogOverlay();   // capa de niebla sobre todo lo anterior (terreno+entidades)
   drawTutorialTarget();   // Fase 6: anillo pulsante sobre el objetivo del paso actual del tutorial
 
@@ -3954,6 +4006,7 @@ function render(){
       }
     }
   }
+  if(shaking) ctx.restore();
 }
 
 // Dibuja las figuras de terreno (río, riscos) en coordenadas de mundo.
@@ -4297,6 +4350,13 @@ function drawUnit(e){
     fx.trailDist = (fx.trailDist||0) + movedD;
     if(fx.trailDist >= FOOT_STEP){ fx.trailDist -= FOOT_STEP; addFootprint(e.x, e.y); }
   }
+  // Polvo bajo la caballería (Caballo/Héroe Jinete) al galopar: nube más
+  // grande y de vida corta, con su propio contador de distancia (más seguido
+  // que las huellas, para que se lea como una nube continua tras el caballo).
+  if(movedD>0.12 && d.cat==='cavalry'){
+    fx.dustDist = (fx.dustDist||0) + movedD;
+    if(fx.dustDist >= DUST_STEP){ fx.dustDist -= DUST_STEP; addDust(e.x, e.y); }
+  }
 
   let lungeX=0, lungeY=0;
   if(e.anim>0){
@@ -4308,6 +4368,26 @@ function drawUnit(e){
       const ldx=tp.x-e.x, ldy=tp.y-e.y, ld=Math.hypot(ldx,ldy)||1;
       const amt = 5*cam.zoom*Math.min(1, e.anim/0.12);
       lungeX = ldx/ld*amt; lungeY = ldy/ld*amt;
+
+      // Chispas de recolección/impacto (pedido explícito de efectos
+      // visuales): throttle por unidad con una marca de tiempo, porque
+      // `e.anim` se mantiene >0 varios cuadros seguidos mientras dura la
+      // acción (recolectar) o el pulso del golpe (atacar). Se deriva SOLO de
+      // `e.state`/`e.gather`/`e.target` (todo viaja en el snapshot MP), igual
+      // que el resto de esta animación — funciona igual en host y cliente.
+      const nowSpark = performance.now();
+      if(!fx.nextSparkT || nowSpark>=fx.nextSparkT){
+        if(e.state==='gather'){
+          const rtype = tp.kind==='resource' ? tp.rtype : BLD[tp.btype].produces;
+          addSpark(e.x+ldx*0.4, e.y+ldy*0.4, rtype);
+          fx.nextSparkT = nowSpark + 380 + Math.random()*160;
+        } else if(e.state==='attack' && d.cat!=='archer' && d.cat!=='siege'){
+          // Solo golpes cuerpo a cuerpo instantáneos; arquero/catapulta ya
+          // muestran un proyectil visible que impacta más tarde en el blanco.
+          addSpark((e.x+tp.x)/2, (e.y+tp.y)/2, 'impact');
+          fx.nextSparkT = nowSpark + 220 + Math.random()*80;
+        }
+      }
     }
   }
   // "Bonk": pulso de tamaño breve al recibir un golpe, además del flash blanco
@@ -4578,6 +4658,138 @@ function drawFootprints(){
     ctx.fillStyle = `rgba(35,28,20,${alpha})`;
     ctx.fill();
   }
+}
+
+// --- Polvo bajo la caballería (Caballo/Héroe Jinete) en movimiento rápido ---
+// Nube más grande y clara que las huellas, se disipa mucho más rápido (efecto
+// de velocidad, no una marca duradera). Mismo patrón de pool+purga por edad.
+const DUST_STEP = 10;      // px de mundo entre nubes (más seguido que las huellas)
+const DUST_LIFE = 900;     // ms hasta disiparse del todo
+function addDust(x, y){
+  const f = _dustPool.pop() || {};
+  f.x = x + (Math.random()-0.5)*10;
+  f.y = y + (Math.random()-0.5)*10;
+  f.t0 = performance.now();
+  dust.push(f);
+}
+function drawDust(){
+  const now=performance.now();
+  for(let i=dust.length-1;i>=0;i--){
+    const f=dust[i], age=now-f.t0;
+    if(age>DUST_LIFE){
+      const last=dust.length-1;
+      if(i!==last) dust[i]=dust[last];
+      dust.pop(); _dustPool.push(f);
+      continue;
+    }
+    const s=worldToScreen(f.x,f.y);
+    if(s.x<-20||s.x>viewW()+20||s.y<-20||s.y>viewH()+20) continue;
+    const t = age/DUST_LIFE;
+    const r = (2+t*6)*cam.zoom;   // crece mientras se disipa
+    ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(185,168,120,${(1-t)*0.26})`;
+    ctx.fill();
+  }
+}
+
+// --- Chispas cortas: recolección (madera/piedra/oro/comida) e impacto cuerpo
+// a cuerpo. Un puñado de partículas que saltan desde el punto de contacto y
+// caen con un arco simple (mismo truco de "falso eje Z" que ya usan las
+// flechas parabólicas de la Catapulta en `drawProjectiles`).
+const SPARK_LIFE = 420;
+const SPARK_COLOR = { wood:'168,122,66', stone:'150,150,140', gold:'230,195,74', food:'214,90,90', impact:'255,235,180' };
+function addSpark(x, y, rtype){
+  const isImpact = rtype==='impact';
+  const n = isImpact ? (3+Math.floor(Math.random()*2)) : (2+Math.floor(Math.random()*2));
+  for(let i=0;i<n;i++){
+    const s = _sparkPool.pop() || {};
+    s.x=x; s.y=y; s.rtype=rtype;
+    s.ang = Math.random()*Math.PI*2;
+    s.dist = (isImpact?10:8) + Math.random()*(isImpact?14:10);
+    s.t0 = performance.now();
+    sparks.push(s);
+  }
+}
+function drawSparks(){
+  const now=performance.now();
+  for(let i=sparks.length-1;i>=0;i--){
+    const s=sparks[i], age=now-s.t0;
+    if(age>SPARK_LIFE){
+      const last=sparks.length-1;
+      if(i!==last) sparks[i]=sparks[last];
+      sparks.pop(); _sparkPool.push(s);
+      continue;
+    }
+    const t = age/SPARK_LIFE;
+    const wx = s.x + Math.cos(s.ang)*s.dist*t, wy = s.y + Math.sin(s.ang)*s.dist*t;
+    const scr = worldToScreen(wx, wy);
+    scr.y -= 14*4*t*(1-t)*cam.zoom;   // arco hacia arriba en pantalla, cae al final
+    if(scr.x<-20||scr.x>viewW()+20||scr.y<-20||scr.y>viewH()+20) continue;
+    const col = SPARK_COLOR[s.rtype] || '210,210,200';
+    ctx.beginPath(); ctx.arc(scr.x, scr.y, (2.3-t*1.4)*cam.zoom, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(${col},${(1-t)*0.9})`;
+    ctx.fill();
+  }
+}
+
+// --- Destello dorado al avanzar de Era o completar una mejora/tecnología ---
+// Anillo dorado expandiéndose + un puñado de destellos orbitando hacia
+// arriba, sobre el Centro Urbano del bando que investigó (simplificación:
+// siempre el Centro Urbano, sin importar en qué edificio se compró — es el
+// "hogar" natural del bando, evita rastrear la posición exacta de cada
+// edificio de investigación para un efecto puramente decorativo).
+const BURST_LIFE = 900;
+function ownerTownPos(owner){
+  const t = entities.find(e=>e.kind==='building' && e.owner===owner && e.btype==='town');
+  return t ? {x:t.x, y:t.y} : null;
+}
+function triggerAchievementBurst(owner){
+  const p = ownerTownPos(owner);
+  if(p) addBurst(p.x, p.y);
+}
+function addBurst(x, y){
+  const b = _burstPool.pop() || {};
+  b.x=x; b.y=y; b.t0=performance.now();
+  bursts.push(b);
+}
+function drawBursts(){
+  const now=performance.now();
+  for(let i=bursts.length-1;i>=0;i--){
+    const b=bursts[i], age=now-b.t0;
+    if(age>BURST_LIFE){
+      const last=bursts.length-1;
+      if(i!==last) bursts[i]=bursts[last];
+      bursts.pop(); _burstPool.push(b);
+      continue;
+    }
+    const s=worldToScreen(b.x,b.y);
+    if(s.x<-60||s.x>viewW()+60||s.y<-60||s.y>viewH()+60) continue;
+    const t = age/BURST_LIFE;
+    const cy = s.y - 20*cam.zoom;
+    const r = (10+t*46)*cam.zoom;
+    ctx.beginPath(); ctx.arc(s.x, cy, r, 0, Math.PI*2);
+    ctx.strokeStyle = `rgba(230,195,74,${(1-t)*0.8})`; ctx.lineWidth = 3*cam.zoom; ctx.stroke();
+    const n=5;
+    for(let i2=0;i2<n;i2++){
+      const ang = (i2/n)*Math.PI*2 + t*1.2;
+      const rr = (6+t*30)*cam.zoom;
+      const px = s.x + Math.cos(ang)*rr;
+      const py = cy - t*30*cam.zoom + Math.sin(ang)*rr*0.3;
+      ctx.beginPath(); ctx.arc(px, py, (2.4-t*1.6)*cam.zoom, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(255,230,150,${(1-t)*0.95})`;
+      ctx.fill();
+    }
+  }
+}
+
+// --- Sacudida de cámara (Centro Urbano/Castillo destruido): puramente de
+// render, nunca toca `cam.x`/`cam.y` "de verdad" — se aplica como un
+// desplazamiento temporal del contexto en `render()` y se restaura antes de
+// devolver el control, así que no afecta al mapeo pantalla↔mundo que usan
+// los toques/clics (que se procesan fuera de `render`).
+function triggerShake(mag, dur){
+  shakeMag = Math.max(shakeMag, mag);
+  shakeT = Math.max(shakeT, dur);
 }
 
 function drawHpBar(cx, cy, w, frac, owner){

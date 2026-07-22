@@ -2275,3 +2275,53 @@ al moverse, desvaneciéndose con el tiempo.
   corpses/pings); comparación visual de humo/fuego en 3 edificios a 65%/30%/
   8% de vida mostrando intensidad claramente creciente; regresión de ~300s
   con IA Difícil — 0 errores de consola.
+
+## 2026-07-22 — Más efectos visuales: chispas, polvo, destello dorado y sacudida de cámara
+Continuación de la sesión anterior de efectos visuales, a pedido explícito
+("implementa todos" sobre 5 sugerencias propuestas). Los 5 son puramente
+decorativos (arrays fuera de `entities`, con pool + purga por edad como
+`corpses`/`pings`/`footprints`) y funcionan igual en host/partida local y en
+el cliente MP (derivados de `e.state`/`e.gather`/`e.target`/hp que ya viajan
+en el snapshot, o con detección explícita por diff en `applySnap` cuando la
+función de origen solo corre en el host).
+- **Chispas de recolección** (`sparks[]`): al recolectar madera/piedra/oro/
+  comida, 2-3 partículas saltan desde el punto de contacto con un arco
+  simple (mismo truco de "falso eje Z" que ya usan las flechas parabólicas
+  de la Catapulta), coloreadas según el recurso. Enganchado en `drawUnit`
+  (dentro del bloque que ya calcula `tp`/lunge para recolectar/atacar/
+  construir), con un throttle por unidad (`fx.nextSparkT`) porque `e.anim`
+  se mantiene >0 varios cuadros seguidos mientras dura la acción.
+- **Chispazo de impacto cuerpo a cuerpo**: mismo array `sparks[]`, variante
+  `rtype:'impact'` (más partículas, más rápidas), disparado cuando
+  `e.state==='attack'` y la categoría NO es arquero/catapulta (esas ya
+  muestran un proyectil visible que impacta más tarde en el blanco propio).
+- **Polvo bajo la caballería** (`dust[]`): nube más grande y de vida corta
+  (900ms) tras el Caballo/Héroe Jinete al galopar, con su propio contador de
+  distancia (`fx.dustDist`, cada 10px) separado del de las huellas.
+- **Destello dorado al avanzar de Era o completar una mejora/tecnología**
+  (`bursts[]`, `triggerAchievementBurst(owner)`): anillo dorado expandiéndose
+  + destellos orbitando hacia arriba, sobre el Centro Urbano del bando
+  (simplificación: siempre el Centro Urbano, sin rastrear el edificio exacto
+  de cada tecnología). Enganchado en `tryAdvanceAge`/`buyEcon`/`buyUpgrade`/
+  `buyLineTier` (host/partida local) Y detectado por diff en `applySnap`
+  (`player.age`/`enemy.age` y el conteo de claves de `upg` antes/después del
+  `Object.assign`) para que el cliente MP también lo vea en su propio logro
+  y en el del rival.
+- **Sacudida de cámara** al caer un Centro Urbano o Castillo (de cualquier
+  bando): `triggerShake(mag,dur)` fija `shakeT`/`shakeMag`, que decae en
+  TIEMPO REAL (`realDt`, no escalado por velocidad de partida) desde `loop`.
+  Se aplica en `render()` como un `ctx.translate` aleatorio envolviendo TODO
+  el dibujo del mundo, restaurado antes de devolver el control — nunca toca
+  `cam.x`/`cam.y` de verdad, así que no afecta al mapeo pantalla↔mundo que
+  usan los toques (procesados fuera de `render`). Detectado en el host (bucle
+  de "muertos" de `update()`) y en el cliente MP (diff de qué Centro Urbano/
+  Castillo existía antes de la instantánea y ya no existe).
+- Verificado headless: chispas de recolección confirmadas con captura en
+  zoom alto (partícula fresca, antes de que el desvanecimiento de 420ms la
+  apague); chispazo de impacto visible entre dos unidades en combate;
+  destello dorado confirmado con captura (anillo + orbitales sobre el
+  Centro Urbano) al llamar `tryAdvanceAge`; sacudida de cámara confirmada
+  triplemente (disparo al poner hp=0 en el Centro Urbano rival, decaimiento
+  de `shakeT` cuadro a cuadro, y diferencia real de píxeles entre cuadros
+  consecutivos mientras dura); regresión de ~300s con IA Difícil sin errores
+  de consola.

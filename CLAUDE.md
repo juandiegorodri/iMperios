@@ -1033,3 +1033,26 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     real (no simulado); comparación de intensidad de humo/fuego en 3
     edificios a 65%/30%/8% de vida; regresión de ~300s con IA Difícil sin
     errores de consola.
+- **Más efectos visuales: chispas, polvo, destello dorado y sacudida de
+  cámara** (2026-07-22): a pedido explícito ("implementa todos" sobre 5
+  sugerencias). Todos puramente decorativos (pool + purga por edad, mismo
+  patrón que huellas/cadáveres/pings), funcionan igual en host y cliente MP.
+  - **Chispas de recolección** (`sparks[]`): 2-3 partículas de color según
+    el recurso saltan del punto de contacto al recolectar madera/piedra/
+    oro/comida, con throttle por unidad.
+  - **Chispazo de impacto cuerpo a cuerpo**: mismo array, variante más
+    intensa (`rtype:'impact'`) solo para golpes instantáneos (no arquero/
+    catapulta, que ya muestran un proyectil).
+  - **Polvo bajo la caballería** (`dust[]`): nube que se disipa rápido tras
+    el Caballo/Héroe Jinete al galopar.
+  - **Destello dorado al avanzar de Era o completar una mejora** (`bursts[]`,
+    `triggerAchievementBurst`): anillo dorado + destellos sobre el Centro
+    Urbano; detectado también en el cliente MP por diff de `age`/`upg`.
+  - **Sacudida de cámara** al caer un Centro Urbano o Castillo (cualquier
+    bando): `triggerShake` decae en tiempo real; se aplica en `render()`
+    como un `ctx.translate` temporal que nunca toca `cam.x`/`cam.y` de
+    verdad, así que no afecta al mapeo pantalla↔mundo de los toques.
+  - Verificado headless: cada efecto confirmado con capturas/mediciones
+    dedicadas (chispas frescas antes de apagarse, destello con anillo+
+    orbitales, sacudida con diferencia de píxeles real entre cuadros);
+    regresión de ~300s con IA Difícil sin errores de consola.
