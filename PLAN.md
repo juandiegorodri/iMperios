@@ -459,8 +459,17 @@ dirección de arte hacia una cámara **cenital estricta** (90°) con estética d
 en tiempo real, mismo mapa, misma niebla). Fase A (motor: rejilla de
 colocación para edificios/unidades libres, fichas centradas con trim de
 bando, rotación real al movimiento, refuerzo del efecto de interacción,
-`hitBox` simplificado) y Fase B (arte real de Gemini recortado, fondo
+`hitBox` simplificado), Fase B (arte real de Gemini recortado, fondo
 quitado, integrado con arte propio por tier de mejora de línea, atlas
-regenerado) **ya están fusionadas** — el juego usa el set v2 completo, no
-quedan sprites pixel-art v1 en uso. Detalle completo en `progress.md`
-(entradas 2026-07-21 y 2026-07-22) y `CLAUDE.md` §6.
+regenerado) y **Fase C** (correcciones tras jugar de verdad con el arte
+integrado: proporción edificio/unidad corregida con `BLD_VIS_SCALE`,
+recorte arreglado de caballo/catapulta/arquero/piquetero, decisión de dejar
+de rotar el sprite del personaje —solo rota el anillo/muesca de bando,
+porque el arte generado no respeta un "mirar hacia arriba" consistente—,
+rejilla de tablero permanente y murallas alineadas a ella, iconos de sprite
+real en los botones de entrenamiento/construcción, y un segundo anillo de
+color de bando reforzado sobre la ficha) **ya están fusionadas** — el juego
+usa el set v2 completo, no quedan sprites pixel-art v1 en uso, y ya fue
+verificado tras un playtest real. Detalle completo en `progress.md`
+(entradas 2026-07-21 y 2026-07-22, incluida "FASE 9C: correcciones tras
+jugar con el arte real integrado") y `CLAUDE.md` §6.
