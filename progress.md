@@ -2156,3 +2156,82 @@ título con navegación por pasos:
   medio configurar); capturas de pantalla en móvil estrecho (430px) y
   ancho tipo iPad (1180px) revisadas visualmente; 0 errores de consola en
   todos los pasos.
+
+## 2026-07-22 — Cuatro correcciones/mejoras tras jugar una partida real
+Pedido explícito del usuario tras probar la FASE 10: aldeanos atrapados
+construyendo murallas, imposibilidad de eliminar edificios, niebla de guerra
+descuadrada con mucho zoom out, y pantalla de título poco épica.
+
+- **Aldeanos atrapados construyendo murallas** (bug que rompía la partida —
+  el jugador perdía el aldeano para siempre): investigado con un repro
+  headless real (una línea de 16 tramos de muralla + un aldeano por tramo,
+  simulación completa con `update()`, no solo lectura de código). Causa raíz
+  de DOS partes:
+  1. `blockedByWall` solo eximía al aldeano del tramo EXACTO que estaba
+     construyendo (`e.build===w.id`); en una línea de varios tramos, el
+     tramo del MEDIO puede quedar sandwich entre dos vecinos YA construidos
+     cuyo radio de bloqueo (~26px, tramos cada `WALL_SP`=40px) se solapa
+     justo donde el aldeano tiene que pararse a trabajar. Ahora, mientras
+     construye/repara/recarga CUALQUIER tramo de muralla propio, queda
+     exento de TODAS las murallas propias (no solo esa), ya que trabajar en
+     la línea implica estar físicamente sobre/junto a ella.
+  2. Aun así, un aldeano que YA había terminado su tramo (o uno cercano
+     construido por otro) podía quedar atrapado un instante DESPUÉS: cuando
+     OTRO tramo vecino de la misma línea (construido por otro aldeano)
+     termina justo al lado suyo, su radio de bloqueo lo alcanza donde ya
+     estaba parado — nadie lo empuja en ese momento porque ya no está
+     "construyendo" nada. Nueva `unstickUnitsNearWall(w)`, llamada cada vez
+     que un tramo de muralla propio cambia su geometría de bloqueo (termina
+     de construirse, o sube a Torre de Muralla — radio mayor): revisa a
+     TODAS las unidades propias cercanas (no solo a quien lo construyó) y,
+     si alguna quedó atrapada (`escapeWallIfStuck`), la empuja de un salto
+     justo fuera del radio del muro más cercano que la bloquea (hasta 4
+     veces, por si hay más de uno alrededor).
+  - Verificado headless: línea de 16 tramos con un aldeano por tramo,
+    simulación completa (150s) hasta terminar toda la muralla — los 16
+    quedan con `blockedByWall(v,v.x,v.y)===false` de forma consistente en
+    7 corridas repetidas (antes de la corrección, al menos 1 quedaba
+    `blocked:true` e inmóvil para siempre, confirmado con capturas de
+    posición cuadro a cuadro). Regresión de ~300s con IA Difícil sin
+    errores de consola.
+- **No se podían eliminar edificios**: nueva opción **"🗑️ Demoler"** en el
+  panel de acciones de CUALQUIER edificio propio ya construido (sin
+  reembolso, ya cumplió su función) — excepto el Centro Urbano, que nunca
+  se puede demoler (no está en la lista de edificios construibles, así que
+  perderlo sería una autoderrota irreversible por un toque accidental). Al
+  demoler, se pone `hp=0` y se deja que el mismo camino de "muerte" de
+  siempre procese el resto (sonido, stats de edificios perdidos, evacuar
+  guarnición, invalidar la rejilla de A* si era muralla) — sin duplicar esa
+  lógica. De paso, los cimientos SIN terminar (que antes no tenían ningún
+  botón en el panel) ahora muestran **"✕ Cancelar cimientos"** (reembolso
+  completo, igual criterio que cancelar una unidad en cola). Ambas acciones
+  tienen su comando de red (`demolish`/`cancelFoundation`) para
+  multijugador. Verificado headless: demoler una Casa construida la
+  elimina e incrementa `stats.lostB`; el Centro Urbano seleccionado NO
+  muestra el botón; cancelar cimientos de una Granja reembolsa su madera y
+  la elimina.
+- **Niebla de guerra descuadrada con mucho zoom out**: reproducido headless
+  con un viewport ancho (1920×1080) al zoom mínimo (`cam.min=0.5`) — el
+  mundo visible en ese caso (viewport/zoom) supera el tamaño real del mapa
+  (frecuente también en un iPad en apaisado ancho), así que el rectángulo
+  FUENTE que `drawFogOverlay` le pedía a `fogCanvas` (`sw`/`sh`) superaba
+  sus dimensiones reales (`FOG_COLS`×`FOG_ROWS`) — `drawImage` deja sin
+  pintar la porción sobrante en vez de recortarla, y esa franja se veía con
+  el terreno crudo sin ninguna niebla encima (captura de pantalla antes/
+  después incluida en la sesión). Corregido recortando el rectángulo fuente
+  a los límites reales de la textura y ajustando el DESTINO en la misma
+  proporción (sin estirar la parte que sí se pinta, sigue alineada 1:1 con
+  el mundo); la franja sobrante (mundo inexistente más allá del borde del
+  mapa) se rellena de negro sólido en vez de dejarse sin pintar, para que
+  se lea como "no hay nada que ver ahí" en vez de un descuadre. Verificado
+  con capturas antes/después en ambas esquinas del mapa.
+- **Pantalla de título más épica**: rediseño del panel `title` (FASE 10):
+  banner de fondo más grande y prominente con el sprite del Castillo
+  (antes un icono pequeño casi invisible), degradado oscuro para
+  legibilidad, DOS héroes reales del juego (Héroe Espada y Héroe Arco)
+  flanqueando el título con una ligera inclinación (arte ya existente, sin
+  generar nada nuevo), título con relleno degradado dorado metálico y
+  resplandor pulsante (`@keyframes titleGlow`), un divisor decorativo
+  (línea dorada + ❖) bajo el título, y un marco doble color oro en toda la
+  tarjeta (antes borde plano gris) con sombra de profundidad. Verificado
+  con capturas en móvil estrecho y escritorio ancho.

@@ -969,3 +969,49 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     título; ciclo completo jugar → victoria → «Jugar de nuevo» vuelve
     exactamente al panel `title`; capturas en móvil estrecho y ancho tipo
     iPad revisadas visualmente; 0 errores de consola.
+- **Cuatro correcciones/mejoras tras jugar una partida real** (2026-07-22):
+  - **Aldeanos ya NO quedan atrapados construyendo murallas** (bug que
+    rompía la partida — se perdía el aldeano para siempre). Causa raíz en
+    dos partes, reproducida con un repro headless real (línea de 16 tramos
+    + un aldeano por tramo, simulación completa): 1) `blockedByWall` solo
+    eximía al aldeano del tramo EXACTO que construía; en una línea, el
+    tramo del medio puede quedar sandwich entre dos vecinos YA construidos
+    cuyo radio de bloqueo se solapa justo donde tiene que pararse a
+    trabajar — ahora exime de TODAS las murallas propias mientras
+    construye/repara/recarga cualquier tramo. 2) Un aldeano que ya había
+    terminado podía quedar atrapado un instante DESPUÉS, cuando OTRO tramo
+    vecino (de otro aldeano) termina justo al lado suyo — nueva
+    `unstickUnitsNearWall(w)`, llamada cada vez que un tramo cambia su
+    geometría de bloqueo (termina de construirse o sube a Torre de
+    Muralla), revisa a TODAS las unidades propias cercanas y las empuja
+    (`escapeWallIfStuck`) justo fuera del radio del muro más cercano que
+    las bloquea.
+  - **Nueva opción "🗑️ Demoler"** en el panel de CUALQUIER edificio propio
+    ya construido (sin reembolso), excepto el Centro Urbano (nunca — no se
+    puede reconstruir, sería una autoderrota irreversible). Al demoler se
+    pone `hp=0` y se deja que el camino de "muerte" de siempre procese el
+    resto (sonido, stats, guarnición, rejilla de A*). De paso, los cimientos
+    SIN terminar ahora muestran **"✕ Cancelar cimientos"** (reembolso
+    completo). Ambas con su comando de red para multijugador.
+  - **Niebla de guerra ya no se descuadra con mucho zoom out**: en un
+    viewport más ancho/alto que el propio mundo a zoom mínimo (frecuente en
+    pantallas anchas/iPad apaisado), el rectángulo que `drawFogOverlay` le
+    pedía a la textura de niebla superaba sus dimensiones reales —
+    `drawImage` dejaba sin pintar la porción sobrante, mostrando terreno
+    crudo sin niebla. Corregido recortando el rectángulo fuente a los
+    límites reales de la textura (destino recortado en la misma
+    proporción, sin estirar) y rellenando la franja sobrante de negro
+    sólido en vez de dejarla sin pintar.
+  - **Pantalla de título más épica**: banner más grande y prominente con el
+    sprite del Castillo, degradado oscuro para legibilidad, dos héroes
+    reales del juego (Espada y Arco) flanqueando el título con ligera
+    inclinación, título con relleno degradado dorado y resplandor
+    pulsante, divisor decorativo, y un marco doble color oro en toda la
+    tarjeta.
+  - Verificado headless: 16 tramos de muralla construidos por 16 aldeanos
+    sin ninguno atrapado (7 corridas repetidas, `blockedByWall===false`
+    siempre); demoler una Casa la elimina e incrementa `stats.lostB`, el
+    Centro Urbano no muestra el botón; niebla corregida con capturas
+    antes/después en ambas esquinas del mapa; título revisado en móvil y
+    escritorio ancho; regresión de ~300s con IA Difícil sin errores de
+    consola.

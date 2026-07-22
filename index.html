@@ -126,16 +126,39 @@
      viven dentro del mismo overlay `#startScreen` para no tocar los sitios
      donde el código ya lo oculta/muestra al empezar o terminar una partida. */
   .menuPanel.hidden{ display:none !important; }
-  .titleCard{ padding:0; overflow:hidden; }
-  .titleBanner{ position:relative; padding:28px 20px 20px; text-align:center; overflow:hidden;
-    background:radial-gradient(120% 140% at 50% -20%, #3a3324 0%, #1c1f26 60%, #14161b 100%);
-    border-bottom:1px solid var(--line); }
-  .titleBanner img{ position:absolute; top:-8%; left:50%; transform:translateX(-50%); width:280px; max-width:85%;
-    opacity:.24; filter:saturate(.7) brightness(.9); pointer-events:none; }
-  .gameTitle{ position:relative; margin:0; font-size:32px; letter-spacing:.5px; font-weight:800;
-    text-shadow:0 2px 0 #0008, 0 0 20px #caa46a55; color:#fff; }
-  .gameTitle .gtIcon{ filter:drop-shadow(0 2px 2px #000a); }
-  .gameSubtitle{ position:relative; margin-top:6px; font-size:13px; color:var(--accent); font-weight:700; letter-spacing:.3px; }
+  /* Pantalla de título épica (pedido explícito tras juego real: "debe ser
+     más épica y con mejor diseño"): banner de fondo grande con el Castillo,
+     degradado oscuro para legibilidad, dos héroes flanqueando el título
+     (arte real del juego, no decoración nueva), título con relleno dorado
+     metálico y resplandor pulsante, y un marco doble color oro en toda la
+     tarjeta en vez del borde plano de siempre. */
+  .titleCard{ padding:0; overflow:hidden; width:min(480px,92vw);
+    border-color:#8a6a35; box-shadow:0 0 0 1px #3a2f18, 0 14px 36px #000a, 0 0 46px #00000055; }
+  .titleBanner{ position:relative; min-height:220px; padding:26px 20px 14px; text-align:center; overflow:hidden;
+    background:radial-gradient(120% 140% at 50% -25%, #4a3f26 0%, #1c1f26 62%, #14161b 100%);
+    border-bottom:1px solid #8a6a35; display:flex; flex-direction:column; justify-content:flex-end; }
+  .titleBanner .bannerBg{ position:absolute; top:0; left:50%; transform:translateX(-50%); width:380px; max-width:130%;
+    opacity:.6; filter:saturate(.85) brightness(.8); pointer-events:none; }
+  .titleBanner .bannerFade{ position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(180deg, rgba(14,15,18,.05) 0%, rgba(14,15,18,.4) 48%, rgba(14,15,18,.97) 100%); }
+  .titleBanner .flankHero{ position:absolute; bottom:-4px; width:80px; height:80px; object-fit:contain;
+    filter:drop-shadow(0 6px 6px #000c); pointer-events:none; opacity:.97; }
+  .titleBanner .flankHero.left{ left:0; transform:rotate(-11deg); }
+  .titleBanner .flankHero.right{ right:0; transform:rotate(11deg); }
+  .gameTitle{ position:relative; margin:0; font-size:38px; letter-spacing:.5px; font-weight:800;
+    background:linear-gradient(180deg,#fff6d8 0%,#e6c34a 45%,#a8792f 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:titleGlow 3.2s ease-in-out infinite alternate; }
+  @keyframes titleGlow{
+    from{ filter:drop-shadow(0 3px 1px #000c) drop-shadow(0 0 8px #caa46a66); }
+    to{ filter:drop-shadow(0 3px 1px #000c) drop-shadow(0 0 20px #e6c34acc); }
+  }
+  .titleDivider{ position:relative; display:flex; align-items:center; justify-content:center; gap:8px;
+    width:64%; margin:10px auto 0; }
+  .titleDivider::before, .titleDivider::after{ content:''; flex:1; height:1px;
+    background:linear-gradient(90deg, transparent, #a8792f, transparent); }
+  .titleDivider span{ color:var(--accent); font-size:12px; }
+  .gameSubtitle{ position:relative; margin-top:8px; font-size:13px; color:var(--accent); font-weight:700; letter-spacing:.3px; }
   .titleMenu{ display:flex; flex-direction:column; gap:10px; padding:18px 20px 6px; }
   .bigMenuBtn{ display:flex; align-items:center; gap:14px; width:100%; min-height:64px; padding:10px 16px;
     border-radius:14px; border:1px solid var(--line); background:linear-gradient(#23272f,#181b21);
@@ -311,8 +334,12 @@
   <!-- Panel 1: título — elige el TIPO de partida -->
   <div class="card titleCard menuPanel" data-panel="title">
     <div class="titleBanner">
-      <img src="assets/sprites/bld_castle.png" alt="" onerror="this.remove()">
+      <img class="bannerBg" src="assets/sprites/bld_castle.png" alt="" onerror="this.remove()">
+      <div class="bannerFade"></div>
+      <img class="flankHero left" src="assets/sprites/unit_hero_sword.png" alt="" onerror="this.remove()">
+      <img class="flankHero right" src="assets/sprites/unit_hero_archer.png" alt="" onerror="this.remove()">
       <h1 class="gameTitle"><span class="gtIcon">⚔️</span> iMperios <span class="gtIcon">⚔️</span></h1>
+      <div class="titleDivider"><span>❖</span></div>
       <div class="gameSubtitle">RTS táctico en tiempo real — para iPad</div>
     </div>
     <div class="titleMenu">
@@ -1606,6 +1633,8 @@ function hostHandleCmd(m){
     case 'market': if(RES[m.r]) marketTrade(own, m.dir, m.r); break;
     case 'gate': { const g=find(m.b); if(g && g.owner===own && g.btype==='gate'){ g.closed=!!m.closed; invalidatePathGrid(); } break; }
     case 'wallUpgrade': { const w=find(m.b); if(w && w.owner===own) upgradeWallToTower(w); break; }
+    case 'demolish': { const db=find(m.b); if(db && db.owner===own) demolishBuilding(db); break; }
+    case 'cancelFoundation': { const cb=find(m.b); if(cb && cb.owner===own) cancelFoundation(cb); break; }
     case 'rally': { const b=find(m.b); if(b && b.owner===own) b.rally = m.rtype ? {x:m.x,y:m.y,rtype:m.rtype} : {x:m.x,y:m.y}; break; }
     case 'place': hostPlace(m, units); break;
     case 'wall': hostWall(m); break;
@@ -2234,8 +2263,31 @@ function redrawFogCanvas(){
 function drawFogOverlay(){
   const sx = cam.x/FOG_CELL, sy = cam.y/FOG_CELL;
   const sw = (viewW()/cam.zoom)/FOG_CELL, sh = (viewH()/cam.zoom)/FOG_CELL;
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(fogCanvas, sx, sy, sw, sh, 0, 0, viewW(), viewH());
+  // Recorta el rectángulo FUENTE a los límites reales de `fogCanvas`
+  // (FOG_COLS×FOG_ROWS): con un viewport más ANCHO/ALTO que el propio mundo
+  // (frecuente en pantallas anchas/iPad apaisado) al zoom mínimo, `sw`/`sh`
+  // pedían más área de la que la textura tiene — `drawImage` deja sin pintar
+  // la porción sobrante en vez de recortarla, y esa franja del mapa se veía
+  // sin niebla (bug real de juego: "la niebla se descuadra con mucho zoom
+  // out"). El destino se recorta en la MISMA proporción para que la parte
+  // que sí se pinta siga alineada 1:1 con el mundo (sin estirarla).
+  const cw = Math.max(0, Math.min(sw, FOG_COLS - sx));
+  const ch = Math.max(0, Math.min(sh, FOG_ROWS - sy));
+  if(cw>0 && ch>0){
+    const dw = viewW() * (cw/sw), dh = viewH() * (ch/sh);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(fogCanvas, sx, sy, cw, ch, 0, 0, dw, dh);
+    // La franja sobrante (si la hay) es mundo INEXISTENTE más allá del borde
+    // del mapa — sin esto quedaba visible el color de fondo crudo en vez de
+    // leerse como "no hay nada que ver ahí", el mismo "descuadre" reportado.
+    // Se rellena de negro sólido (mismo tono que una celda nunca explorada).
+    ctx.fillStyle = '#000';
+    if(dw < viewW()) ctx.fillRect(dw, 0, viewW()-dw, viewH());
+    if(dh < viewH()) ctx.fillRect(0, dh, dw, viewH()-dh);
+  } else {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, viewW(), viewH());
+  }
 }
 // ¿Debe dibujarse esta entidad según lo que el jugador ha explorado/ve ahora?
 // Lo propio (owner==='player') siempre se ve. Edificios y recursos (sin dueño
@@ -2887,6 +2939,33 @@ function cancelQueued(b, idx){
   if(b.owner==='player') updateActionPanel();
 }
 
+// Cancela unos cimientos SIN terminar (reembolsa el coste completo, ya que
+// nada se dio por perdido todavía — mismo criterio que `cancelQueued`).
+function cancelFoundation(b){
+  if(net.mode==='client'){ netSend({t:'cmd', c:'cancelFoundation', b:b.id}); return; }
+  if(b.built) return;
+  const s = side(b.owner);
+  const cost = BLD[b.btype].cost;
+  for(const k in cost) s.res[k] += cost[k];
+  removeEntity(b);   // ya limpia selección/panel de acciones/rejilla de A* si era muralla
+  if(b.owner==='player') showHint('Cimientos cancelados, recursos reembolsados.');
+}
+// Demuele un edificio YA construido a petición del jugador (pedido explícito
+// tras juego real: "no se pueden eliminar edificios"). Sin reembolso (ya
+// cumplió su función, a diferencia de cancelar unos cimientos) — se deja que
+// el hp llegue a 0 y lo procese el mismo camino de "muerte" de siempre
+// (sonido, stats de edificios perdidos, evacuar guarnición, invalidar la
+// rejilla de A* si era una muralla), para no duplicar esa lógica. El Centro
+// Urbano NUNCA se puede demoler: no hay forma de reconstruirlo (no está en
+// la lista de edificios construibles) y sería una autoderrota irreversible
+// por un toque accidental.
+function demolishBuilding(b){
+  if(net.mode==='client'){ netSend({t:'cmd', c:'demolish', b:b.id}); return; }
+  if(!b.built || b.btype==='town') return;
+  b.hp = 0;   // el bucle de "muertos" de `update()` procesa el resto (sonido, stats, guarnición, removeEntity)
+  if(b.owner==='player'){ selection=[]; updateActionPanel(); }
+}
+
 function update(dt){
   if(peaceTimer>0) peaceTimer = Math.max(0, peaceTimer-dt);
   // Murallas construidas (para colisión de movimiento de este frame). Reusa
@@ -3025,7 +3104,7 @@ function update(dt){
           b.hp = Math.max(b.hp, BLD[b.btype].hp * (0.05 + 0.95*Math.min(1,b.progress/need)));
           if(b.progress>=need){ b.built=true; b.hp=BLD[b.btype].hp; e.state='idle'; e.build=null;
             side(b.owner).stats.built++;
-            if(BLD[b.btype].wall) invalidatePathGrid();   // nueva muralla/puerta: el grid de A* queda obsoleto
+            if(BLD[b.btype].wall){ invalidatePathGrid(); unstickUnitsNearWall(b); }   // nueva muralla/puerta: el grid de A* queda obsoleto; puede atrapar a aldeanos cercanos entre tramos vecinos
             if(e.owner==='player'){ showHint(BLD[b.btype].name+' construido.'); playSfx('built'); } }
         } else if(b.built && BLD[b.btype].produces && b.reserve < b.maxReserve && b.hp>=b.maxHp){
           // RECARGAR un edificio de producción (hasta 500; cuesta el coste de construcción)
@@ -3106,6 +3185,7 @@ function update(dt){
         e.btype='wall_tower'; e.maxHp=BLD.wall_tower.hp; e.hp=BLD.wall_tower.hp;
         e.upT=null; e.upTotal=null;
         invalidatePathGrid();   // cambia el radio de colisión (tamaño distinto)
+        unstickUnitsNearWall(e);   // el radio de bloqueo creció: puede atrapar a quien ya estaba cerca
         if(e.owner==='player') showHint('Torre de Muralla construida.');
       }
     }
@@ -3297,16 +3377,62 @@ function wallBlocksSide(w, moverSide){
 }
 // ¿La posición choca con una muralla/puerta que bloquea a este bando?
 function blockedByWall(e, x, y){
+  // Un aldeano CONSTRUYENDO/REPARANDO/RECARGANDO un tramo de muralla propio
+  // (incl. puerta o Torre de Muralla) queda exento del bloqueo de TODAS las
+  // murallas propias mientras dure ese trabajo, no solo la que está tocando.
+  // Antes solo se eximía el tramo exacto (`e.build===w.id`): en una línea de
+  // varios tramos, el tramo del MEDIO puede terminar sandwich entre dos
+  // vecinos YA construidos cuyo radio de bloqueo (~26px, con tramos cada
+  // `WALL_SP`=40px) se solapa justo en el punto donde el aldeano tiene que
+  // pararse a trabajar — quedaba atrapado ahí sin ninguna dirección libre
+  // (bug real de juego: "los aldeanos se quedan atrapados construyendo las
+  // murallas"). Trabajar en CUALQUIER tramo de la propia línea ya implica
+  // estar físicamente sobre/junto a ella, así que exime de todas.
+  let exemptOwnWalls = false;
+  if(e.state==='build' && e.build){
+    const bTarget = find(e.build);
+    if(bTarget && BLD[bTarget.btype] && BLD[bTarget.btype].wall) exemptOwnWalls = true;
+  }
   for(const w of frameWalls){
+    if(exemptOwnWalls && w.owner===e.owner) continue;
     if(!wallBlocksSide(w, e.owner)) continue;
     if(e.state==='attack' && e.target && e.target.id===w.id) continue;
-    // Reparando/recargando su propia muralla (incl. Torre de Muralla): puede
-    // acercarse lo suficiente para trabajar en ella aunque ahora bloquee.
-    if(e.state==='build' && e.build===w.id) continue;
     const r = radiusOf(w) + 11;
     if((x-w.x)*(x-w.x)+(y-w.y)*(y-w.y) < r*r) return true;
   }
   return false;
+}
+// Tras TERMINAR de construir/reparar una muralla propia, el aldeano pierde la
+// exención de arriba y puede quedar literalmente atrapado si su posición de
+// trabajo cae dentro del radio de bloqueo de un tramo vecino (ver comentario
+// en `blockedByWall`). En vez de dejarlo inmóvil para siempre, se le empuja
+// de un salto justo fuera del radio del muro propio más cercano que lo
+// bloquee (hasta 4 veces, por si queda entre más de uno).
+function escapeWallIfStuck(e){
+  for(let tries=0; tries<4 && blockedByWall(e, e.x, e.y); tries++){
+    const w = nearestBlockingWall(e);
+    if(!w) return;
+    const ax=e.x-w.x, ay=e.y-w.y, ad=Math.hypot(ax,ay)||1;
+    const r = radiusOf(w) + 15;
+    e.x = clamp(w.x + ax/ad*r, 8, WORLD.w-8);
+    e.y = clamp(w.y + ay/ad*r, 8, WORLD.h-8);
+  }
+}
+// Reproducido en juego real: NO basta con desatascar al propio constructor al
+// terminar SU tramo — un aldeano que ya terminó un tramo vecino y se quedó
+// cerca (recolectando, idle...) puede quedar atrapado un instante DESPUÉS,
+// cuando OTRO tramo de la misma línea (construido por otro aldeano) termina
+// justo al lado suyo y su radio de bloqueo lo alcanza donde ya estaba parado
+// — nadie lo empuja en ese momento porque el aldeano no está "construyendo"
+// nada. Por eso, cada vez que un tramo de muralla propio cambia de geometría
+// de bloqueo (termina de construirse o sube a Torre de Muralla), se revisa a
+// TODAS las unidades propias cercanas, no solo a quien lo construyó.
+function unstickUnitsNearWall(w){
+  for(const u of entities){
+    if(u.kind!=='unit' || u.owner!==w.owner || u.garrisonedIn) continue;
+    if(dist(u,w) > 120) continue;
+    escapeWallIfStuck(u);
+  }
 }
 
 /* ==================== PATHFINDING (A*) Y FORMACIONES (Fase 4) ====================
@@ -4950,6 +5076,8 @@ function updateActionPanel(){
         actionsEl.appendChild(qrow);
       }
       buildingButtons(b);
+    } else {
+      actionsEl.appendChild(btnEl('✕ Cancelar cimientos','Reembolsa el coste','danger',true, ()=>cancelFoundation(b)));
     }
     actionsEl.appendChild(btnEl('✕ Deseleccionar','','',true, deselectAll));
     return;
@@ -5114,6 +5242,14 @@ function buildingButtons(b){
         expelGarrison(b);
       }));
     }
+  }
+  // Demoler (pedido explícito tras juego real: "no se pueden eliminar
+  // edificios"): disponible para CUALQUIER edificio propio ya construido,
+  // salvo el Centro Urbano (no se puede reconstruir — sería una autoderrota
+  // irreversible por un toque accidental). Sin reembolso, a diferencia de
+  // cancelar unos cimientos.
+  if(b.btype!=='town'){
+    actionsEl.appendChild(btnEl('🗑️ Demoler','Sin reembolso','danger',true, ()=>demolishBuilding(b)));
   }
 }
 

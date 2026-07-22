@@ -98,7 +98,11 @@ El archivo se organiza en estas secciones (en orden de aparición):
    `fogExploredAt` (consulta), `markVision`/`recomputeFog` (recálculo cada
    ~150ms desde `loop`, también en el cliente MP), `redrawFogCanvas` (pinta la
    textura de niebla), `drawFogOverlay` (la pega sobre el canvas principal con
-   suavizado bilineal), `fogRenderOk` (filtro por entidad, usado en `render`,
+   suavizado bilineal; recorta el rectángulo fuente/destino a los límites
+   reales de `fogCanvas` y rellena de negro la franja sobrante cuando el
+   viewport, a zoom mínimo, es más ancho/alto que el propio mundo — si no,
+   `drawImage` dejaba esa franja sin pintar, niebla "descuadrada"),
+   `fogRenderOk` (filtro por entidad, usado en `render`,
    `drawProjectiles`, `drawCorpses` y `pickAt`) y `resetFog` (reinicio por
    partida). Alertas: `alertZoneKey`/`triggerAttackAlert` (throttle 8s por
    zona de 200px, pulso rojo + botón `#btnAlert`), `showAlertButton`/
@@ -339,8 +343,13 @@ El archivo se organiza en estas secciones (en orden de aparición):
     Casa/Castillo, entrenamiento de Catapulta en el Taller de Asedio, botones
     de compra/venta del Mercado, y para una Puerta, el botón "🔒 Cerrar
     puerta"/"🔓 Abrir puerta" que alterna `b.closed` — Fase 4, ≥44px, envía
-    comando `gate` si es cliente MP; al final, para cualquier edificio con
-    guarnición, info "🛡️ N/max" + botón "🚪 Expulsar" — Fase 5), `deselectAll`.
+    comando `gate` si es cliente MP; para cualquier edificio con guarnición,
+    info "🛡️ N/max" + botón "🚪 Expulsar" — Fase 5; y al final, "🗑️ Demoler"
+    para cualquier edificio propio ya construido salvo el Centro Urbano —
+    `demolishBuilding`, sin reembolso, pone `hp=0` y deja que el camino de
+    "muerte" de siempre procese el resto). Los cimientos SIN terminar
+    muestran "✕ Cancelar cimientos" (`cancelFoundation`, reembolso completo)
+    en vez de `buildingButtons`. `deselectAll`.
     Botón "⚔️→ Ataque-mover" (Fase 3, con militares seleccionados) fija
     `orderMode='amove'`; botón "🪖 Todo el ejército" (`#btnArmy`) selecciona
     todos los militares vivos propios (excluye guarnecidos — Fase 5).
@@ -449,9 +458,15 @@ El archivo se organiza en estas secciones (en orden de aparición):
     bloquea SIEMPRE en una muralla normal (antes nunca al dueño); `frameOpenGates`
     (subcaché de `frameWalls`, recalculado en `update`) da al dueño un pasillo
     real de paso junto a una Puerta abierta (los tramos vecinos dejan de
-    bloquearlo a él, no al rival). `blockedByWall` tiene una excepción para
-    `state==='build'` sobre el propio tramo (reparar/recargar sin quedar
-    bloqueado por él mismo). `wallSegmentType` ya no inserta Torres de Muralla
+    bloquearlo a él, no al rival). `blockedByWall` exime de TODAS las
+    murallas propias (no solo el tramo exacto) a quien está construyendo/
+    reparando/recargando cualquier tramo de la línea — de lo contrario, el
+    tramo del medio de una línea puede quedar sandwich entre dos vecinos ya
+    construidos y atrapar al aldeano (bug real de juego); `escapeWallIfStuck`/
+    `unstickUnitsNearWall(w)` (llamada al terminar de construir un tramo o al
+    completarse una mejora a Torre de Muralla) revisan a las unidades propias
+    cercanas y las empujan fuera del radio de bloqueo si quedaron atrapadas
+    DESPUÉS de perder esa exención. `wallSegmentType` ya no inserta Torres de Muralla
     automáticas (solo la Puerta central); `upgradeWallToTower` (con comando MP
     `wallUpgrade`) construye una explícitamente sobre un tramo normal ya en
     pie, pagando su coste real, y el panel de un tramo normal muestra el botón
