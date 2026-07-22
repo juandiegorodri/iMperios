@@ -792,3 +792,53 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
       confirmada visualmente (la Milicia cambia al sprite de Espadachín al
       investigarlo), murallas+puerta+3 héroes renderizados juntos sin
       errores, y regresión de 300s con IA Difícil sin errores.
+  - **FASE 9C — Correcciones tras jugar con el arte real** (2026-07-22):
+    lista concreta de problemas de juego real corregidos:
+    - **Recorte roto de caballo/catapulta/arquero**: causa raíz encontrada —
+      el detector de huecos exigía `cols-1` huecos para una fila de 4
+      columnas nominales que solo tenía 3 personajes reales (4ª celda vacía
+      a propósito), así que SIEMPRE caía a una división pareja rota para esa
+      fila, cortando la cabeza/cola del caballo y filtrando un fragmento
+      suyo dentro del recorte de la catapulta. Recortados de nuevo a mano
+      con coordenadas verificadas por muestreo de píxeles.
+    - **Piquetero recentrado**: su cuerpo ocupaba solo ~20% del ancho del
+      recorte (la lanza larga dominaba el resto), así que el centro de la
+      ficha caía sobre el asta vacía, "flotando" lejos del personaje.
+      Recortado de nuevo centrado en el cuerpo real (detectado por perfil de
+      densidad de tinta), con un tramo corto de lanza a cada lado.
+    - **Las unidades ya NO rotan el cuerpo completo con el movimiento**: el
+      arte generado no respeta de forma consistente "mirar hacia arriba"
+      (cada pieza mira para un lado distinto), así que rotar el dibujo
+      completo garantizaba que varias se vieran "yendo hacia atrás/de
+      lado" sin importar que la fórmula de rotación en sí fuera correcta
+      (se re-verificó matemáticamente). Ahora solo rotan el anillo y la
+      muesca de dirección (formas simples, neutras a la rotación); el
+      sprite/emoji se dibuja siempre en pie.
+    - **`BLD_VIS_SCALE=1.9`**: los edificios no-muralla ahora se ven ~2.5-5×
+      más grandes que una unidad (antes casi el mismo tamaño, por haber
+      perdido sin querer el estirado ×1.7 de antes de la Fase 9 al pasar a
+      fichas centradas). Unidades también reducidas (`sz` 22→16, `uH`
+      40→30). Mismo multiplicador usado en render, `hitBox` y fantasma de
+      colocación para que el área de toque coincida con lo que se ve.
+    - **Rejilla de tablero SIEMPRE visible** (`drawBoardGrid`, no solo al
+      colocar un edificio) + texturas de piso más chicas (`worldTile`
+      300→80, más repetición) — refuerza el efecto "tablero de mesa".
+    - **Murallas alineadas a la rejilla**: `snapWallEndpoint` encaja un
+      extremo nuevo (sin muralla/borde de mapa cerca) a la intersección de
+      rejilla más próxima.
+    - **Anillo de bando reforzado por código** (no arte duplicado por bando,
+      más caro de generar/mantener): un segundo anillo, más grueso, se
+      dibuja ENCIMA del sprite, así nunca queda tapado por el arte del
+      personaje.
+    - **Iconos reales en botones de entrenamiento/construcción** (`btnEl`
+      acepta un `iconSprite` opcional): Aldeano en el Centro Urbano, toda la
+      lista de construcción de edificios, unidades entrenables, héroes del
+      Castillo y la fila de cola — ya no usan el emoji.
+    - Atlas regenerado otra vez con los 4 sprites corregidos.
+    - Verificado con capturas reales en cada paso (no solo aserciones de
+      código): sprites re-recortados completos, escena general con la
+      nueva jerarquía de tamaños y la rejilla visible, panel con el icono
+      real del Aldeano, muralla vertical perfectamente alineada (`punto %
+      FOG_CELL === 0`), acercamiento a 4 unidades con anillos azul/rojo
+      claramente distinguibles, y regresión de 300s con IA Difícil — 0
+      errores de consola en todos los pasos.

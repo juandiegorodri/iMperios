@@ -62,6 +62,7 @@
     background:var(--panel2); color:var(--txt); font-size:14px; font-weight:600; display:flex; flex-direction:column;
     align-items:center; justify-content:center; line-height:1.15; cursor:pointer; }
   .btn .cost{ font-size:11px; color:var(--muted); font-weight:500; margin-top:2px; }
+  .btnIcon{ width:26px; height:26px; object-fit:contain; margin-bottom:2px; pointer-events:none; }
   .btn:active{ background:#2a2f39; }
   .btn[disabled]{ opacity:.4; }
   .btn.build{ background:#23282f; }
@@ -491,6 +492,14 @@ const VISION_BLD   = 220;   // radio de visión de un edificio
 // lean como fichas de tablero alineadas; las UNIDADES siguen moviéndose libres
 // (incluida diagonal), sin restricción de rejilla — solo cambia dónde se
 // asienta un edificio nuevo, no la simulación en tiempo real.
+// Multiplicador visual (y de zona táctil) de los edificios NO-muralla sobre
+// su `d.size` de juego. Feedback de juego real: al quitar el estirado ×1.7
+// de antes (Fase 9A dejó solo ×1.05), un edificio pequeño (p.ej. Casa) quedó
+// casi del mismo tamaño que una unidad — la jerarquía visual no tenía
+// sentido ("cada unidad está casi del tamaño de un edificio entero"). Se usa
+// el MISMO valor en `drawBuilding`, `hitBox` (para que el área de toque
+// coincida con lo que se ve) y el fantasma de colocación.
+const BLD_VIS_SCALE = 1.9;
 function snapToGrid(x, y){
   return { x: Math.round(x/FOG_CELL)*FOG_CELL, y: Math.round(y/FOG_CELL)*FOG_CELL };
 }
@@ -3640,7 +3649,7 @@ function render(){
       // que se ve es exactamente donde caerá, ver snapToGrid/tryPlaceBuilding).
       const snapped = snapToGrid(w.x, w.y);
       const s = worldToScreen(snapped.x,snapped.y); const d=BLD[placement.btype];
-      const sz = d.size*cam.zoom;
+      const sz = d.size*BLD_VIS_SCALE*cam.zoom;
       const ok = placementValid(snapped.x,snapped.y) && canAfford(player, d.cost);
       // rejilla sutil alrededor de la celda destino, para que se lea "tablero"
       ctx.strokeStyle='rgba(255,255,255,.22)'; ctx.lineWidth=1;
@@ -3659,7 +3668,7 @@ function render(){
       ctx.globalAlpha=1;
       ctx.strokeStyle = ok? 'rgba(95,177,95,.9)':'rgba(208,90,90,.9)'; ctx.lineWidth=2;
       ctx.strokeRect(s.x-sz/2, s.y-sz/2, sz, sz);
-      if(!drawSprite('bld_'+placement.btype, s.x, s.y, d.size*1.05*cam.zoom, false)){
+      if(!drawSprite('bld_'+placement.btype, s.x, s.y, d.size*BLD_VIS_SCALE*cam.zoom, false)){
         ctx.font = `${Math.floor(d.size*0.6*cam.zoom)}px serif`;
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText(d.emoji, s.x, s.y);
@@ -3674,7 +3683,7 @@ function drawTerrain(){
     const a=worldToScreen(t.x,t.y);
     const w=t.w*cam.zoom, h=t.h*cam.zoom;
     if(t.kind==='river'){
-      if(!fillPattern('tile_water', a.x,a.y,w,h, 300)){ ctx.fillStyle='#2f5d86'; ctx.fillRect(a.x,a.y,w,h); }
+      if(!fillPattern('tile_water', a.x,a.y,w,h, 80)){ ctx.fillStyle='#2f5d86'; ctx.fillRect(a.x,a.y,w,h); }
       ctx.fillStyle='rgba(40,90,130,.25)'; ctx.fillRect(a.x,a.y,w,h);  // tinte para distinguir el cauce
     } else if(t.kind==='bridge'){
       ctx.fillStyle='#8a6a44'; ctx.fillRect(a.x,a.y,w,h);
@@ -3683,7 +3692,7 @@ function drawTerrain(){
       for(let i=0;i<=planks;i++){ const px=a.x+(w/planks)*i; ctx.beginPath(); ctx.moveTo(px,a.y); ctx.lineTo(px,a.y+h); ctx.stroke(); }
     } else if(t.kind==='cliff'){
       ctx.save(); roundRect(a.x,a.y,w,h,6*cam.zoom); ctx.clip();
-      if(!fillPattern('tile_mountain', a.x,a.y,w,h, 300)){ ctx.fillStyle='#6b6356'; ctx.fillRect(a.x,a.y,w,h); }
+      if(!fillPattern('tile_mountain', a.x,a.y,w,h, 80)){ ctx.fillStyle='#6b6356'; ctx.fillRect(a.x,a.y,w,h); }
       ctx.restore();
       ctx.strokeStyle='#3a352c'; ctx.lineWidth=2; roundRect(a.x,a.y,w,h,6*cam.zoom); ctx.stroke();
       // montañas decorativas encima
@@ -3713,16 +3722,46 @@ function fillPattern(name, sx, sy, sw, sh, worldTile){
   return true;
 }
 
+// FASE 9C: rejilla sutil y translúcida SIEMPRE visible (antes solo aparecía
+// al colocar un edificio) alineada a FOG_CELL, para reforzar el efecto de
+// "tablero de juego de mesa" pedido tras juego real. Recorta al rectángulo
+// de suelo visible (gx,gy,gw,gh, ya calculado por el llamador) y se salta el
+// dibujo si las celdas quedarían demasiado juntas con poco zoom (evita ruido
+// visual y coste de dibujo innecesario al alejar mucho la cámara).
+function drawBoardGrid(gx, gy, gw, gh){
+  const cell = FOG_CELL*cam.zoom;
+  if(cell < 7) return;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(gx, gy, gw, gh); ctx.clip();
+  ctx.strokeStyle='rgba(255,255,255,.10)'; ctx.lineWidth=1;
+  ctx.beginPath();
+  const startWX = Math.floor(cam.x/FOG_CELL)*FOG_CELL;
+  const endWX = cam.x + viewW()/cam.zoom + FOG_CELL;
+  for(let wx=startWX; wx<endWX; wx+=FOG_CELL){
+    const sx = worldToScreen(wx,0).x;
+    ctx.moveTo(sx, gy); ctx.lineTo(sx, gy+gh);
+  }
+  const startWY = Math.floor(cam.y/FOG_CELL)*FOG_CELL;
+  const endWY = cam.y + viewH()/cam.zoom + FOG_CELL;
+  for(let wy=startWY; wy<endWY; wy+=FOG_CELL){
+    const sy = worldToScreen(0,wy).y;
+    ctx.moveTo(gx, sy); ctx.lineTo(gx+gw, sy);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawGround(){
   const tl=worldToScreen(0,0), br=worldToScreen(WORLD.w,WORLD.h);
   const gx=Math.max(0,tl.x), gy=Math.max(0,tl.y);
   const gw=Math.min(viewW(),br.x)-gx, gh=Math.min(viewH(),br.y)-gy;
   if(gw>0 && gh>0){
     const groundTile = mapTheme==='cliffs' ? 'tile_dirt' : 'tile_grass';
-    if(!fillPattern(groundTile, gx, gy, gw, gh, 300)){
+    if(!fillPattern(groundTile, gx, gy, gw, gh, 80)){
       ctx.fillStyle=(MAPS[mapTheme]&&MAPS[mapTheme].ground)||'#26331f'; ctx.fillRect(gx,gy,gw,gh);
     }
     if(mapTheme==='forest'){ ctx.fillStyle='rgba(15,30,12,.35)'; ctx.fillRect(gx,gy,gw,gh); } // bosque más oscuro
+    drawBoardGrid(gx, gy, gw, gh);
   }
   // Borde del mundo
   ctx.strokeStyle='rgba(0,0,0,.5)'; ctx.lineWidth=3;
@@ -3788,7 +3827,7 @@ function drawBuilding(e){
   // estricta), no el anclaje "abajo + estirado ×1.7" de antes (simulaba un
   // edificio visto en ¾). `box` es el tamaño visual cuadrado de la ficha;
   // todo lo demás (trim de bando, barras, selección) se ancla a su centro.
-  const box = d.size * (d.wall ? 1.15 : 1.05) * cam.zoom;
+  const box = d.size * (d.wall ? 1.15 : BLD_VIS_SCALE) * cam.zoom;
   ctx.globalAlpha = e.built?1:0.55;
   // sombra de ficha (offset, SIN achatar: en vista cenital estricta una
   // sombra proyectada hacia abajo no se ve elíptica, se ve circular/recta).
@@ -3972,20 +4011,25 @@ function drawUnit(e){
   let hurtPunch=1;
   if(e.hurtT){ const age=performance.now()-e.hurtT; if(age<110) hurtPunch=1+0.16*(1-age/110); }
 
-  const sz=22*cam.zoom * (e.anim>0?1.15:1) * hurtPunch;
+  // FASE 9C: unidades más chicas (antes 22/40, casi el tamaño de un edificio
+  // pequeño) para que la jerarquía visual edificio > unidad tenga sentido —
+  // ver BLD_VIS_SCALE, que agranda los edificios en la misma tanda.
+  const sz=16*cam.zoom * (e.anim>0?1.15:1) * hurtPunch;
   const cx=s.x+lungeX, cy=s.y+lungeY;
   // sombra de ficha (offset, sin achatar), clavada al suelo: se dibuja ANTES
   // de rotar para que no gire con la unidad (cámara cenital estricta).
   ctx.beginPath(); ctx.arc(cx+2*cam.zoom, cy+3*cam.zoom, sz*0.52, 0, Math.PI*2);
   ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fill();
 
-  const drawAngle = fx.angle + Math.PI/2;   // alinea el "arriba" local del token con el rumbo real
+  // Anillo tipo "sticker" + muesca de dirección: SÍ rotan hacia el rumbo real
+  // (son formas simples, geométricamente neutras a la rotación). El arte de
+  // la ficha, en cambio, YA NO rota (ver más abajo) — feedback de juego real
+  // tras integrar el arte: no todas las piezas generadas respetan de forma
+  // consistente la convención "mirar hacia arriba", así que rotar el dibujo
+  // completo hacía que varias unidades se vieran moviéndose "hacia atrás" o
+  // "de lado". La muesca sigue marcando el rumbo real con fiabilidad.
+  const drawAngle = fx.angle + Math.PI/2;
   setUnitTransform(cx, cy, drawAngle, 1);
-  // Ficha tipo "sticker": relleno claro + borde blanco + borde del color de
-  // bando + muesca de dirección (misma silueta neutra para ambos bandos —
-  // lo que distingue de quién es cada ficha son estas líneas de color, no un
-  // sprite distinto por bando). La muesca también sirve de indicador de
-  // rumbo incluso con el arte de respaldo (emoji) de hoy.
   ctx.beginPath(); ctx.arc(0, 0, sz*0.52, 0, Math.PI*2);
   ctx.fillStyle='rgba(245,238,222,.94)'; ctx.fill();
   ctx.lineWidth=Math.max(1.4,sz*0.1); ctx.strokeStyle='#fff'; ctx.stroke();
@@ -3997,7 +4041,10 @@ function drawUnit(e){
   ctx.beginPath();
   ctx.moveTo(0, -sz*0.62); ctx.lineTo(-sz*0.11, -sz*0.46); ctx.lineTo(sz*0.11, -sz*0.46);
   ctx.closePath(); ctx.fill();
-  const uH = 40*cam.zoom * (e.anim>0?1.12:1);
+  resetTransform();
+
+  // Ficha (sprite/emoji) SIEMPRE en pie, sin rotar — ver nota arriba.
+  const uH = 30*cam.zoom * (e.anim>0?1.12:1) * hurtPunch;
   // FASE 9B: arte propio por TIER de línea de mejora (Fase 5) si existe,
   // igual en host y cliente MP (el tier es del BANDO, viaja gratis en
   // `serSide`). Los héroes siempre usan su propia ficha fija, nunca la de
@@ -4005,11 +4052,11 @@ function drawUnit(e){
   // `drawSprite` devuelve false y se reintenta con el de tipo base — sin
   // volver a pedir nada por red gracias al registro previo en SPRITE_FILES.
   const tier = d.hero ? 0 : lineTierCount(e.owner, d.cat);
-  const drewTiered = tier>0 && drawSprite('unit_'+d.cat+'_t'+tier, 0, 0, uH, false);
-  if(!drewTiered && !drawSprite('unit_'+e.type, 0, 0, uH, false)){
+  const drewTiered = tier>0 && drawSprite('unit_'+d.cat+'_t'+tier, cx, cy, uH, false);
+  if(!drewTiered && !drawSprite('unit_'+e.type, cx, cy, uH, false)){
     // respaldo: aura + emoji + estrella de héroe
     if(d.hero){
-      ctx.beginPath(); ctx.arc(0, 0, sz*0.7, 0, Math.PI*2);
+      ctx.beginPath(); ctx.arc(cx, cy, sz*0.7, 0, Math.PI*2);
       ctx.fillStyle='rgba(230,190,90,.28)'; ctx.fill();
     }
     // Catapulta sin sprite (Fase 5): el emoji de respaldo (🎯) no lee como una
@@ -4017,13 +4064,23 @@ function drawUnit(e){
     // emoji, un dibujo procedural (ruedas + chasis + brazo lanzador) que se
     // reconoce como catapulta a simple vista (feedback de juego real).
     if(d.cat==='siege' && !d.hero){
-      drawCatapultIcon(sz);
+      ctx.save(); ctx.translate(cx,cy); drawCatapultIcon(sz); ctx.restore();
     } else {
       ctx.font=`${sz}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(d.emoji, 0, 0);
-      if(d.hero){ ctx.font=`${12*cam.zoom}px serif`; ctx.fillText('⭐', sz*0.45, -sz*0.45); }
+      ctx.fillText(d.emoji, cx, cy);
+      if(d.hero){ ctx.font=`${12*cam.zoom}px serif`; ctx.fillText('⭐', cx+sz*0.45, cy-sz*0.45); }
     }
   }
+  // Anillo de bando GRUESO, dibujado ENCIMA del sprite (a diferencia del
+  // anillo fino de abajo, este nunca queda tapado por el arte del personaje
+  // aunque llene casi todo el token) — refuerzo pedido tras juego real: el
+  // anillo fino solo no se distinguía bien a simple vista. Hecho por código
+  // (no arte duplicado por bando) para no tener que regenerar ni mantener
+  // dos variantes de cada pieza.
+  ctx.beginPath(); ctx.arc(cx, cy, sz*0.56, 0, Math.PI*2);
+  ctx.lineWidth=Math.max(2,sz*0.13);
+  ctx.strokeStyle = e.owner==='player' ? '#3f7fd9' : '#d9463f';
+  ctx.stroke();
   // flash blanco al recibir daño
   if(e.hurtT){
     const age = performance.now()-e.hurtT;
@@ -4031,12 +4088,11 @@ function drawUnit(e){
       ctx.save();
       ctx.globalAlpha = 0.6*(1-age/90);
       ctx.globalCompositeOperation = 'lighter';
-      ctx.beginPath(); ctx.arc(0, 0, sz*0.75, 0, Math.PI*2);
+      ctx.beginPath(); ctx.arc(cx, cy, sz*0.75, 0, Math.PI*2);
       ctx.fillStyle = '#fff'; ctx.fill();
       ctx.restore();
     }
   }
-  resetTransform();
   // símbolo del recurso que recolecta el aldeano (insignia)
   if(e.type==='villager' && e.state==='gather' && e.gather){
     const g=find(e.gather.id);
@@ -4363,7 +4419,7 @@ function hitBox(e){
   if(e.kind==='building'){
     const d=BLD[e.btype];
     if(d.wall || d.gate){ const r=radiusOf(e)+8; return {x1:e.x-r,x2:e.x+r,y1:e.y-r,y2:e.y+r}; }
-    const half = d.size*1.05/2 + 8;
+    const half = d.size*BLD_VIS_SCALE/2 + 8;
     return {x1:e.x-half, x2:e.x+half, y1:e.y-half, y2:e.y+half};
   }
   const r = radiusOf(e)+8;
@@ -4626,6 +4682,7 @@ function wallTap(p){
 const WALL_SNAP = 46;
 function snapWallEndpoint(pt){
   let x=pt.x, y=pt.y;
+  const edgeSnapped = (x<=WALL_SNAP || x>=WORLD.w-WALL_SNAP || y<=WALL_SNAP || y>=WORLD.h-WALL_SNAP);
   if(x<=WALL_SNAP) x=0; else if(x>=WORLD.w-WALL_SNAP) x=WORLD.w;
   if(y<=WALL_SNAP) y=0; else if(y>=WORLD.h-WALL_SNAP) y=WORLD.h;
   let best=null, bd=WALL_SNAP;
@@ -4636,6 +4693,14 @@ function snapWallEndpoint(pt){
     }
   }
   if(best){ x=best.x; y=best.y; }
+  else if(!edgeSnapped){
+    // FASE 9C: sin muralla/borde de mapa cerca (terreno abierto), encaja el
+    // extremo a la rejilla del tablero — para que una muralla nueva también
+    // se lea alineada al mismo tablero que los edificios (feedback de juego
+    // real: "las murallas no están correspondiendo a la grilla").
+    const g = snapToGrid(x, y);
+    x = g.x; y = g.y;
+  }
   return {x,y};
 }
 // Puntos equiespaciados de una línea (inclusive en los extremos).
@@ -4651,10 +4716,17 @@ function wallPoints(a, b){
 const actionsEl = document.getElementById('actions');
 const selinfoEl = document.getElementById('selinfo');
 
-function btnEl(label, sub, cls, enabled, onTap){
+// FASE 9C: `iconSprite` (opcional) muestra el sprite REAL de la unidad/
+// edificio en vez de depender del emoji embebido en `label` — pedido tras
+// juego real: "si ya tenemos un icono de aldeano, en el Centro Urbano
+// usamos el icono de aldeano para crear aldeanos, no el emoji". Si el PNG
+// no carga (no debería pasar: solo se usa con nombres ya confirmados en
+// `assets/sprites/`), `onerror` lo oculta sin dejar un ícono roto.
+function btnEl(label, sub, cls, enabled, onTap, iconSprite){
   const b=document.createElement('button');
   b.className='btn'+(cls?(' '+cls):'');
-  b.innerHTML = `<span>${label}</span>`+(sub?`<span class="cost">${sub}</span>`:'');
+  const icon = iconSprite ? `<img class="btnIcon" src="assets/sprites/${iconSprite}.png" alt="" onerror="this.style.display='none'">` : '';
+  b.innerHTML = icon+`<span>${label}</span>`+(sub?`<span class="cost">${sub}</span>`:'');
   if(!enabled) b.setAttribute('disabled','');
   b.addEventListener('click', (e)=>{ e.preventDefault(); if(enabled) onTap(); });
   return b;
@@ -4718,7 +4790,7 @@ function updateActionPanel(){
         lbl.textContent='Cola ('+Math.ceil(b.queue[0].time)+'s):'; qrow.appendChild(lbl);
         b.queue.forEach((job,i)=>{
           const q=document.createElement('button'); q.className='btn q';
-          q.innerHTML=`<span>${UNIT[job.type].emoji}</span><span class="x">✕</span>`;
+          q.innerHTML=`<img class="btnIcon" src="assets/sprites/unit_${job.type}.png" alt="" onerror="this.outerHTML='<span>'+${JSON.stringify(UNIT[job.type].emoji)}+'</span>'"><span class="x">✕</span>`;
           q.title='Cancelar '+UNIT[job.type].name;
           q.addEventListener('click',(ev)=>{ ev.preventDefault(); cancelQueued(b,i); });
           qrow.appendChild(q);
@@ -4764,7 +4836,7 @@ function updateActionPanel(){
       let sub = costStr(d.cost);
       if(d.req&&d.req.length&&!reqOk) sub+=' · req. Cuartel';
       if(d.reqAge&&!ageOk) sub+=' · '+AGES[d.reqAge].name;
-      actionsEl.appendChild(btnEl(d.emoji+' '+d.name, sub, 'build', en, ()=>{ placement={btype:bt}; updateActionPanel(); }));
+      actionsEl.appendChild(btnEl(d.name, sub, 'build', en, ()=>{ placement={btype:bt}; updateActionPanel(); }, 'bld_'+bt));
     }
     // Muralla (herramienta de dos toques: inicio y fin)
     actionsEl.appendChild(btnEl('🧱 Muralla', '🪨5/tramo', 'build', player.res.stone>=BLD.wall.cost.stone,
@@ -4800,7 +4872,7 @@ function buildingButtons(b){
   const cap = popCap('player');
   if(b.btype==='town'){
     const d=UNIT.villager;
-    actionsEl.appendChild(btnEl('👷 Aldeano', costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'villager')));
+    actionsEl.appendChild(btnEl('Aldeano', costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'villager'), 'unit_villager'));
     // Avance de era (hasta Imperial)
     if(player.age<MAX_AGE){
       const next=AGES[player.age+1];
@@ -4819,19 +4891,19 @@ function buildingButtons(b){
   }
   else if(b.btype==='barracks'){
     for(const t of ['infantry','pike']){ const d=UNIT[t];
-      actionsEl.appendChild(btnEl(d.emoji+' '+d.name, costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,t))); }
+      actionsEl.appendChild(btnEl(d.name, costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,t), 'unit_'+t)); }
     appendLineTierButtons(['infantry','pike']);
   }
   else if(b.btype==='range'){ const d=UNIT.archer;
-    actionsEl.appendChild(btnEl(d.emoji+' Arquero', costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'archer')));
+    actionsEl.appendChild(btnEl('Arquero', costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'archer'), 'unit_archer'));
     appendLineTierButtons(['archer']);
   }
   else if(b.btype==='stable'){ const d=UNIT.cavalry;
-    actionsEl.appendChild(btnEl(d.emoji+' Caballo', costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'cavalry')));
+    actionsEl.appendChild(btnEl('Caballo', costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'cavalry'), 'unit_cavalry'));
     appendLineTierButtons(['cavalry']);
   }
   else if(b.btype==='siegeworkshop'){ const d=UNIT.siege;
-    actionsEl.appendChild(btnEl(d.emoji+' '+d.name, costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'siege'))); }
+    actionsEl.appendChild(btnEl(d.name, costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'siege'), 'unit_siege')); }
   else if(b.btype==='market'){
     const ico={food:'🍖',wood:'🪵',stone:'🪨'};
     for(const r of ['food','wood','stone']){
@@ -4848,7 +4920,7 @@ function buildingButtons(b){
   else if(b.btype==='castle'){
     // Héroes: unidades especiales más fuertes
     for(const t of ['hero_sword','hero_archer','hero_cav']){ const d=UNIT[t];
-      actionsEl.appendChild(btnEl(d.emoji+' '+d.name, costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,t))); }
+      actionsEl.appendChild(btnEl(d.name, costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,t), 'unit_'+t)); }
   }
   else if(BLD[b.btype].produces){
     const ico={food:'🍖',wood:'🪵',gold:'🪙',stone:'🪨'}[BLD[b.btype].produces];

@@ -296,6 +296,16 @@ El archivo se organiza en estas secciones (en orden de aparición):
     nombres de tier (`unit_infantry_t1/t2`, `unit_pike_t1`, `unit_archer_t1`,
     `unit_cavalry_t1/t2`) más `bld_market`, `bld_siegeworkshop` y
     `unit_siege` (antes excluidos a propósito por no tener PNG).
+    **FASE 9C** (correcciones tras juego real): `drawUnit` ya NO rota el
+    sprite/emoji con el movimiento (el arte no respeta de forma consistente
+    "mirar hacia arriba") — solo rota el anillo+muesca de dirección; se
+    dibuja un segundo anillo de bando más grueso ENCIMA del sprite.
+    `BLD_VIS_SCALE` (junto a `snapToGrid`) fija el multiplicador visual/
+    táctil de los edificios no-muralla, usado por `drawBuilding`, `hitBox` y
+    el fantasma de colocación. `drawBoardGrid` (llamada desde `drawGround`)
+    dibuja la rejilla de tablero SIEMPRE (antes solo al colocar un
+    edificio). `snapWallEndpoint` encaja a la rejilla los extremos de
+    muralla que no caen cerca de otra muralla/borde de mapa.
 11. **Entrada táctil**: objeto `input` (incluye `panVelX`/`panVelY`/`lastPanT`
     para la inercia de cámara, Fase 3), manejadores
     `pointerdown/move/up/cancel`, `wheel`, teclado; `pickAt`, `handleTap`
@@ -313,7 +323,12 @@ El archivo se organiza en estas secciones (en orden de aparición):
     alrededor de `e.x,e.y` tanto para unidades (radio fijo) como para
     edificios (media huella `d.size*1.05` + margen táctil) — antes reproducía
     offsets asimétricos para calzar con el anclaje "por los pies".
-12. **UI: panel de acciones**: `btnEl`, `clearActions` (limpia botones y filas de
+12. **UI: panel de acciones**: `btnEl` (Fase 9C: acepta un `iconSprite`
+    opcional que agrega el PNG real de `assets/sprites/` como `<img>` en vez
+    de depender del emoji embebido en el texto — usado en Aldeano,
+    construcción de edificios, unidades entrenables, héroes y la fila de
+    cola; con `onerror` de respaldo aunque no debería dispararse nunca
+    porque solo se usan nombres ya confirmados), `clearActions` (limpia botones y filas de
     cola), `updateActionPanel` (multiplicador de producción, fila de cola
     cancelable, chips de filtro por tipo en selecciones mixtas — Fase 3 —,
     estado abierta/cerrada de una Puerta seleccionada — Fase 4 —, conteo de

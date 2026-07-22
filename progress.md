@@ -1798,3 +1798,154 @@ Se sirvió el juego por **HTTP real** (servidor Node mínimo de la sesión, NO
   hizo falta tocarlo: siguen con el pixel-art viejo pero son rutas de
   respaldo que en la práctica no se usan (la Puerta ya reutiliza
   `bld_wall_h`/`bld_wall_v` nuevos).
+
+## 2026-07-22 — FASE 9C: correcciones tras jugar con el arte real integrado
+
+El usuario probó la Fase 9B integrada y reportó una lista concreta de
+problemas de juego real: la relación de tamaño edificio/unidad no tenía
+sentido (una unidad casi del tamaño de un edificio entero), unidades que se
+movían "hacia atrás" o "de lado", caballos que se veían incompletos/cortados,
+el centro del piquetero "en el aire", pidió que el piso se sintiera más como
+un tablero (tiles más chicos + rejilla visible), que las murallas
+correspondieran a esa rejilla, que los botones de entrenamiento usaran el
+sprite real en vez del emoji, y que el bando de una unidad se entendiera
+mejor a simple vista. También pidió explícitamente volver a testear de
+verdad con capturas y revisar los errores, no solo asumir que algo quedó
+bien.
+
+### Diagnóstico (con capturas reales, antes de tocar código)
+- **`unit_cavalry.png` estaba literalmente cortado**: la cabeza y la cola del
+  caballo quedaban fuera del recorte. Al revisar la fuente con más margen se
+  confirmó que el caballo fue dibujado ACOSTADO horizontalmente (cola a la
+  izquierda, cabeza a la derecha) — el recorte automático de la fila
+  (arquero/caballo/catapulta) no le dio suficiente ancho.
+- **Causa raíz encontrada**: el detector de huecos (`smart_col_bounds`)
+  exigía exactamente `cols-1` huecos para aceptar el resultado del recorte
+  "inteligente" y si no los encontraba caía en silencio a una división
+  pareja rota. La fila de arquero/caballo/catapulta tiene 4 columnas
+  nominales pero solo 3 personajes reales (la 4ª celda está vacía a
+  propósito) — nunca hay 3 huecos posibles con solo 3 elementos, así que
+  SIEMPRE caía al respaldo roto para esa fila específica, cortando el
+  caballo y filtrando un fragmento de su cola dentro del recorte de la
+  catapulta. Se recortaron los tres (arquero, caballo, catapulta) a mano con
+  coordenadas verificadas por muestreo de píxeles.
+- **El piquetero "flotaba"**: su cuerpo (casco+escudo) ocupaba solo ~20% del
+  ancho de la imagen recortada, con la lanza larga dominando el resto — al
+  centrar la ficha en el punto medio del recorte completo, el centro visual
+  caía sobre el asta vacía de la lanza, lejos del cuerpo real. Se recortó de
+  nuevo centrado en el cuerpo real (detectado por perfil de densidad de
+  tinta: la lanza es una línea delgada, el cuerpo es una mancha gruesa),
+  dejando un tramo corto de lanza visible a cada lado en vez de la lanza
+  completa de ~2.5× el ancho del cuerpo.
+- **Movimiento "hacia atrás/de lado"**: se re-derivó la fórmula de rotación
+  matemáticamente (con números concretos, no solo álgebra) y resultó
+  CORRECTA — el problema real es que el arte generado NO respeta de forma
+  consistente la convención pedida ("toda pieza mirando hacia arriba"): el
+  aldeano/arquero/infantería parecen mirar hacia abajo, el caballo base
+  mira hacia la derecha, el héroe jinete mira hacia la izquierda, los
+  héroes de capa parecen mirar hacia arriba... cada pieza a su manera. Con
+  esa base tan inconsistente, rotar el dibujo completo garantizaba que
+  varias unidades se vieran "mal orientadas" sin importar qué tan correcta
+  fuera la matemática.
+
+### Decisión de diseño: dejar de rotar el cuerpo completo
+En vez de intentar corregir la orientación de cada pieza ya generada (poco
+fiable sin volver a generar todo el set), se decidió que la FICHA (sprite/
+emoji) ya NO rota con el movimiento — se dibuja siempre en pie. Lo que SÍ
+sigue rotando es el anillo + la muesca triangular de dirección (formas
+simples, geométricamente neutras a la rotación), que siguen marcando el
+rumbo real con fiabilidad. Esto es además el patrón habitual en varios RTS
+de fichas/tokens (la pieza no gira, solo se desliza), y es coherente con la
+estética de "juego de mesa" que se está buscando.
+
+### Cambios de motor
+- **`BLD_VIS_SCALE = 1.9`** (nueva constante): multiplicador visual (y de
+  zona táctil) de los edificios no-muralla sobre su `d.size` — antes de la
+  Fase 9A era ×1.7 pero como un ESTIRADO vertical sobre un sprite con
+  aspecto natural; Fase 9A lo dejó en ×1.05 sobre una ficha ya cuadrada
+  centrada, perdiendo sin querer casi toda la diferencia de tamaño con una
+  unidad. Se usa el MISMO valor en `drawBuilding` (render), `hitBox`
+  (para que el área de toque coincida con lo que se ve) y el fantasma de
+  colocación (para que lo que se ve al colocar sea el tamaño real).
+- **Unidades más chicas**: `sz` (diámetro de ficha) de 22→16, `uH` (alto del
+  sprite) de 40→30 — junto con `BLD_VIS_SCALE`, restaura una jerarquía
+  visual con sentido (Casa ~2.5× una unidad, Centro Urbano/Castillo ~4-5×).
+- **`drawUnit` reescrito de nuevo**: el anillo+muesca de dirección se sigue
+  dibujando dentro de `setUnitTransform(...,drawAngle,1)` (rotado); el
+  sprite/emoji se dibuja DESPUÉS de `resetTransform()`, en coordenadas de
+  pantalla normales, sin rotación. El "bonk" (`hurtPunch`) ahora también
+  escala el sprite (`uH`), no solo el anillo. Un **segundo anillo de bando,
+  más grueso, dibujado ENCIMA del sprite** (`sz*0.56` de radio,
+  `sz*0.13` de grosor) refuerza la identificación de bando sin depender de
+  que el anillo fino de abajo no quede tapado por el arte del personaje —
+  hecho por código (no arte duplicado por bando), decisión tomada tras
+  preguntarle al usuario: generar doble arte por bando es más caro de
+  generar y mantener, y el resultado por código ya se ve claro en las
+  capturas de verificación.
+- **Rejilla de tablero SIEMPRE visible** (`drawBoardGrid`, llamada desde
+  `drawGround`): antes solo aparecía como ayuda visual al colocar un
+  edificio; ahora es una rejilla sutil y translúcida (`rgba(255,255,255,.10)`,
+  1px) alineada a `FOG_CELL` (40px) sobre todo el suelo visible, recortada
+  al rectángulo de pantalla y con un piso de zoom mínimo (celda <7px en
+  pantalla) para no dibujar de más ni generar ruido visual al alejar mucho
+  la cámara.
+- **Texturas de piso más chicas**: `worldTile` (cuántos px de MUNDO cubre
+  una repetición del patrón) bajado de 300 a 80 en las 3 llamadas a
+  `fillPattern` (pasto/tierra, agua, riscos) — con más repetición se lee
+  más como baldosas de tablero, calzando además con la rejilla persistente
+  nueva (80 = 2 celdas de `FOG_CELL`).
+- **Murallas alineadas a la rejilla**: `snapWallEndpoint` ahora, cuando un
+  extremo de muralla NO cae cerca de otra muralla ni del borde del mapa (los
+  dos casos ya cubiertos y verificados en fases anteriores, sin tocarlos),
+  encaja el punto a la intersección de rejilla más cercana con
+  `snapToGrid`. El resto del sistema de murallas (espaciado `WALL_SP=28`,
+  snapping a murallas vecinas) no se tocó, para no arriesgar la lógica de
+  esquinas/puertas ya verificada en dos rondas de correcciones anteriores.
+- **Iconos reales en botones de entrenamiento/construcción**: `btnEl` acepta
+  ahora un `iconSprite` opcional que agrega un `<img>` con el PNG real
+  (`assets/sprites/<nombre>.png`) en vez de depender del emoji embebido en
+  el texto del botón — aplicado al botón de Aldeano del Centro Urbano, a
+  toda la lista de construcción de edificios, a las unidades entrenables de
+  Cuartel/Galería/Establo/Taller de Asedio, a los héroes del Castillo, y a
+  los iconos de la fila de cola (`.btn.q`). Los botones de tecnologías
+  económicas/mejoras de Herrería/mercado se dejaron con emoji (no tienen un
+  sprite de unidad/edificio 1:1 equivalente). Si el PNG no cargara,
+  `onerror` lo oculta sin dejar un ícono roto — en la práctica no debería
+  pasar nunca porque solo se usan nombres ya confirmados en
+  `assets/sprites/`.
+- **Atlas regenerado otra vez** (mismo script Python de la sesión) para que
+  recoja los 4 sprites re-recortados (`unit_cavalry`, `unit_siege`,
+  `unit_archer`, `unit_pike`) — el atlas tiene prioridad sobre el PNG suelto,
+  así que sin regenerarlo el juego habría seguido mostrando los recortes
+  rotos.
+
+### Verificación (con capturas reales en cada paso, no solo aserciones de código)
+Todo corrido por HTTP real (no `file://`), con capturas de pantalla
+revisadas visualmente en cada punto, tal como pidió el usuario:
+- Contact sheets de los 4 sprites re-recortados: caballo completo (cabeza y
+  cola visibles), catapulta completa (sin fragmento de caballo filtrado),
+  arquero completo, piquetero con el cuerpo centrado.
+- Escena general (Centro Urbano + Casa + Cuartel + 4 unidades moviéndose en
+  4 direcciones distintas): rejilla visible, edificios claramente más
+  grandes que las unidades, texturas de piso repitiendo con más frecuencia,
+  anillos de bando gruesos visibles.
+- Panel de acciones del Centro Urbano: botón "Aldeano" mostrando el sprite
+  real en vez del emoji 👷.
+- Muralla nueva trazada en terreno abierto: perfectamente vertical y
+  alineada a la rejilla (confirmado también por aritmética:
+  `punto % FOG_CELL === 0` en ambos extremos).
+- Acercamiento a 4 unidades (2 propias en movimiento, 2 rivales quietas):
+  anillos azul/rojo claramente distinguibles, ninguna ficha cortada ni con
+  orientación rara.
+- Regresión general: 300s simulados con IA Difícil, 0 errores de consola en
+  todos los pasos.
+
+### Pendiente
+- El anillo de bando fino de abajo (bajo el sprite) quedó redundante con el
+  nuevo anillo grueso de encima — se podría simplificar a uno solo más
+  adelante, pero no se tocó esta tanda para minimizar el diff.
+- Si más adelante se regenera el set de unidades con Gemini, ahora sí
+  conviene insistir con más fuerza en la instrucción "mirar hacia arriba"
+  (o aceptar de una vez que las fichas no rotan y liberar esa restricción
+  del prompt) — mientras tanto, la decisión de NO rotar el cuerpo completo
+  es la solución vigente y ya verificada.
