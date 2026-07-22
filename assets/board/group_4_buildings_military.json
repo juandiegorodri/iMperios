@@ -1,0 +1,45 @@
+{
+  "group_id": "P3_buildings_military",
+  "status": null,
+  "grid": {
+    "cols": 2,
+    "rows": 2,
+    "cell_px": 512
+  },
+  "note": "IMPORTANT: this single image must be a 2x2 grid of 4 equal square cells, with NO gaps, NO borders, and NO visible seams between cells, and NO cell numbering/labels drawn in the image. Each described cell below goes in its exact row/column position, reading left-to-right then top-to-bottom.",
+  "how_to_use": "Copia el texto de 'full_prompt' de UNA celda a la vez y pegalo en Gemini para esa posicion exacta (fila/columna), o pega la nota 'note' de arriba una sola vez seguida de los 'full_prompt' de TODAS las celdas de este archivo en un unico mensaje para pedir la parrilla completa de una vez. Cada full_prompt ya trae TODAS las normas de estilo incluidas, no hace falta agregar nada mas.",
+  "cells": [
+    {
+      "row": 1,
+      "col": 1,
+      "id": "barracks",
+      "name_es": "Cuartel",
+      "ingame_px": 54,
+      "full_prompt": "top-down flat sticker icon of a barracks: sturdy building with a pitched roof, a rack of crossed spears/swords visible near the entrance, seen from directly above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "id": "range",
+      "name_es": "Galería de Tiro",
+      "ingame_px": 54,
+      "full_prompt": "top-down flat sticker icon of an archery range: similar building to the barracks but with round archery targets leaning against it instead of melee weapons, seen from directly above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "id": "stable",
+      "name_es": "Establo",
+      "ingame_px": 54,
+      "full_prompt": "top-down flat sticker icon of a stable: long low-pitched roof building, a hay bale and a wooden water trough near the entrance, seen from directly above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "id": "siegeworkshop",
+      "name_es": "Taller de Asedio",
+      "ingame_px": 56,
+      "full_prompt": "top-down flat sticker icon of a siege workshop: larger pitched-roof workshop building, spare wheels and stacked wooden beams outside suggesting siege engines are built there, seen from directly above. Camera: strict orthographic top-down bird's-eye view (90 degrees), no perspective, no isometric view, no 3/4 view. Art style: flat cardboard/sticker board-game token, thick dark cartoon outline around the entire silhouette, flat cel-shaded colors with soft internal shading for volume (no photorealistic gradients). Material/color: use NEUTRAL colors only (wood, stone, leather, cloth in earthy/green/grey/gold tones) -- do NOT paint any team color (no blue, no red); the game engine paints a colored ring/border on top for team identification, so the art itself must stay neutral. Orientation: the piece must face the TOP edge of the frame (as if moving/looking upward) -- this is mandatory, the game engine rotates the image in real time assuming 'up' = 'forward'. Background: fully transparent PNG (alpha channel) -- no scenery, no ground, no grass behind the piece. Shadow: do NOT draw any drop shadow, not even a subtle one -- the engine adds its own shadow at render time. Composition: single subject, centered, filling about 80-90% of the frame, small uniform margin. Negative prompt: no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward, no multiple subjects in the frame."
+    }
+  ]
+}

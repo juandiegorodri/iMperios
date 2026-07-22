@@ -14,9 +14,11 @@ código nuevas (ver normas en `CLAUDE.md`).
 | `progress.md` | Bitácora cronológica de avance. |
 | `README.md` | Cómo jugar, controles y cómo desplegar. |
 | `assets/ART.md` | Manual de línea gráfica y lista de sprites/animaciones. |
-| `assets/sprites/*.png` | Sprites finales del juego (unidades, edificios, recursos). |
-| `assets/atlas.png` / `atlas.json` | Atlas de sprites (Fase 8): 30 de los 34 PNG de `assets/sprites/` empaquetados y PRE-ESCALADOS en una sola textura + su mapa de recortes, para menos peticiones y menos reescalado por cuadro. Generado por un script Node de la sesión (`build_atlas.cjs`, no forma parte del repo, igual criterio que `arena.cjs` de la Fase 5); regenerar si cambian los PNG de origen. Ver `assets/ART.md`. |
-| `assets/_raw/*.webp` | Hojas fuente generadas con Ideogram (para re-recortar). |
+| `assets/sprites/*.png` | Sprites finales del juego (unidades —incl. arte propio por tier de mejora `unit_<cat>_t<n>`—, edificios, recursos, murallas, texturas de piso). Desde la FASE 9B: estilo "ficha de tablero" (sticker, cenital estricto), generado con Gemini a partir de `board_sprites.json`; reemplaza por completo el set pixel-art v1. |
+| `assets/atlas.png` / `atlas.json` | Atlas de sprites: 38 PNG de `assets/sprites/` empaquetados y PRE-ESCALADOS (≤240px de lado mayor) en una sola textura + su mapa de recortes, para menos peticiones y menos reescalado por cuadro (deja fuera los `tile_*`, que necesitan la imagen completa como fuente de `createPattern`, y `obj_gate`, sin uso). Regenerado en la FASE 9B con el nuevo arte (script Python de la sesión, empaquetado tipo estantería/shelf, no forma parte del repo, igual criterio que `arena.cjs` de la Fase 5); regenerar si cambian los PNG de origen. Ver `assets/ART.md`. |
+| `assets/_raw/*.webp` | Hojas fuente generadas con Ideogram para el set pixel-art v1 (para re-recortar; ya no es el set activo, ver FASE 9). |
+| `assets/board/board_sprites.json` | FASE 9: fuente de verdad de la especificación de las parrillas de arte "ficha de tablero" (sticker, cenital estricto) — estilo global + prompt corto por celda + cómo recortar/importar el resultado. Incluye el estado de cada hoja (recibida/pendiente/aprobada) y notas de mapeo real vs. especificado. Ver `assets/ART.md` (nota de pivote de dirección de arte). |
+| `assets/board/group_1_units.json` ... `group_7_walls.json` | FASE 9: el mismo contenido de `board_sprites.json` exportado como **un archivo por grupo/hoja** (unidades, tiers faltantes, edificios económicos, edificios militares, recursos/props, texturas de piso, murallas), con las normas de estilo YA incrustadas dentro del `full_prompt` de CADA celda (autocontenido, no depende de un bloque de estilo global aparte) — pensado para pegarle a Gemini un grupo a la vez. Generados con un script Python de la sesión a partir de `board_sprites.json` (no forma parte del repo); regenerar si cambia la especificación maestra. Los 7 grupos ya se generaron y se integraron en la FASE 9B. |
 | `vercel.json` | Config de despliegue estático en Vercel (caché de sprites y del atlas, headers). |
 | `.vercelignore` | Excluye del deploy web `ios/`, `server.js`, `assets/_raw/` y los `.md`. |
 | `manifest.webmanifest` | Web App Manifest (PWA: nombre, iconos, pantalla completa). |
@@ -276,6 +278,24 @@ El archivo se organiza en estas secciones (en orden de aparición):
     encadenado (Fase 3); la Puerta (Fase 4) usa el sprite `obj_gate` (no
     `bld_wall_h/v`) y siempre dibuja un candado 🔒/🔒→🔓 sobre ella según
     `e.closed` (no solo al seleccionarla).
+    **FASE 9** (vista de tablero, ver `CLAUDE.md` §6): `drawBuilding`/
+    `drawUnit` ahora anclan la ficha CENTRADA en `e.x,e.y` (antes: "por los
+    pies" + estirado ×1.7) con sombra recta sin achatar (`drawShadow`,
+    `drawSelRing`, `drawPings` — cámara cenital estricta); `drawBuilding`
+    dibuja un trim de borde blanco+color de bando en vez de la bandera; los
+    edificios nuevos hacen `snapToGrid` (rejilla de `FOG_CELL`=40px) al
+    colocarse, las unidades siguen libres; `drawUnit` calcula un rumbo
+    (`fx.angle`, suavizado cuadro a cuadro) y rota la ficha hacia su
+    movimiento real en vez del volteo ±1 de antes (`e.face` se conserva solo
+    para la caída de cadáveres); `hurtPunch` añade un pulso de escala breve
+    al recibir daño, sobre el lunge/flash ya existentes.
+    **FASE 9B** (arte real integrado): `drawUnit` intenta primero
+    `unit_<cat>_t<tier>` (según `lineTierCount`, nunca para héroes) y si
+    `drawSprite` devuelve `false` cae al sprite de tipo base — mismo `spr()`/
+    atlas de siempre, sin protocolo nuevo. `SPRITE_FILES` ahora incluye los 6
+    nombres de tier (`unit_infantry_t1/t2`, `unit_pike_t1`, `unit_archer_t1`,
+    `unit_cavalry_t1/t2`) más `bld_market`, `bld_siegeworkshop` y
+    `unit_siege` (antes excluidos a propósito por no tener PNG).
 11. **Entrada táctil**: objeto `input` (incluye `panVelX`/`panVelY`/`lastPanT`
     para la inercia de cámara, Fase 3), manejadores
     `pointerdown/move/up/cancel`, `wheel`, teclado; `pickAt`, `handleTap`
@@ -288,7 +308,11 @@ El archivo se organiza en estas secciones (en orden de aparición):
     del mismo tipo visibles, excluye guarnecidas — Fase 5; Fase 3: también
     edificios del mismo tipo), `finishBoxSelect` (excluye guarnecidas — Fase
     5), `selectedUnits`, `selectedBuilding`; colocación (`placementValid`,
-    `tryPlaceBuilding`).
+    `tryPlaceBuilding` — Fase 9: hace `snapToGrid` antes de validar/colocar).
+    `hitBox` (Fase 9): con las fichas ya centradas, es un cuadrado simétrico
+    alrededor de `e.x,e.y` tanto para unidades (radio fijo) como para
+    edificios (media huella `d.size*1.05` + margen táctil) — antes reproducía
+    offsets asimétricos para calzar con el anclaje "por los pies".
 12. **UI: panel de acciones**: `btnEl`, `clearActions` (limpia botones y filas de
     cola), `updateActionPanel` (multiplicador de producción, fila de cola
     cancelable, chips de filtro por tipo en selecciones mixtas — Fase 3 —,

@@ -684,3 +684,111 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
   (ni paneo ni pinch) y soltar rápido deselecciona todo — gesto táctil
   habitual en iPad, además del botón "✕ Deseleccionar" del panel (que se
   mantiene para ratón/escritorio).
+- **FASE 9 — Vista de tablero: fichas tipo sticker** (2026-07-21/22):
+  pivote de dirección de arte hacia un RTS con cámara **cenital estricta**
+  (90°, sin perspectiva) y estética de **juego de mesa** (fichas planas tipo
+  sticker/cartón sobre un tablero de pasto, estilo Carcassonne), pensado para
+  jugarse con el iPad plano sobre una mesa. La SIMULACIÓN no cambia (sigue
+  siendo el mismo RTS en tiempo real, mapa igual de grande, niebla de guerra
+  igual); es un cambio de la capa gráfica y de colocación. Primera tanda
+  (motor + fichas de respaldo, sin arte nuevo todavía):
+  - **Edificios en rejilla, unidades libres**: al construir, el CENTRO del
+    edificio se ajusta (`snapToGrid`) a la misma rejilla de 40px que ya usan
+    niebla/pathfinding/minimapa (`FOG_CELL`); las unidades siguen moviéndose
+    libremente por el mapa (incluida diagonal, sin restricción de rejilla) —
+    solo cambia dónde se asienta un edificio nuevo, no el movimiento en
+    tiempo real. El fantasma de colocación muestra la casilla ya encajada más
+    una rejilla sutil alrededor, para que "se vea tablero" antes de confirmar.
+  - **Fichas centradas y planas** (`drawBuilding`/`drawUnit`): se abandonó el
+    anclaje "por los pies + estirado ×1.7" (simulaba un edificio visto en
+    ¾) por un anclaje CENTRADO en `e.x,e.y`, con sombra recta (sin achatar)
+    en vez de la elipse que simulaba perspectiva — igual en `drawShadow`
+    (recursos), `drawSelRing`/`drawPings` (ya no se achatan).
+  - **Trim de bando en vez de bandera**: cada edificio dibuja un borde blanco
+    + un borde interior del color de bando (azul jugador / rojo rival)
+    directamente sobre su marco — el MISMO arte sirve para ambos jugadores;
+    lo que distingue de quién es un Castillo o una Casa son esas líneas, no
+    un sprite o color distinto por bando. Las unidades llevan el mismo
+    lenguaje: anillo blanco + anillo de color de bando alrededor de la ficha.
+  - **Rotación real hacia el movimiento**: las unidades ya no solo voltean
+    izquierda/derecha (`e.face`, que se conserva SOLO para la caída de los
+    cadáveres) — rotan de verdad hacia el rumbo real de desplazamiento
+    (ángulo suavizado cuadro a cuadro desde el delta de posición, igual en
+    host y cliente MP porque se deriva de `e.x/e.y`, que siempre viajan en el
+    snapshot). Una pequeña muesca triangular de color de bando en el borde
+    del token marca el rumbo con claridad incluso con el arte de respaldo
+    (emoji) de hoy.
+  - **Refuerzo del efecto de interacción**: además del "lunge" ya existente
+    (el atacante/recolector se desplaza hacia su objetivo) y el flash blanco
+    al recibir daño, ahora quien recibe el golpe también sufre un breve
+    "bonk" de escala (`hurtPunch`, ~110ms) — dos fichas que interactúan
+    (atacar, recolectar, construir) se notan claramente en movimiento.
+  - **Hitboxes simplificados** (`hitBox`): al estar ahora centradas, la zona
+    de toque de una unidad es un cuadrado simétrico alrededor de su centro
+    (antes era una caja asimétrica que reproducía el anclaje "por los pies")
+    y la de un edificio es exactamente su huella cuadrada — selección más
+    predecible y fácil de acertar en pantalla táctil.
+  - **`assets/board/board_sprites.json`**: especificación completa (estilo
+    global + 5 hojas/parrillas: unidades, edificios económicos, edificios
+    militares, recursos/props, texturas de piso) con el prompt exacto de
+    cada celda para generar el arte definitivo con IA (Gemini) — arte NEUTRO
+    sin color de bando horneado (lo pinta el motor) y toda pieza mirando
+    hacia el borde superior de su celda (el motor la rota en tiempo real).
+    Cuando llegue ese arte se sustituyen los sprites actuales sin tocar la
+    lógica de juego. Detalle del pipeline de recorte/import en `progress.md`.
+  - Verificado headless: 0 errores de consola, movimiento diagonal libre
+    confirmado, snap de colocación a múltiplos de 40px confirmado, rotación
+    hacia un rumbo diagonal confirmada por cálculo, selección exacta en
+    centro y borde de ficha confirmada, y regresión completa (pathfinding/
+    formaciones/puertas, flip de bandos MP, cruce de puente, 300s con IA
+    Difícil) sin errores.
+  - **FASE 9B — Integración del arte real** (2026-07-22): el usuario generó
+    con Gemini las 7 hojas completas de `assets/board/board_sprites.json` (34
+    de 42 celdas útiles, tras corregir el mapeo de la parrilla de unidades y
+    añadir la hoja de murallas que faltaba) y las subió como un `.zip`.
+    Reemplazan por completo el set pixel-art v1 (unidades, los 12 edificios,
+    4 recursos, `obj_mountain`, muralla horizontal/vertical/Torre de Muralla y
+    las 4 texturas de piso) — la Puerta no necesitó imagen propia, hereda el
+    sprite de muralla ya existente en el motor.
+    - **Recorte automático** (script Python de la sesión, no forma parte del
+      repo): cada hoja se recorta celda por celda y se le quita el fondo
+      blanco por flood-fill (deja intactos los blancos internos, como brillos
+      de armadura). Dos hojas necesitaron manejo especial en vez de división
+      pareja: la de unidades (los personajes NO están centrados uniformemente
+      —el piquetero, p. ej., tiene su cuerpo corrido hacia la celda vecina
+      para dejarle sitio a la lanza larga— así que se detectan los huecos de
+      tinta reales entre personajes por fila) y la de edificios económicos
+      (el Centro Urbano y el Castillo ocupan una columna ENTERA de dos celdas
+      de alto cada uno, no una celda 3×4 pareja —Gemini reorganizó la
+      rejilla para darles protagonismo—, así que sus 10 celdas reales se
+      recortaron con coordenadas verificadas a mano).
+    - **Arte por TIER de línea de mejora** (pedido explícito del usuario:
+      "arte es más pro, con este tipo de unidades nos lo podemos permitir"):
+      además del set base (Fase 5 ya tenía Milicia/Piquetero/Arquero/Caballo/
+      Héroes), ahora Espadachín, Campeón, Alabardero, Arquero de Tiro Largo,
+      Caballero y Paladín tienen su PROPIA ficha (antes: mismo sprite base +
+      insignia de estrellas encima). Nueva convención de nombre de archivo
+      `unit_<categoría>_t<tier>` (p. ej. `unit_infantry_t1`); `drawUnit`
+      intenta primero el sprite del tier investigado (`lineTierCount`, nunca
+      para héroes) y si no existe cae al de tipo base — nunca dispara una
+      petición de red nueva porque los nombres de tier ya están pre-
+      registrados en `SPRITE_FILES`. La insignia de estrellas se mantiene
+      encima igualmente (refuerzo visual, no redundante: el arte cambia la
+      apariencia, la insignia sigue marcando el número exacto de tier).
+    - **Atlas regenerado por completo** (`assets/atlas.png`+`atlas.json`,
+      script Python de la sesión, empaquetado tipo estantería/shelf, cada
+      sprite pre-escalado a ≤240px de lado mayor): imprescindible, porque
+      `drawSprite` prioriza el atlas sobre el PNG suelto — sin regenerarlo,
+      el juego habría seguido mostrando el arte viejo aunque se
+      reemplazaran los PNG de `assets/sprites/`. Antes: 30 sprites, 2.59MB.
+      Ahora: 38 sprites (suma el arte de tier, mercado, taller de asedio y
+      catapulta que antes no tenían PNG), 2.4MB.
+    - `bld_market`, `bld_siegeworkshop` y `unit_siege` pasan a tener sprite
+      real (antes usaban emoji/dibujo procedural de respaldo, que se
+      mantiene como red de seguridad si el PNG llegara a fallar).
+    - Verificado headless sirviendo por HTTP real (no `file://`, para que el
+      atlas cargue de verdad como en producción): atlas cargado con sus 38
+      sprites, 0 errores de consola, compra de un tier de mejora en vivo
+      confirmada visualmente (la Milicia cambia al sprite de Espadachín al
+      investigarlo), murallas+puerta+3 héroes renderizados juntos sin
+      errores, y regresión de 300s con IA Difícil sin errores.

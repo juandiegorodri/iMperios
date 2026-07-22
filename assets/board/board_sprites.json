@@ -1,0 +1,199 @@
+{
+  "_readme": "Especificación para generar con IA (Gemini) las parrillas de arte 'ficha de tablero' de iMperios (FASE 9). Cada 'sheet' es UNA imagen de parrilla NxM que le pides a Gemini en un solo prompt (usa 'sheet_prompt_prefix' + la lista de 'cells' con su fila/columna). Al recibir el PNG, se recorta celda por celda con las coordenadas de 'grid' (todas las celdas son cuadradas e iguales dentro de una misma hoja) y se importa a assets/board/. NO se generan variantes por bando (azul/rojo): el arte es neutro, el propio motor del juego dibuja encima un borde blanco + un borde de color de bando (azul jugador / rojo rival) y, en las unidades, una pequeña muesca triangular que indica hacia dónde miran — por eso toda pieza debe estar dibujada MIRANDO HACIA ARRIBA (borde superior de su celda) por defecto: el motor la rota en tiempo real hacia donde se mueve.",
+
+  "style_global": {
+    "look": "Ficha de juego de mesa tipo STICKER/calcomanía: silueta plana, colores vivos y planos (flat/cel-shaded, con un sombreado interno suave para dar volumen, sin degradados fotorrealistas), CONTORNO GRUESO oscuro tipo cómic alrededor de toda la silueta.",
+    "camera": "Cámara ortográfica CENITAL ESTRICTA (90°, bird's-eye view, top-down). Nada de perspectiva, nada de vista isométrica ni en ¾. Es literalmente mirar la ficha puesta sobre una mesa desde arriba.",
+    "material_neutral": "El material/color de la pieza en sí debe ser NEUTRO (madera, piedra, cuero, tela en tonos tierra/verdes/grises/dorados) — NO pintar la pieza de azul o rojo de bando: eso lo añade el motor como un borde/anillo alrededor. Evita cualquier bandera o escudo con un color de bando específico ya pintado en el arte.",
+    "orientation": "TODA pieza (unidad e icono de edificio) se dibuja mirando hacia el borde SUPERIOR de su celda (como si avanzara hacia 'arriba' de la imagen). Esto es obligatorio: el motor rota la imagen en tiempo real según hacia dónde se mueve la unidad, asumiendo que 'arriba' = 'adelante'.",
+    "background": "Fondo TRANSPARENTE (PNG con alpha). Nada de escenografía, nada de suelo/pasto detrás de la pieza — el suelo lo pone el juego.",
+    "shadow": "NINGUNA sombra proyectada en el arte (ni siquiera sutil): el motor añade su propia sombra desplazada en tiempo real. Un halo de contacto muy sutil bajo la pieza está bien si ayuda a anclarla, pero sin gradiente de sombra direccional.",
+    "outline": "Contorno oscuro grueso y limpio (2-4% del tamaño de la celda), consistente en todas las piezas de todas las hojas — es la seña de identidad visual del set completo.",
+    "composition": "La pieza debe llenar aproximadamente 80-90% del ancho/alto de su celda, centrada, dejando un pequeño margen uniforme.",
+    "palette_notes": "Colores vivos y saturados (paleta tipo juego de mesa infantil-adulto, no oscura/realista): madera clara/oscura, piedra gris-azulada, metal plateado, cuero marrón, telas en verde bosque/mostaza/burdeos (NUNCA azul puro ni rojo puro, para no confundir con los colores de bando que pone el motor).",
+    "negative_prompt": "no perspective, no isometric view, no 3/4 view, no side view, no photorealism, no gradients simulating depth of field, no baked drop shadow, no ground/background scenery, no text, no watermark, no grid lines, no team-colored paint (no blue, no red), not facing sideways or downward in the cell, no multiple pieces per cell"
+  },
+
+  "engine_notes": {
+    "units": "En juego, TODAS las unidades se dibujan como ficha circular (~44px de diámetro a zoom 1): el motor ya pone un relleno claro tipo cartón + borde blanco + borde de color de bando + muesca de dirección; el PNG de la unidad se recorta a ese círculo interior. Todas las unidades usan el MISMO tamaño de token en juego (no varían por tipo), así que dibújalas todas ocupando proporciones similares dentro de su celda.",
+    "buildings": "Los edificios se colocan encajados en una rejilla de 40px (el motor hace snap del CENTRO del edificio a esa rejilla al construir); no hace falta que el arte respete una proporción exacta NxN de celdas de esa rejilla, solo que el tamaño relativo entre 'pequeño/mediano/grande' de esta lista se sienta proporcional (ver 'ingame_px' de cada celda, ya son los tamaños reales usados por el motor).",
+    "walls": "ACTUALIZADO (2026-07-22): se decidió SÍ regenerar muralla/torre de muralla en el nuevo estilo sticker, para que no desentonen con el resto del set ya regenerado (ver hoja 'P6_walls' más abajo). La Puerta NO necesita imagen propia: el motor la dibuja reutilizando el MISMO sprite de la muralla (horizontal o vertical según su orientación) + una marca oscura pequeña que pinta el propio código encima, más un candado 🔒/🔓 — así que en cuanto se reemplacen bld_wall_h/bld_wall_v, la puerta hereda el estilo nuevo automáticamente, sin trabajo extra."
+  },
+
+  "sheets": [
+    {
+      "id": "P1_units",
+      "status": "RECIBIDO (2026-07-22) — Gemini entregó una parrilla de 4×3 (más grande que la especificada aquí originalmente en 3×3), reutilizando 'nivel 1/2/3' para nombrar lo que en el motor son: nivel base, tier de mejora de línea (Fase 5, mismo tipo con más armadura) y héroe del Castillo (fila 3, confirmado por el usuario). Mapeo confirmado en conversación — ver 'row'/'col' de cada celda abajo, ya ACTUALIZADOS a la rejilla real entregada (no a la 3×3 original). El motor necesita una extensión (Fase 9B) para buscar sprite por TIPO+TIER, no solo por tipo, ya que se decidió explícitamente usar arte distinto por nivel en vez de solo la insignia de estrellas.",
+      "filename_suggestion": "sheet_units.png",
+      "grid": { "cols": 4, "rows": 3, "cell_px": 512 },
+      "sheet_prompt_prefix": "Generate a single 4x3 grid image (12 equal square cells, no gaps, no borders between cells) of top-down board-game unit tokens for a medieval RTS. Each cell contains exactly ONE flat cardboard/sticker-style token, transparent background, thick dark cartoon outline, seen strictly from directly above (orthographic top-down, 90°). Every token faces the TOP edge of its own cell. Do not paint any team colors (no blue, no red) — use neutral wood/leather/steel/cloth tones. Cells, in reading order (left-to-right, top-to-bottom):",
+      "cells": [
+        { "row": 1, "col": 1, "id": "villager", "name_es": "Aldeano", "ingame_px": 44,
+          "prompt": "top-down flat sticker token of a peasant villager: round head with a simple cap, shoulders, one small farming tool (hoe or hand-axe) visible beside the body, seen strictly from above" },
+        { "row": 1, "col": 2, "id": "infantry_tier1", "name_es": "Milicia mejorada — Espadachín (tier 1)", "ingame_px": 44, "game_key": "UNIT_LINES.infantry.tiers[0] (Espadachín)",
+          "prompt": "top-down flat sticker token of an upgraded sword-and-shield infantry soldier (tier 1, 'Espadachín'): full chainmail with a cross emblem on the round helmet, larger round wooden shield with metal rivets, short sword blade poking forward, seen strictly from above" },
+        { "row": 1, "col": 3, "id": "infantry", "name_es": "Milicia (infantería base)", "ingame_px": 44,
+          "prompt": "top-down flat sticker token of a base sword-and-shield infantry soldier: chainmail hood, plain round shield, short sword blade poking forward, seen strictly from above" },
+        { "row": 1, "col": 4, "id": "pike", "name_es": "Piquetero", "ingame_px": 44,
+          "prompt": "top-down flat sticker token of a pikeman: conical helmet, round shield, a long pike/spear clearly extending forward beyond the token edge, seen strictly from above" },
+        { "row": 2, "col": 1, "id": "archer", "name_es": "Arquero (base)", "ingame_px": 44,
+          "prompt": "top-down flat sticker token of an archer: hooded head, curved bow visible to one side, quiver of arrows on the back, seen strictly from above" },
+        { "row": 2, "col": 2, "id": "cavalry", "name_es": "Caballo (caballería ligera, base)", "ingame_px": 44,
+          "prompt": "top-down flat sticker token of light cavalry: elongated horse body seen from above with head at the top edge and haunches at the bottom edge, helmeted rider as an oval on the horse's back holding a short spear, seen strictly from above" },
+        { "row": 2, "col": 3, "id": "siege", "name_es": "Catapulta", "ingame_px": 50,
+          "status": "APROBADA por el usuario (2026-07-22) — se integra tal cual, sin regenerar.",
+          "prompt": "top-down flat sticker token of a wooden catapult siege engine: rectangular wheeled chassis, and a clearly visible diagonal throwing arm with a counterweight box at one end and a sling/cup at the other end (the throwing arm is the single most important recognizable feature — do not omit it), seen strictly from above" },
+        { "row": 2, "col": 4, "id": null, "name_es": "(no generada)", "ingame_px": 0, "prompt": null },
+        { "row": 3, "col": 1, "id": "hero_sword", "name_es": "Héroe Espada (Castillo)", "ingame_px": 48,
+          "prompt": "top-down flat sticker token of an elite sword hero: like a sword-and-shield infantry token but with a burgundy cape and golden trim accents on helmet/shield, seen strictly from above" },
+        { "row": 3, "col": 2, "id": "archer_tier1", "name_es": "Arquero mejorado — Tiro Largo (tier 1)", "ingame_px": 44, "game_key": "UNIT_LINES.archer.tiers[0] (Arquero de Tiro Largo)",
+          "prompt": "top-down flat sticker token of an upgraded archer (tier 1, 'Arquero de Tiro Largo'): forest green hooded cloak, a longer/larger bow with a golden trim accent, quiver of arrows on the back, seen strictly from above" },
+        { "row": 3, "col": 3, "id": "hero_archer", "name_es": "Héroe Arco (Castillo)", "ingame_px": 48,
+          "prompt": "top-down flat sticker token of an elite archer hero: like the archer token but with a golden trim accent on the hood, seen strictly from above" },
+        { "row": 3, "col": 4, "id": "hero_cav", "name_es": "Héroe Jinete (Castillo)", "ingame_px": 48,
+          "prompt": "top-down flat sticker token of an elite cavalry hero: like the light cavalry token but on a black or white horse (distinct from the regular brown cavalry horse), with a short flowing dark cape, a golden helmet plume, and a long lance, seen strictly from above" }
+      ]
+    },
+    {
+      "id": "P1b_unit_tiers_missing",
+      "status": "PENDIENTE — faltan estas 4 celdas para tener cobertura completa de todas las líneas de mejora (Fase 5) con arte propio, ya que se confirmó usar arte distinto por nivel. Pégalas en una sola parrilla nueva 2x2.",
+      "filename_suggestion": "sheet_unit_tiers_missing.png",
+      "grid": { "cols": 2, "rows": 2, "cell_px": 512 },
+      "sheet_prompt_prefix": "Generate a single 2x2 grid image (4 equal square cells, no gaps) of top-down board-game unit tokens for a medieval RTS, matching EXACTLY the same art style as a previous sheet: flat cardboard/sticker-style tokens, transparent background, thick dark cartoon outline, seen strictly from directly above (orthographic top-down, 90°), every token facing the TOP edge of its cell, no team colors baked in (neutral wood/leather/steel/cloth tones). Cells, in reading order:",
+      "cells": [
+        { "row": 1, "col": 1, "id": "infantry_tier2", "name_es": "Milicia mejorada — Campeón (tier 2)", "ingame_px": 44, "game_key": "UNIT_LINES.infantry.tiers[1] (Campeón)",
+          "prompt": "top-down flat sticker token of a heavily upgraded infantry soldier (tier 2, 'Campeón'): ornate full-face helmet with a small crest, a larger reinforced shield with golden studs, a wider/heavier sword blade, more golden trim than the tier-1 version, seen strictly from above" },
+        { "row": 1, "col": 2, "id": "pike_tier1", "name_es": "Piquetero mejorado — Alabardero (tier 1)", "ingame_px": 44, "game_key": "UNIT_LINES.pike.tiers[0] (Alabardero)",
+          "prompt": "top-down flat sticker token of an upgraded pikeman (tier 1, 'Alabardero'): sturdier armor, wielding a halberd instead of a plain pike — a long shaft ending in a broad axe-blade combined with a spike, clearly extending forward beyond the token edge, seen strictly from above" },
+        { "row": 2, "col": 1, "id": "cavalry_tier1", "name_es": "Caballo mejorado — Caballero (tier 1)", "ingame_px": 44, "game_key": "UNIT_LINES.cavalry.tiers[0] (Caballero)",
+          "prompt": "top-down flat sticker token of upgraded cavalry (tier 1, 'Caballero'): the horse now wears visible barding/armor plates, the rider has a full plate helmet and carries a proper long lance instead of a short spear, seen strictly from above" },
+        { "row": 2, "col": 2, "id": "cavalry_tier2", "name_es": "Caballo mejorado — Paladín (tier 2)", "ingame_px": 44, "game_key": "UNIT_LINES.cavalry.tiers[1] (Paladín)",
+          "prompt": "top-down flat sticker token of heavily upgraded cavalry (tier 2, 'Paladín'): fully barded horse, rider in ornate plate armor with a small holy/radiant golden symbol on the barding or shield, long lance, seen strictly from above" }
+      ]
+    },
+    {
+      "id": "P2_buildings_economy",
+      "filename_suggestion": "sheet_buildings_economy.png",
+      "grid": { "cols": 3, "rows": 4, "cell_px": 512 },
+      "sheet_prompt_prefix": "Generate a single 3x4 grid image (12 equal square cells, no gaps) of top-down flat sticker-style medieval RTS building icons, transparent background, thick dark cartoon outline, seen strictly from directly above (orthographic top-down roof view, 90°). Each building is a distinct, instantly recognizable silhouette (roof shape + one or two defining details) — no team colors baked in. Cells, in reading order:",
+      "cells": [
+        { "row": 1, "col": 1, "id": "town", "name_es": "Centro Urbano", "ingame_px": 74,
+          "status": "REESCRITO 2026-07-22 (feedback: le faltaba detalle/épica) — mucho más ornamentado, debe leerse como el corazón monumental de la civilización, no una casa grande.",
+          "silhouette": "el edificio MÁS grande, ornamentado y monumental del set entero: planta cuadrada amplia con un gran techo central a cuatro aguas de tejas oscuras, flanqueado por dos torres/torreones más bajos en las esquinas frontales (cada uno con su propio techo cónico), un campanario/reloj alto y detallado en el centro con una campana visible, banderines/gallardetes ondeando en cada punta de techo, vigas de madera oscura decorativas entrecruzadas sobre los muros de piedra clara, un pórtico de entrada con columnas o arco de piedra tallada, y pequeños detalles dorados (remaches, veletas) que le dan un aire de sede de poder, no de vivienda común",
+          "prompt": "top-down flat sticker icon of an EPIC, highly detailed large town hall / civic keep — the single most ornate and imposing building in the entire set: a wide square base with a grand central four-sided pitched roof of dark tiles, flanked by two smaller corner turrets each with their own conical roof, a tall detailed clock/bell tower rising from the center with a visible bell, small pennant flags fluttering from each roof peak, ornate dark timber cross-bracing over light stone walls, a grand stone entrance archway with carved columns, and small golden accent details (rivets, weathervane) that make it read as a seat of power rather than a plain building, seen from directly above" },
+        { "row": 1, "col": 2, "id": "house", "name_es": "Casa", "ingame_px": 42,
+          "silhouette": "casa pequeña sencilla, techo a dos aguas, una chimenea",
+          "prompt": "top-down flat sticker icon of a small simple house: pitched two-sided roof, one chimney, seen from directly above" },
+        { "row": 1, "col": 3, "id": "farm", "name_es": "Granja", "ingame_px": 46,
+          "silhouette": "parcela de cultivo cuadrada dividida en franjas (surcos) de color trigo/verde, sin techo (es un campo, no una construcción con techo)",
+          "prompt": "top-down flat sticker icon of a small farm plot: square field divided into wheat/green furrow stripes, no roof (it's an open field, not a roofed building), seen from directly above" },
+        { "row": 2, "col": 1, "id": "goldmine", "name_es": "Mina de Oro", "ingame_px": 46,
+          "silhouette": "entrada a una mina en una pequeña colina rocosa, con vetas doradas visibles y un carrito de mina de madera al lado",
+          "prompt": "top-down flat sticker icon of a small gold mine: rocky mound with a dark mine entrance, visible golden ore veins, a small wooden mine cart beside it, seen from directly above" },
+        { "row": 2, "col": 2, "id": "quarry", "name_es": "Mina de Piedra", "ingame_px": 46,
+          "silhouette": "cantera de piedra: bloques de roca gris apilados/cortados alrededor de un pequeño pozo, sin vetas doradas (para distinguirla de la mina de oro)",
+          "prompt": "top-down flat sticker icon of a small stone quarry: grey cut rock blocks stacked around a small pit, no golden veins (to stay distinct from the gold mine), seen from directly above" },
+        { "row": 2, "col": 3, "id": "lumbercamp", "name_es": "Bosquero", "ingame_px": 44,
+          "silhouette": "campamento maderero pequeño: tocones y troncos apilados junto a una choza de madera diminuta con techo de paja",
+          "prompt": "top-down flat sticker icon of a small lumber camp: tree stumps and stacked logs beside a tiny thatched-roof wooden hut, seen from directly above" },
+        { "row": 3, "col": 1, "id": "market", "name_es": "Mercado", "ingame_px": 50,
+          "silhouette": "puesto de mercado con toldo a rayas (colores neutros, no azul/rojo) y cestas/sacos de mercancía alrededor",
+          "prompt": "top-down flat sticker icon of a market stall: striped awning/canopy in neutral colors (not blue or red), baskets and goods sacks around it, seen from directly above" },
+        { "row": 3, "col": 2, "id": "blacksmith", "name_es": "Herrería", "ingame_px": 54,
+          "silhouette": "herrería: techo a dos aguas con una chimenea grande humeante y un yunque visible junto a la puerta",
+          "prompt": "top-down flat sticker icon of a blacksmith building: pitched roof with a large smoking chimney and an anvil visible near the doorway, seen from directly above" },
+        { "row": 3, "col": 3, "id": "tower", "name_es": "Torre", "ingame_px": 46,
+          "silhouette": "torre defensiva circular de piedra, base más ancha que la punta, almenas en el borde superior",
+          "prompt": "top-down flat sticker icon of a round stone defense tower: circular base, battlements/crenellations around the top rim, seen from directly above" },
+        { "row": 4, "col": 1, "id": "castle", "name_es": "Castillo", "ingame_px": 74,
+          "status": "REESCRITO 2026-07-22 (feedback: le faltaba detalle/épica) — mucho más fortificado y amenazante, con más capas de detalle que el Centro Urbano (es la mejora tope de era).",
+          "silhouette": "una FORTALEZA masiva y amenazante, con MÁS capas de detalle que cualquier otro edificio del set: planta cuadrada gruesa con CUATRO torreones circulares en las esquinas (cada uno más alto que el resto del muro, con su propia corona de almenas y una tronera/saetera visible), doble anillo de almenas en todo el perímetro del muro principal (más grueso y oscuro que una muralla normal, con manchas de desgaste/musgo en la piedra), un rastrillo/puerta reforzada con refuerzos de hierro visible en un lado, una torre del homenaje central más alta que los torreones asomando por encima del patio, banderas/estandartes ondeando en cada torreón, y un patio interior con adoquinado visible — debe leerse inequívocamente como el edificio más grande, oscuro e imponente de todo el set, con más textura y sombreado interno que el Centro Urbano",
+          "prompt": "top-down flat sticker icon of a MASSIVE, imposing medieval fortress-castle — must read as the single largest, darkest and most heavily fortified building in the entire set, with more layers of detail than any other piece: thick square wall layout with FOUR round corner turrets (each taller than the connecting walls, each with its own crenellated crown and a visible arrow-slit), a double ring of battlements along the whole main wall (thicker and darker stone than a plain wall segment, with weathered/mossy stone texture), a heavily reinforced iron-banded gate visible on one side, a tall central keep tower rising above the courtyard higher than the corner turrets, small banners/pennants flying from each turret, and a visible cobblestone courtyard floor inside, seen strictly from directly above" },
+        { "row": 4, "col": 2, "id": "castle_alt_unused", "name_es": "(libre / variante castillo)", "ingame_px": 0,
+          "silhouette": "opcional: puedes repetir el castillo desde otro pequeño detalle o dejar una variante de iconografía de bandera neutra sobre un asta, para tener una celda de repuesto",
+          "prompt": "optional spare cell: a simple neutral flag on a pole (no team color, plain grey/beige cloth) as a placeholder decorative prop, seen from directly above" },
+        { "row": 4, "col": 3, "id": "market_alt_unused", "name_es": "(libre / prop decorativo)", "ingame_px": 0,
+          "silhouette": "opcional: un carromato de mercader o un barril, como prop decorativo de repuesto",
+          "prompt": "optional spare cell: a small merchant cart or a wooden barrel as a decorative prop, seen from directly above" }
+      ]
+    },
+    {
+      "id": "P3_buildings_military",
+      "filename_suggestion": "sheet_buildings_military.png",
+      "grid": { "cols": 2, "rows": 2, "cell_px": 512 },
+      "sheet_prompt_prefix": "Generate a single 2x2 grid image (4 equal square cells, no gaps) of top-down flat sticker-style medieval RTS military building icons, transparent background, thick dark cartoon outline, seen strictly from directly above (90°). No team colors baked in. Cells, in reading order:",
+      "cells": [
+        { "row": 1, "col": 1, "id": "barracks", "name_es": "Cuartel", "ingame_px": 54,
+          "silhouette": "edificio militar robusto, techo a dos aguas, un rack de lanzas/espadas cruzadas visible junto a la entrada",
+          "prompt": "top-down flat sticker icon of a barracks: sturdy building with a pitched roof, a rack of crossed spears/swords visible near the entrance, seen from directly above" },
+        { "row": 1, "col": 2, "id": "range", "name_es": "Galería de Tiro", "ingame_px": 54,
+          "silhouette": "similar al cuartel pero con blancos de tiro con arco (dianas circulares) apoyados junto al edificio en vez de armas cuerpo a cuerpo",
+          "prompt": "top-down flat sticker icon of an archery range: similar building to the barracks but with round archery targets leaning against it instead of melee weapons, seen from directly above" },
+        { "row": 2, "col": 1, "id": "stable", "name_es": "Establo", "ingame_px": 54,
+          "silhouette": "establo con techo bajo alargado, un fardo de heno y un abrevadero de madera junto a la entrada",
+          "prompt": "top-down flat sticker icon of a stable: long low-pitched roof building, a hay bale and a wooden water trough near the entrance, seen from directly above" },
+        { "row": 2, "col": 2, "id": "siegeworkshop", "name_es": "Taller de Asedio", "ingame_px": 56,
+          "silhouette": "taller con techo a dos aguas más grande, ruedas de repuesto y vigas de madera apiladas afuera (sugiere que ahí se fabrican máquinas de asedio)",
+          "prompt": "top-down flat sticker icon of a siege workshop: larger pitched-roof workshop building, spare wheels and stacked wooden beams outside suggesting siege engines are built there, seen from directly above" }
+      ]
+    },
+    {
+      "id": "P4_resources_props",
+      "filename_suggestion": "sheet_resources_props.png",
+      "grid": { "cols": 3, "rows": 2, "cell_px": 384 },
+      "sheet_prompt_prefix": "Generate a single 3x2 grid image (6 equal square cells, no gaps) of top-down flat sticker-style resource nodes for a medieval RTS board game, transparent background, thick dark cartoon outline, seen strictly from directly above (90°). Cells, in reading order:",
+      "cells": [
+        { "row": 1, "col": 1, "id": "res_food", "name_es": "Comida (arbusto de bayas)", "ingame_px": 40,
+          "prompt": "top-down flat sticker icon of a round berry bush full of red berries, seen from directly above" },
+        { "row": 1, "col": 2, "id": "res_wood", "name_es": "Madera (árbol)", "ingame_px": 40,
+          "prompt": "top-down flat sticker icon of a single round leafy tree canopy (seen as a circle from above, trunk hidden underneath), seen from directly above" },
+        { "row": 1, "col": 3, "id": "res_gold", "name_es": "Oro (veta)", "ingame_px": 40,
+          "prompt": "top-down flat sticker icon of a small rocky outcrop with glittering golden ore veins, seen from directly above" },
+        { "row": 2, "col": 1, "id": "res_stone", "name_es": "Piedra (veta)", "ingame_px": 40,
+          "prompt": "top-down flat sticker icon of a small rocky outcrop of plain grey stone (no gold), seen from directly above" },
+        { "row": 2, "col": 2, "id": "obj_mountain", "name_es": "Montaña decorativa (riscos)", "ingame_px": 60,
+          "prompt": "top-down flat sticker icon of a small decorative rocky mountain peak cluster, seen from directly above" },
+        { "row": 2, "col": 3, "id": "obj_bush", "name_es": "Matojo decorativo", "ingame_px": 30,
+          "prompt": "top-down flat sticker icon of a small decorative round grass/scrub bush, seen from directly above" }
+      ]
+    },
+    {
+      "id": "P5_ground_tiles",
+      "filename_suggestion": "sheet_ground_tiles.png",
+      "grid": { "cols": 2, "rows": 2, "cell_px": 512 },
+      "sheet_prompt_prefix": "Generate a single 2x2 grid image (4 equal square cells, no gaps between cells, EACH CELL MUST BE SEAMLESSLY TILEABLE on its own — its left edge must match its right edge and its top edge must match its bottom edge so it can repeat infinitely) of top-down textures for a medieval RTS board game, seen strictly from directly above (90°), painterly flat cartoon style consistent with a board-game aesthetic (not photoreal). Cells, in reading order:",
+      "cells": [
+        { "row": 1, "col": 1, "id": "tile_grass", "name_es": "Pasto (piso base)",
+          "prompt": "seamless tileable top-down grass texture: warm green with small darker speckles and a few subtle blade-of-grass details, flat painterly board-game style, no shadows, no objects on top" },
+        { "row": 1, "col": 2, "id": "tile_dirt", "name_es": "Tierra (mapa de Riscos)",
+          "prompt": "seamless tileable top-down dirt/packed-earth texture: warm light brown with small pebble speckles, flat painterly board-game style, no shadows" },
+        { "row": 2, "col": 1, "id": "tile_water", "name_es": "Agua (río)",
+          "prompt": "seamless tileable top-down water texture: flat blue with small lighter ripple highlights, flat painterly board-game style, no shadows, no reflections of objects" },
+        { "row": 2, "col": 2, "id": "tile_mountain", "name_es": "Roca (riscos)",
+          "prompt": "seamless tileable top-down rocky mountain-terrain texture: grey rock with darker cracks/fissures, flat painterly board-game style, no shadows" }
+      ]
+    },
+    {
+      "id": "P6_walls",
+      "status": "PENDIENTE (añadida 2026-07-22, a pedido del usuario) — sin esto, la muralla se vería con el pixel-art viejo mientras todo lo demás ya es sticker. La Puerta NO va aquí: reutiliza el sprite de muralla (ver 'engine_notes.walls').",
+      "filename_suggestion": "sheet_walls.png",
+      "grid": { "cols": 3, "rows": 1, "cell_px": 512 },
+      "sheet_prompt_prefix": "Generate a single 1x3 grid image (3 equal square cells, no gaps) of top-down flat sticker-style medieval RTS wall/fortification pieces, transparent background, thick dark cartoon outline, seen strictly from directly above (90°), grey stone material, no team colors baked in. These pieces are placed edge-to-edge with copies of themselves to form a continuous wall line, so keep the stone pattern generic/seamless-friendly at the left/right (or top/bottom) edges of the cell. Cells, in reading order:",
+      "cells": [
+        { "row": 1, "col": 1, "id": "wall_h", "name_es": "Muralla (tramo horizontal)", "ingame_px": 34,
+          "prompt": "top-down flat sticker icon of a short horizontal stone wall segment: a thick rectangular strip of rough grey stone blocks, oriented so its long axis runs left-to-right, flat top with a subtle crenellation pattern, seen strictly from above" },
+        { "row": 1, "col": 2, "id": "wall_v", "name_es": "Muralla (tramo vertical)", "ingame_px": 34,
+          "prompt": "top-down flat sticker icon of a short vertical stone wall segment: identical style and material to the horizontal wall segment, but rotated 90 degrees so its long axis runs top-to-bottom, seen strictly from above" },
+        { "row": 1, "col": 3, "id": "wall_tower", "name_es": "Torre de Muralla", "ingame_px": 42,
+          "prompt": "top-down flat sticker icon of a fortified wall tower segment: a squat square stone turret (wider and taller-looking than a plain wall segment, but still reads as part of a wall line, NOT a tall freestanding round tower), crenellations around its top rim, one or two small arrow-slit windows, seen strictly from above" }
+      ]
+    }
+  ],
+
+  "how_to_use": [
+    "1. Para cada 'sheet': pégale a Gemini el 'sheet_prompt_prefix' + la lista numerada de cada 'cells[].prompt' indicando la fila/columna exacta, y pide explícitamente que respete la rejilla 'grid.cols'x'grid.rows' de celdas cuadradas iguales sin márgenes ni numeración visible.",
+    "2. Baja el PNG resultante y pásaselo de vuelta a Claude (o a quien esté implementando FASE 9) junto con el nombre del 'id' de la hoja (p. ej. 'P1_units').",
+    "3. El código recorta cada celda con 'grid.cell_px' (tamaño de celda en el PNG que entregue Gemini) y la guarda como assets/board/<id>.png para cargarla en el juego reemplazando el placeholder procedural.",
+    "4. Si una hoja no sale bien a la primera, se puede regenerar SOLO esa hoja (son independientes) sin tocar las demás."
+  ]
+}

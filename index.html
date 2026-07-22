@@ -486,6 +486,15 @@ const FOG_ROWS = Math.ceil(WORLD.h/FOG_CELL);   // 38
 const VISION_UNIT = 180;    // radio de visión de una unidad
 const VISION_BLD   = 220;   // radio de visión de un edificio
 
+// FASE 9 — Vista de tablero: los EDIFICIOS se colocan encajados en la misma
+// rejilla que ya usan niebla/pathfinding/minimapa (FOG_CELL=40px), para que se
+// lean como fichas de tablero alineadas; las UNIDADES siguen moviéndose libres
+// (incluida diagonal), sin restricción de rejilla — solo cambia dónde se
+// asienta un edificio nuevo, no la simulación en tiempo real.
+function snapToGrid(x, y){
+  return { x: Math.round(x/FOG_CELL)*FOG_CELL, y: Math.round(y/FOG_CELL)*FOG_CELL };
+}
+
 // Ciclo de contraunidades por CATEGORÍA: clave es fuerte (×2) contra su valor.
 const STRONG_VS = { archer:'infantry', infantry:'pike', pike:'cavalry', cavalry:'archer' };
 
@@ -750,16 +759,18 @@ function side(owner){ return owner==='player'?player:enemy; }
 // sería nulo frente al riesgo de un patrón mal recortado.
 const SPRITE_FILES = [
   'res_food','res_wood','res_gold','res_stone',
-  'unit_villager','unit_infantry','unit_pike','unit_archer','unit_cavalry',
+  'unit_villager','unit_infantry','unit_pike','unit_archer','unit_cavalry','unit_siege',
   'unit_hero_sword','unit_hero_archer','unit_hero_cav',
+  // FASE 9B: arte propio por TIER de línea de mejora (Fase 5) — ver
+  // `unitSpriteName()`. Si falta alguno (p.ej. no se generó todavía), cae
+  // solo al de tipo base, nunca a un 404 (comprobado con spr() antes de usar).
+  'unit_infantry_t1','unit_infantry_t2','unit_pike_t1','unit_archer_t1',
+  'unit_cavalry_t1','unit_cavalry_t2',
   'bld_town','bld_house','bld_barracks','bld_range','bld_stable','bld_blacksmith',
   'bld_tower','bld_castle','bld_farm','bld_goldmine','bld_quarry','bld_lumbercamp',
+  'bld_market','bld_siegeworkshop',
   'bld_wall','bld_wall_h','bld_wall_v','bld_wall_tower',
   'tile_grass','tile_water','tile_mountain','tile_dirt','obj_mountain','obj_gate',
-  // Fase 5: catapulta, taller de asedio y mercado usan emoji de respaldo esta
-  // sesión (Ideogram no disponible) — NO se registran aquí a propósito para
-  // evitar peticiones 404 (que Chromium reporta como console.error); cuando
-  // se generen los PNG, añadir 'unit_siege','bld_siegeworkshop','bld_market'.
 ];
 const SPRITE_SET = new Set(SPRITE_FILES);   // para no pedir por red nombres no registrados (p.ej. bld_market/bld_siegeworkshop, Fase 5: sin PNG, solo emoji)
 const sprites = {};       // PNG sueltos cargados (perezoso): sprites[name] = {img, ready}
@@ -846,11 +857,13 @@ function setUnitTransform(cx, cy, tilt, face){
 }
 function resetTransform(){ ctx.setTransform(DPR,0,0,DPR,0,0); }
 
-// Sombra elíptica bajo unidades/edificios para anclarlos al suelo.
+// Sombra bajo recursos/props para anclarlos al suelo. FASE 9: cámara cenital
+// ESTRICTA (90°, sin perspectiva) — antes se achataba (scale 1,0.4) para
+// simular una vista en ángulo; ahora es un círculo recto, offset unos px
+// como una ficha de tablero con algo de grosor.
 function drawShadow(cx, cy, rx){
-  ctx.save(); ctx.translate(cx, cy); ctx.scale(1, 0.4);
-  ctx.beginPath(); ctx.arc(0,0,rx,0,Math.PI*2);
-  ctx.fillStyle='rgba(0,0,0,.28)'; ctx.fill(); ctx.restore();
+  ctx.beginPath(); ctx.arc(cx+2, cy+3, rx, 0, Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,.28)'; ctx.fill();
 }
 
 // ---------- Ajustes (Fase 6): volumen, velocidad de cámara, fps, tutorial ----------
@@ -3623,14 +3636,30 @@ function render(){
         ctx.fillStyle='rgba(180,180,170,.8)'; ctx.fillRect(s.x-6*cam.zoom,s.y-6*cam.zoom,12*cam.zoom,12*cam.zoom);
       }
     } else {
-      const s = worldToScreen(w.x,w.y); const d=BLD[placement.btype];
+      // FASE 9: fantasma de colocación encajado a la rejilla del tablero (lo
+      // que se ve es exactamente donde caerá, ver snapToGrid/tryPlaceBuilding).
+      const snapped = snapToGrid(w.x, w.y);
+      const s = worldToScreen(snapped.x,snapped.y); const d=BLD[placement.btype];
       const sz = d.size*cam.zoom;
-      const ok = placementValid(w.x,w.y) && canAfford(player, d.cost);
+      const ok = placementValid(snapped.x,snapped.y) && canAfford(player, d.cost);
+      // rejilla sutil alrededor de la celda destino, para que se lea "tablero"
+      ctx.strokeStyle='rgba(255,255,255,.22)'; ctx.lineWidth=1;
+      const gc=FOG_CELL*cam.zoom, gr=Math.ceil(sz/gc)+1;
+      for(let gy=-gr; gy<=gr; gy++){
+        const ly=s.y+gy*gc; if(Math.abs(gy*gc)>sz*0.9) continue;
+        ctx.beginPath(); ctx.moveTo(s.x-gr*gc, ly); ctx.lineTo(s.x+gr*gc, ly); ctx.stroke();
+      }
+      for(let gx=-gr; gx<=gr; gx++){
+        const lx=s.x+gx*gc; if(Math.abs(gx*gc)>sz*0.9) continue;
+        ctx.beginPath(); ctx.moveTo(lx, s.y-gr*gc); ctx.lineTo(lx, s.y+gr*gc); ctx.stroke();
+      }
       ctx.globalAlpha=0.6;
       ctx.fillStyle = ok? 'rgba(95,177,95,.4)':'rgba(208,90,90,.4)';
       ctx.fillRect(s.x-sz/2, s.y-sz/2, sz, sz);
       ctx.globalAlpha=1;
-      if(!drawSprite('bld_'+placement.btype, s.x, s.y, d.size*1.3*cam.zoom, false)){
+      ctx.strokeStyle = ok? 'rgba(95,177,95,.9)':'rgba(208,90,90,.9)'; ctx.lineWidth=2;
+      ctx.strokeRect(s.x-sz/2, s.y-sz/2, sz, sz);
+      if(!drawSprite('bld_'+placement.btype, s.x, s.y, d.size*1.05*cam.zoom, false)){
         ctx.font = `${Math.floor(d.size*0.6*cam.zoom)}px serif`;
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText(d.emoji, s.x, s.y);
@@ -3755,9 +3784,18 @@ function drawBuilding(e){
   const sz=d.size*cam.zoom;
   const sel = e.owner==='player' && selection.includes(e.id);
   const img = spr(d.gate ? 'bld_wall' : ('bld_'+e.btype));
-  const scale = d.wall ? 1.45 : 1.7;
-  const spriteH = d.size*scale*cam.zoom;
+  // FASE 9 — vista de tablero: ficha PLANA anclada en su CENTRO (cámara cenital
+  // estricta), no el anclaje "abajo + estirado ×1.7" de antes (simulaba un
+  // edificio visto en ¾). `box` es el tamaño visual cuadrado de la ficha;
+  // todo lo demás (trim de bando, barras, selección) se ancla a su centro.
+  const box = d.size * (d.wall ? 1.15 : 1.05) * cam.zoom;
   ctx.globalAlpha = e.built?1:0.55;
+  // sombra de ficha (offset, SIN achatar: en vista cenital estricta una
+  // sombra proyectada hacia abajo no se ve elíptica, se ve circular/recta).
+  if(!d.wall && e.built){
+    ctx.fillStyle='rgba(0,0,0,.22)';
+    roundRect(s.x-box/2+3*cam.zoom, s.y-box/2+4*cam.zoom, box, box, 8*cam.zoom); ctx.fill();
+  }
   if(img){
     if(e.btype==='wall' || d.gate){
       // La Puerta ahora usa el MISMO sprite que la muralla —concordancia
@@ -3774,7 +3812,7 @@ function drawBuilding(e){
         roundRect(s.x-markW/2, my-markH/2, markW, markH, 3*cam.zoom); ctx.fill(); ctx.stroke();
       }
     } else {
-      drawSprite('bld_'+e.btype, s.x, s.y + sz*0.12, spriteH, true);
+      drawSprite('bld_'+e.btype, s.x, s.y, box, false);
     }
   } else {
     // respaldo: rect + emoji. El Taller de Asedio (sin sprite propio) usa una
@@ -3784,24 +3822,36 @@ function drawBuilding(e){
     ctx.strokeStyle = e.owner==='player' ? '#5b86c4' : '#c46a6a';
     ctx.lineWidth = sel?3:1.5;
     if(e.btype==='siegeworkshop'){
-      const roofH=sz*0.3;
-      roundRect(s.x-sz/2, s.y-sz/2+roofH, sz, sz*0.5, 6*cam.zoom); ctx.fill(); ctx.stroke();
+      const roofH=box*0.3;
+      roundRect(s.x-box/2, s.y-box/2+roofH, box, box*0.5, 6*cam.zoom); ctx.fill(); ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(s.x-sz*0.56, s.y-sz/2+roofH);
-      ctx.lineTo(s.x, s.y-sz/2-roofH*0.25);
-      ctx.lineTo(s.x+sz*0.56, s.y-sz/2+roofH);
+      ctx.moveTo(s.x-box*0.56, s.y-box/2+roofH);
+      ctx.lineTo(s.x, s.y-box/2-roofH*0.25);
+      ctx.lineTo(s.x+box*0.56, s.y-box/2+roofH);
       ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.font=`${Math.floor(d.size*0.42*cam.zoom)}px serif`;
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(d.emoji, s.x, s.y+sz*0.14);
+      ctx.fillText(d.emoji, s.x, s.y+box*0.14);
     } else {
-      roundRect(s.x-sz/2, s.y-sz/2, sz, sz, 8*cam.zoom); ctx.fill(); ctx.stroke();
+      roundRect(s.x-box/2, s.y-box/2, box, box, 8*cam.zoom); ctx.fill(); ctx.stroke();
       ctx.font=`${Math.floor(d.size*0.55*cam.zoom)}px serif`;
       ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(d.emoji, s.x, s.y);
     }
   }
   ctx.globalAlpha=1;
+  // Trim de bando tipo "ficha de cartón" (borde blanco + borde interior del
+  // color de bando) sobre el marco del edificio: el mismo arte sirve para
+  // ambos jugadores, y lo que distingue de quién es cada ficha (Castillo,
+  // Casa...) son estas líneas — reemplaza la bandera pequeña de antes, que
+  // se perdía a tamaños chicos de cámara.
+  if(!d.wall && e.built){
+    const teamColor = e.owner==='player' ? '#5b86c4' : '#d05a5a';
+    ctx.strokeStyle='#fff'; ctx.lineWidth=Math.max(1.5,3*cam.zoom);
+    roundRect(s.x-box/2, s.y-box/2, box, box, 8*cam.zoom); ctx.stroke();
+    ctx.strokeStyle=teamColor; ctx.lineWidth=Math.max(1,2*cam.zoom);
+    roundRect(s.x-box/2+2.5*cam.zoom, s.y-box/2+2.5*cam.zoom, box-5*cam.zoom, box-5*cam.zoom, 6*cam.zoom); ctx.stroke();
+  }
   // Puerta: candado abierto/cerrado siempre visible (no solo al seleccionar),
   // para saber su estado de un vistazo antes de mandar unidades a cruzar.
   if(d.gate && e.built){
@@ -3816,37 +3866,29 @@ function drawBuilding(e){
       ctx.globalAlpha = 0.5*(1-age/90);
       ctx.globalCompositeOperation = 'lighter';
       ctx.fillStyle = '#fff';
-      roundRect(s.x-sz/2, s.y-sz/2, sz, sz, 8*cam.zoom); ctx.fill();
+      roundRect(s.x-box/2, s.y-box/2, box, box, 8*cam.zoom); ctx.fill();
       ctx.restore();
     }
   }
   // humo/fuego cuando el edificio está dañado (<50% humo, <25% también fuego)
-  if(e.built) drawDamageFx(e, s.x, s.y + sz*0.12 - spriteH*0.55, sz);
-  // bandera de bando al tope del edificio (no en murallas), para saber de quién es
-  if(!d.wall && e.built){
-    const fy = s.y + sz*0.12 - spriteH + 8*cam.zoom, fx = s.x + sz*0.32;
-    ctx.strokeStyle='rgba(0,0,0,.5)'; ctx.lineWidth=2*cam.zoom;
-    ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(fx, fy-13*cam.zoom); ctx.stroke();
-    ctx.fillStyle = e.owner==='player' ? '#5b86c4' : '#d05a5a';
-    ctx.beginPath(); ctx.moveTo(fx, fy-13*cam.zoom); ctx.lineTo(fx+11*cam.zoom, fy-9.5*cam.zoom); ctx.lineTo(fx, fy-6*cam.zoom); ctx.closePath(); ctx.fill();
-  }
+  if(e.built) drawDamageFx(e, s.x, s.y-box*0.1, box);
   // progreso de construcción
   if(!e.built){
-    const w=sz, frac=Math.min(1,e.progress/d.build);
-    ctx.fillStyle='#000a'; ctx.fillRect(s.x-w/2, s.y+sz/2+3, w, 5);
-    ctx.fillStyle='#caa46a'; ctx.fillRect(s.x-w/2, s.y+sz/2+3, w*frac, 5);
+    const w=box, frac=Math.min(1,e.progress/d.build);
+    ctx.fillStyle='#000a'; ctx.fillRect(s.x-w/2, s.y+box/2+3, w, 5);
+    ctx.fillStyle='#caa46a'; ctx.fillRect(s.x-w/2, s.y+box/2+3, w*frac, 5);
   } else if(!(d.wall && e.hp>=e.maxHp)){
-    drawHpBar(s.x, s.y - spriteH + sz*0.12 - 6*cam.zoom, sz, e.hp/e.maxHp, e.owner);
+    drawHpBar(s.x, s.y-box/2-8*cam.zoom, box, e.hp/e.maxHp, e.owner);
   }
   // selección (corchetes animados)
-  if(sel) drawSelBox(s.x, s.y + sz*0.12 - spriteH/2, sz*0.95, spriteH*0.6);
+  if(sel) drawSelBox(s.x, s.y, box*0.58, box*0.58);
   // rally: línea punteada del edificio al punto de reunión + bandera (y el
   // icono del recurso si es un rally encadenado sobre comida/madera/oro/piedra)
   if(sel && e.rally){ const r=worldToScreen(e.rally.x,e.rally.y);
     ctx.save();
     ctx.strokeStyle='rgba(202,164,106,.75)'; ctx.lineWidth=1.5*cam.zoom;
     ctx.setLineDash([5*cam.zoom,5*cam.zoom]);
-    ctx.beginPath(); ctx.moveTo(s.x, s.y+sz*0.12); ctx.lineTo(r.x, r.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(r.x, r.y); ctx.stroke();
     ctx.restore();
     ctx.fillStyle='#caa46a'; ctx.font=`${16*cam.zoom}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('🚩', r.x, r.y);
@@ -3890,25 +3932,28 @@ function drawUnit(e){
   const s=worldToScreen(e.x,e.y); const d=UNIT[e.type];
   const sel = e.owner==='player' && selection.includes(e.id);
 
-  // --- Animación procedural (sin nuevos assets): volteo, bamboleo, lunge ---
-  // Volteo y bamboleo se derivan del movimiento real cuadro a cuadro (idénticos
-  // en host y cliente MP). El lunge depende de `e.anim`: en el host lo fija la
-  // acción; en el cliente MP se reconstruye desde el snapshot (deserEntity lee
-  // `an`/`tg`/`bd`), así que el golpe también se ve en el cliente.
+  // --- FASE 9: rotación real hacia el rumbo de movimiento (vista de tablero) ---
+  // El ángulo se suaviza cuadro a cuadro a partir del desplazamiento real
+  // (idéntico en host y cliente MP: `unitFace` se reconstruye igual en ambos
+  // a partir de `e.x/e.y`, que siempre viajan en el snapshot). `face` (±1) se
+  // conserva SOLO para el volteo de los cadáveres al caer (`drawCorpses`),
+  // que sigue siendo un volteo simple, no una rotación completa.
   let fx = unitFace.get(e.id);
-  if(!fx){ fx = { x:e.x, y:e.y, face:1, walking:false }; unitFace.set(e.id, fx); }
-  const movedD = Math.hypot(e.x-fx.x, e.y-fx.y);
+  if(!fx){ fx = { x:e.x, y:e.y, face:1, angle:-Math.PI/2, walking:false }; unitFace.set(e.id, fx); }
+  const dxm=e.x-fx.x, dym=e.y-fx.y;
+  const movedD = Math.hypot(dxm, dym);
   fx.walking = movedD > 0.12;
-  if(Math.abs(e.x-fx.x) > 0.15) fx.face = (e.x-fx.x) < 0 ? -1 : 1;
+  if(Math.abs(dxm) > 0.15) fx.face = dxm < 0 ? -1 : 1;
+  if(movedD > 0.15){
+    const target = Math.atan2(dym, dxm);
+    let diff = target - fx.angle;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff));   // camino corto, evita el "salto" de ±π al cruzar el borde
+    fx.angle += diff * 0.32;
+  }
   fx.x = e.x; fx.y = e.y;
   e.face = fx.face;
 
-  let bob=0, tilt=0, lungeX=0, lungeY=0;
-  if(fx.walking){
-    const ph = performance.now()/110 + e.id*1.7;
-    bob = Math.sin(ph) * 2.2 * cam.zoom;
-    tilt = Math.sin(ph) * (4*Math.PI/180);
-  }
+  let lungeX=0, lungeY=0;
   if(e.anim>0){
     let tp=null;
     if((e.state==='attack'||e.state==='amove') && e.target){ tp=find(e.target.id); }
@@ -3916,22 +3961,55 @@ function drawUnit(e){
     else if(e.state==='build' && e.build){ tp=find(e.build); }
     if(tp){
       const ldx=tp.x-e.x, ldy=tp.y-e.y, ld=Math.hypot(ldx,ldy)||1;
-      const amt = 4*cam.zoom*Math.min(1, e.anim/0.12);
+      const amt = 5*cam.zoom*Math.min(1, e.anim/0.12);
       lungeX = ldx/ld*amt; lungeY = ldy/ld*amt;
     }
   }
+  // "Bonk": pulso de tamaño breve al recibir un golpe, además del flash blanco
+  // de siempre — junto con el lunge del atacante, deja claro que la
+  // interacción (ataque/recolección/construcción) le está pasando a AMBAS
+  // fichas, no solo a la de enfrente (pedido explícito tras juego real).
+  let hurtPunch=1;
+  if(e.hurtT){ const age=performance.now()-e.hurtT; if(age<110) hurtPunch=1+0.16*(1-age/110); }
 
-  const sz=22*cam.zoom * (e.anim>0?1.15:1);
-  setUnitTransform(s.x+lungeX, s.y+lungeY+bob, tilt, fx.face);
-  // anillo de bando
-  ctx.beginPath(); ctx.arc(0, sz*0.35, sz*0.5, 0, Math.PI*2);
-  ctx.fillStyle = e.owner==='player' ? 'rgba(91,134,196,.55)' : 'rgba(196,106,106,.55)';
-  ctx.fill();
+  const sz=22*cam.zoom * (e.anim>0?1.15:1) * hurtPunch;
+  const cx=s.x+lungeX, cy=s.y+lungeY;
+  // sombra de ficha (offset, sin achatar), clavada al suelo: se dibuja ANTES
+  // de rotar para que no gire con la unidad (cámara cenital estricta).
+  ctx.beginPath(); ctx.arc(cx+2*cam.zoom, cy+3*cam.zoom, sz*0.52, 0, Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fill();
+
+  const drawAngle = fx.angle + Math.PI/2;   // alinea el "arriba" local del token con el rumbo real
+  setUnitTransform(cx, cy, drawAngle, 1);
+  // Ficha tipo "sticker": relleno claro + borde blanco + borde del color de
+  // bando + muesca de dirección (misma silueta neutra para ambos bandos —
+  // lo que distingue de quién es cada ficha son estas líneas de color, no un
+  // sprite distinto por bando). La muesca también sirve de indicador de
+  // rumbo incluso con el arte de respaldo (emoji) de hoy.
+  ctx.beginPath(); ctx.arc(0, 0, sz*0.52, 0, Math.PI*2);
+  ctx.fillStyle='rgba(245,238,222,.94)'; ctx.fill();
+  ctx.lineWidth=Math.max(1.4,sz*0.1); ctx.strokeStyle='#fff'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, sz*0.44, 0, Math.PI*2);
+  ctx.lineWidth=Math.max(1,sz*0.06);
+  ctx.strokeStyle = e.owner==='player' ? '#3f7fd9' : '#d9463f';
+  ctx.stroke();
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.beginPath();
+  ctx.moveTo(0, -sz*0.62); ctx.lineTo(-sz*0.11, -sz*0.46); ctx.lineTo(sz*0.11, -sz*0.46);
+  ctx.closePath(); ctx.fill();
   const uH = 40*cam.zoom * (e.anim>0?1.12:1);
-  if(!drawSprite('unit_'+e.type, 0, sz*0.35, uH, true)){
+  // FASE 9B: arte propio por TIER de línea de mejora (Fase 5) si existe,
+  // igual en host y cliente MP (el tier es del BANDO, viaja gratis en
+  // `serSide`). Los héroes siempre usan su propia ficha fija, nunca la de
+  // un tier. Si el sprite del tier concreto no está (todavía sin generar),
+  // `drawSprite` devuelve false y se reintenta con el de tipo base — sin
+  // volver a pedir nada por red gracias al registro previo en SPRITE_FILES.
+  const tier = d.hero ? 0 : lineTierCount(e.owner, d.cat);
+  const drewTiered = tier>0 && drawSprite('unit_'+d.cat+'_t'+tier, 0, 0, uH, false);
+  if(!drewTiered && !drawSprite('unit_'+e.type, 0, 0, uH, false)){
     // respaldo: aura + emoji + estrella de héroe
     if(d.hero){
-      ctx.beginPath(); ctx.arc(0, sz*0.1, sz*0.7, 0, Math.PI*2);
+      ctx.beginPath(); ctx.arc(0, 0, sz*0.7, 0, Math.PI*2);
       ctx.fillStyle='rgba(230,190,90,.28)'; ctx.fill();
     }
     // Catapulta sin sprite (Fase 5): el emoji de respaldo (🎯) no lee como una
@@ -3953,7 +4031,7 @@ function drawUnit(e){
       ctx.save();
       ctx.globalAlpha = 0.6*(1-age/90);
       ctx.globalCompositeOperation = 'lighter';
-      ctx.beginPath(); ctx.arc(0, sz*0.1, sz*0.75, 0, Math.PI*2);
+      ctx.beginPath(); ctx.arc(0, 0, sz*0.75, 0, Math.PI*2);
       ctx.fillStyle = '#fff'; ctx.fill();
       ctx.restore();
     }
@@ -4000,18 +4078,17 @@ function drawUnit(e){
   // barra de vida (si dañado)
   if(e.hp<e.maxHp) drawHpBar(s.x, s.y-30*cam.zoom, 24*cam.zoom, e.hp/e.maxHp, e.owner);
   // selección (anillo pulsante a los pies)
-  if(sel) drawSelRing(s.x, s.y+sz*0.35, sz*0.66);
+  if(sel) drawSelRing(s.x+lungeX, s.y+lungeY, sz*0.66);
   // (el disparo del arquero se ve como flecha real en `projectiles[]`)
 }
 
 // --- Selección animada ---
 function selPulse(){ return 0.5 + 0.5*Math.sin(performance.now()/180); }
+// FASE 9: círculo recto (sin achatar) — cámara cenital estricta.
 function drawSelRing(cx, cy, r){
   const p=selPulse();
-  ctx.save(); ctx.translate(cx,cy); ctx.scale(1,0.5);
   ctx.strokeStyle=`rgba(255,224,140,${0.55+0.4*p})`; ctx.lineWidth=2.5;
-  ctx.beginPath(); ctx.arc(0,0,r+p*2*cam.zoom,0,Math.PI*2); ctx.stroke();
-  ctx.restore();
+  ctx.beginPath(); ctx.arc(cx,cy,r+p*2*cam.zoom,0,Math.PI*2); ctx.stroke();
 }
 function drawSelBox(cx, cy, hw, hh){
   const p=selPulse(), L=Math.min(hw,hh)*0.5;
@@ -4044,10 +4121,8 @@ function drawPings(){
     }
     const s=worldToScreen(pg.x, pg.y);
     const r=(pg.grow ? (8+age*26) : (30-age*22))*cam.zoom;
-    ctx.save(); ctx.translate(s.x, s.y+6*cam.zoom); ctx.scale(1,0.5);
     ctx.strokeStyle=pg.color; ctx.globalAlpha=1-age; ctx.lineWidth=2.5;
-    ctx.beginPath(); ctx.arc(0,0,Math.max(2,r),0,Math.PI*2); ctx.stroke();
-    ctx.restore();
+    ctx.beginPath(); ctx.arc(s.x,s.y,Math.max(2,r),0,Math.PI*2); ctx.stroke();
   }
   ctx.globalAlpha=1;
 }
@@ -4275,24 +4350,21 @@ window.addEventListener('keydown',(e)=>{
 });
 
 // ---------- Hit testing ----------
-// Caja de impacto en coordenadas de mundo. Las unidades y los edificios (salvo
-// murallas/puertas) se dibujan con el sprite ANCLADO POR ABAJO (el punto `e.x,e.y`
-// es la base/pies, el sprite crece hacia arriba) — un círculo centrado en ese
-// punto solo cubría la mitad inferior del dibujo y dejaba la cabeza/tejado sin
-// zona táctil. Aquí se reproduce la misma geometría que usa el render
-// (`drawUnit`/`drawBuilding`, en unidades de mundo, sin `cam.zoom`) para que el
-// área de toque cubra el sprite completo.
+// Caja de impacto en coordenadas de mundo. FASE 9: unidades y edificios ahora
+// se dibujan como fichas PLANAS CENTRADAS en `e.x,e.y` (vista de tablero,
+// cámara cenital estricta) en vez del sprite anclado "por los pies" de antes
+// — así que la zona de toque es simplemente un cuadrado/círculo simétrico
+// alrededor del centro, sin necesidad de reproducir offsets asimétricos.
 function hitBox(e){
   if(e.kind==='unit'){
-    const bottom = e.y + 7.7, top = bottom - 40;   // ver drawUnit: sz*0.35, uH=40
-    return {x1:e.x-14, x2:e.x+14, y1:top-6, y2:bottom+6};
+    const r = 16;   // ~ el radio visual del token circular (22*0.52≈11.4) + margen táctil
+    return {x1:e.x-r, x2:e.x+r, y1:e.y-r, y2:e.y+r};
   }
   if(e.kind==='building'){
     const d=BLD[e.btype];
     if(d.wall || d.gate){ const r=radiusOf(e)+8; return {x1:e.x-r,x2:e.x+r,y1:e.y-r,y2:e.y+r}; }
-    const spriteH = d.size*1.7, bottom = e.y + d.size*0.12, top = bottom - spriteH;
-    const halfW = d.size*0.55;
-    return {x1:e.x-halfW, x2:e.x+halfW, y1:top-8, y2:bottom+8};
+    const half = d.size*1.05/2 + 8;
+    return {x1:e.x-half, x2:e.x+half, y1:e.y-half, y2:e.y+half};
   }
   const r = radiusOf(e)+8;
   return {x1:e.x-r, x2:e.x+r, y1:e.y-r, y2:e.y+r};
@@ -4478,7 +4550,8 @@ function placementValid(x,y){
 }
 function tryPlaceBuilding(p){
   if(placement.wall){ wallTap(p); return; }   // murallas usan dos toques
-  const w=screenToWorld(p.x,p.y); const d=BLD[placement.btype];
+  const raw=screenToWorld(p.x,p.y); const d=BLD[placement.btype];
+  const w=snapToGrid(raw.x,raw.y);   // FASE 9: los edificios encajan en la rejilla del tablero
   if(!placementValid(w.x,w.y)){ showHint('No se puede construir ahí.'); return; }
   if(net.mode==='client'){
     const vills=selectedUnits().filter(u=>u.type==='villager').map(u=>u.id);

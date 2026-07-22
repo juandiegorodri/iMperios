@@ -1,0 +1,41 @@
+{
+  "group_id": "P5_ground_tiles",
+  "status": null,
+  "grid": {
+    "cols": 2,
+    "rows": 2,
+    "cell_px": 512
+  },
+  "note": "IMPORTANT: this single image must be a 2x2 grid of 4 equal square cells, with NO gaps, NO borders, and NO visible seams between cells, and NO cell numbering/labels drawn in the image. Each described cell below goes in its exact row/column position, reading left-to-right then top-to-bottom.",
+  "how_to_use": "Copia el texto de 'full_prompt' de UNA celda a la vez y pegalo en Gemini para esa posicion exacta (fila/columna), o pega la nota 'note' de arriba una sola vez seguida de los 'full_prompt' de TODAS las celdas de este archivo en un unico mensaje para pedir la parrilla completa de una vez. Cada full_prompt ya trae TODAS las normas de estilo incluidas, no hace falta agregar nada mas.",
+  "cells": [
+    {
+      "row": 1,
+      "col": 1,
+      "id": "tile_grass",
+      "name_es": "Pasto (piso base)",
+      "full_prompt": "seamless tileable top-down grass texture: warm green with small darker speckles and a few subtle blade-of-grass details, flat painterly board-game style, no shadows, no objects on top. Camera: strict orthographic top-down view (90 degrees), no perspective. Art style: painterly flat cartoon board-game texture (not photorealistic), matching a sticker/cardboard-piece aesthetic. Tileability: this texture MUST be seamlessly tileable -- its left edge must match its right edge, and its top edge must match its bottom edge, so it can repeat infinitely with no visible seam. Content: pure ground texture only -- no objects, no units, no buildings, no shadows cast by anything on top of it. Negative prompt: no perspective, no 3D relief, no objects on top of the texture, no visible seams at the edges, no text, no watermark, no vignette."
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "id": "tile_dirt",
+      "name_es": "Tierra (mapa de Riscos)",
+      "full_prompt": "seamless tileable top-down dirt/packed-earth texture: warm light brown with small pebble speckles, flat painterly board-game style, no shadows. Camera: strict orthographic top-down view (90 degrees), no perspective. Art style: painterly flat cartoon board-game texture (not photorealistic), matching a sticker/cardboard-piece aesthetic. Tileability: this texture MUST be seamlessly tileable -- its left edge must match its right edge, and its top edge must match its bottom edge, so it can repeat infinitely with no visible seam. Content: pure ground texture only -- no objects, no units, no buildings, no shadows cast by anything on top of it. Negative prompt: no perspective, no 3D relief, no objects on top of the texture, no visible seams at the edges, no text, no watermark, no vignette."
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "id": "tile_water",
+      "name_es": "Agua (río)",
+      "full_prompt": "seamless tileable top-down water texture: flat blue with small lighter ripple highlights, flat painterly board-game style, no shadows, no reflections of objects. Camera: strict orthographic top-down view (90 degrees), no perspective. Art style: painterly flat cartoon board-game texture (not photorealistic), matching a sticker/cardboard-piece aesthetic. Tileability: this texture MUST be seamlessly tileable -- its left edge must match its right edge, and its top edge must match its bottom edge, so it can repeat infinitely with no visible seam. Content: pure ground texture only -- no objects, no units, no buildings, no shadows cast by anything on top of it. Negative prompt: no perspective, no 3D relief, no objects on top of the texture, no visible seams at the edges, no text, no watermark, no vignette."
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "id": "tile_mountain",
+      "name_es": "Roca (riscos)",
+      "full_prompt": "seamless tileable top-down rocky mountain-terrain texture: grey rock with darker cracks/fissures, flat painterly board-game style, no shadows. Camera: strict orthographic top-down view (90 degrees), no perspective. Art style: painterly flat cartoon board-game texture (not photorealistic), matching a sticker/cardboard-piece aesthetic. Tileability: this texture MUST be seamlessly tileable -- its left edge must match its right edge, and its top edge must match its bottom edge, so it can repeat infinitely with no visible seam. Content: pure ground texture only -- no objects, no units, no buildings, no shadows cast by anything on top of it. Negative prompt: no perspective, no 3D relief, no objects on top of the texture, no visible seams at the edges, no text, no watermark, no vignette."
+    }
+  ]
+}

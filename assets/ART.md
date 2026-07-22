@@ -4,6 +4,23 @@ Guía para que **todos** los sprites del juego mantengan el mismo estilo y se
 entiendan de un vistazo. Las imágenes se generan con Ideogram siguiendo estas
 reglas y se guardan en `assets/sprites/`.
 
+> **✅ Pivote de dirección de arte completado (FASE 9, 2026-07-21/22)**: el
+> set activo en `assets/sprites/` YA ES el estilo v2 — vista cenital
+> ESTRICTA (90°) con estética de **ficha de juego de mesa tipo sticker**
+> (contorno grueso, colores planos vivos, arte NEUTRO de bando — el motor
+> pinta encima un borde blanco + uno de color de bando). Generado con
+> Gemini (no Ideogram) siguiendo la especificación completa en
+> **[`board/board_sprites.json`](board/board_sprites.json)** (7 hojas:
+> unidades, tiers de mejora, edificios económicos, edificios militares,
+> murallas, recursos/props, texturas de piso — cada celda con su prompt
+> exacto), recortado y con el fondo quitado por un script de la sesión, y
+> reempaquetado en `assets/atlas.png`/`atlas.json`. El resto de esta sección
+> (§1-4) describe el estilo **v1** (pixel-art 8-bit, ya REEMPLAZADO por
+> completo) — se conserva sin reescribir como referencia histórica y por si
+> hiciera falta reconstruir algún sprite suelto con ese criterio antiguo.
+> Detalle completo del pipeline de recorte/integración en `progress.md`
+> (entrada 2026-07-22).
+
 ---
 
 ## 1. Estilo visual (la "línea gráfica")

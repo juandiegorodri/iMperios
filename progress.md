@@ -1520,3 +1520,281 @@ Verificado headless (`node`+Playwright/Chromium, `startGame(cfg)` directo sin
 pasar por el menú): 0 errores de consola/`pageerror` en los tres escenarios,
 y las tres correcciones probadas por separado con `pickAt`/`handleTap`
 llamados directamente contra el estado del motor.
+
+## 2026-07-21 — FASE 9 (arranque): pivote a vista de tablero con fichas tipo sticker
+
+Pedido del usuario tras jugar: pasar de sprites pixel-art en ¾ a un RTS con
+**cámara cenital ESTRICTA** (90°, sin perspectiva) y estética de **juego de
+mesa** — fichas planas tipo sticker/cartón sobre un tablero de pasto (estilo
+Carcassonne, se va descubriendo con la niebla de guerra), pensado para
+jugarse con el iPad plano sobre una mesa. Aclaración del propio usuario
+durante el diseño: la simulación NO cambia — sigue siendo el mismo RTS en
+tiempo real, con el mismo mapa grande (2600×1500) y la misma niebla de
+guerra; solo cambia la capa gráfica y de colocación. Decisiones tomadas en
+conversación (no todas las recomendadas por defecto se aceptaron tal cual):
+- **Edificios en rejilla, unidades libres**: los edificios encajan en una
+  rejilla al construirse; las unidades se mueven libres por todo el mapa,
+  incluida diagonal, sin restricción de rejilla (el usuario fue explícito en
+  que esto es "también un videojuego" y las unidades no pueden quedar
+  atadas a una cuadrícula).
+- **Ficha tipo sticker** (colores vivos + borde blanco), no madera pintada —
+  se lee mejor a tamaño chico en iPad y combina mejor con el piso de pasto.
+- **Bando por líneas de color sobre arte neutro**: el mismo arte de un
+  Castillo sirve para ambos jugadores; lo que distingue de quién es cada
+  ficha son unas líneas (trim) de color que pinta el MOTOR, no el arte.
+- **Rotación real hacia el movimiento** (no solo volteo izquierda/derecha).
+- **Efecto de interacción reforzado**: cuando dos fichas interactúan
+  (ataque/recolección/construcción) debe notarse en movimiento, no solo un
+  cambio de color — se pidió explícitamente añadir esto sobre lo que ya
+  existía (el "lunge" de la Fase 1).
+
+### Cambios de motor (esta tanda, sin arte nuevo todavía — placeholders)
+- **`snapToGrid(x,y)`** (junto a `FOG_CELL`): nueva función que ajusta un
+  punto al múltiplo de 40px más cercano. Se usa en `tryPlaceBuilding` (la
+  colocación real) y en el fantasma de `render()` (lo que se ve durante la
+  colocación es exactamente donde caerá) — con una rejilla sutil dibujada
+  alrededor de la celda destino para reforzar la lectura de "tablero". Las
+  murallas NO se tocaron (mantienen su propio sistema de espaciado
+  `WALL_SP`/`snapWallEndpoint`, ya verificado en dos rondas de correcciones
+  anteriores — cambiarlo habría sido un riesgo innecesario para este pivote).
+- **`drawBuilding` reescrito**: ancla la ficha CENTRADA en `e.x,e.y` (variable
+  `box`, ≈`d.size*1.05`) en vez del "por los pies + estirado ×1.7" de antes
+  (simulaba un edificio visto en ¾); todos los offsets dependientes (barra
+  de vida, barra de progreso, caja de selección, humo/fuego, flash de daño)
+  se recalcularon relativos al nuevo centro. Se añadió una sombra recta
+  desplazada (sin achatar) y un **trim de bando**: borde blanco + borde
+  interior del color de bando (azul jugador / rojo rival) sobre el marco del
+  edificio, que reemplaza la bandera pequeña de antes (se perdía a tamaños
+  chicos de cámara y no cumplía el pedido de "líneas de color" sobre la
+  MISMA pieza). Las murallas/puertas no se tocaron (ya eran planas/
+  centradas desde la ronda de correcciones anterior).
+- **`drawUnit` reescrito**: se sustituyó el volteo ±1 + bamboleo de ángulo
+  fijo por una **rotación real** hacia el rumbo de movimiento. El ángulo
+  (`fx.angle`, guardado en el mismo `Map` `unitFace` que ya existía) se
+  suaviza cuadro a cuadro por interpolación angular de camino corto (evita
+  el salto de ±180° al cruzar el signo) a partir del delta de posición real
+  — funciona igual en host y cliente MP porque se deriva de `e.x/e.y`, que
+  siempre viajan en el snapshot (mismo mecanismo que ya usaba el bamboleo/
+  volteo de la Fase 1). `e.face` (±1) se conservó, pero AHORA solo para la
+  caída de los cadáveres (`drawCorpses`), no para el dibujo en vivo. Cada
+  unidad dibuja un relleno claro tipo cartón + anillo blanco + anillo de
+  color de bando + una muesca triangular que marca el rumbo con claridad
+  incluso con el arte de respaldo (emoji) de hoy — en cuanto llegue el arte
+  real de la parrilla, rotará igual de bien porque se diseñó para ello (ver
+  `board_sprites.json`, todas las piezas miran "hacia arriba" por defecto).
+  Se añadió `hurtPunch`: un pulso de escala breve (~110ms) al recibir daño,
+  sumado al lunge del atacante y al flash blanco ya existentes, para que la
+  interacción se note en AMBAS fichas, no solo en la de enfrente.
+- **Cámara cenital estricta de verdad**: `drawShadow` (sombra de recursos),
+  `drawSelRing` (anillo de selección) y `drawPings` (efectos de selección/
+  deselección) dejaron de achatarse con `ctx.scale(1,0.5)` — esa elipse
+  simulaba una cámara en ángulo; con 90° estricto, un círculo recto es lo
+  correcto.
+- **`hitBox` simplificado**: con las fichas ya centradas, la zona de toque de
+  una unidad es un cuadrado simétrico de radio fijo alrededor de su centro
+  (antes reproducía offsets asimétricos para calzar con el anclaje "por los
+  pies") y la de un edificio es exactamente su huella cuadrada + margen
+  táctil — selección más simple y predecible, verificado por prueba (toque
+  en el centro exacto Y en el borde desplazado de una ficha, ambos
+  seleccionan correctamente).
+- **`assets/board/board_sprites.json`**: especificación completa entregada
+  al usuario para generar el arte definitivo con Gemini (no Ideogram, que se
+  usó para el set v1) — 5 hojas/parrillas (P1 unidades 3×3, P2 edificios
+  económicos 3×4, P3 edificios militares 2×2, P4 recursos/props 3×2, P5
+  texturas de piso 2×2), cada celda con su prompt exacto en inglés, más un
+  bloque de estilo global (sticker, cenital estricto, arte neutro de bando,
+  sin sombra horneada, orientación "mirando hacia arriba" para que la
+  rotación del motor funcione) y una sección `how_to_use` con el flujo de
+  recorte/importación. Nota en `assets/ART.md` marcando el pivote de
+  dirección de arte (v1 pixel-art ~70° sigue documentada y en uso mientras
+  no se reemplace; v2 sticker/90° es la nueva dirección para lo que venga).
+
+### Verificación headless
+Suite completa re-ejecutada tras los cambios, 0 errores de consola en todos
+los casos:
+- Movimiento diagonal libre de una unidad (sin restricción de rejilla) tras
+  una orden de `applyGroupMove` fuera de cualquier alineación de 40px.
+- Colocación de un edificio (`tryPlaceBuilding`) con snap confirmado por
+  aritmética (`b.x % FOG_CELL === 0` y lo mismo en Y).
+- Rotación hacia un rumbo diagonal confirmada por cálculo (`atan2` del
+  desplazamiento real tras 20 cuadros simulados con `update()+render()`).
+- Selección por toque exacta: centro de un edificio, centro de una unidad, y
+  un toque desplazado ~10px hacia el borde del token — las tres seleccionan
+  correctamente.
+- Regresión general: 300s simulados con IA Difícil (partida completa vía
+  `startGame`+`update()` en bucle), suite de Fase 4 (A*/formaciones/puertas/
+  rodeo de extremos), flip de bandos en cliente MP, y cruce de puente sobre
+  el río — todo sin errores y con el comportamiento esperado.
+- Capturas de pantalla revisadas visualmente: Centro Urbano ya como ficha
+  centrada con trim blanco+azul claramente visible; aldeano en movimiento
+  rotado hacia su rumbo (con el arte pixel-art v1 actual se ve "inclinado"
+  en vez de "girado limpio" — esperado, mejorará al llegar el arte v2 diseñado
+  para rotar); fantasma de colocación de edificio ya encajado a la rejilla.
+
+### Pendiente
+- Integrar el arte real de `board_sprites.json` en cuanto el usuario lo
+  genere con Gemini y lo entregue (Fase B del plan: recorte + carga +
+  sustitución de los sprites placeholder, sin tocar lógica de juego).
+- Pulido visual adicional una vez haya arte real (ajuste fino de tamaño/
+  anclaje por pieza, posible mosaico de piso de pasto con textura en vez del
+  patrón actual — ya existe `tile_grass` pero podría regenerarse con el
+  estilo v2 usando `P5_ground_tiles` del JSON).
+
+## 2026-07-22 — Ajustes al spec de arte tras revisar la parrilla de unidades
+
+El usuario entregó la primera parrilla de unidades generada con Gemini (4×3,
+no 3×3 como pedía el spec original) describiéndola celda por celda. Se
+confirmó el mapeo real: fila 3 son los HÉROES del Castillo (no una tercera
+mejora de línea), y se decidió explícitamente usar **arte distinto por cada
+tier de mejora de línea** en vez de solo la insignia de estrellas ("arte es
+más pro, con este tipo de unidades nos lo podemos permitir") — esto implica
+un cambio de motor real (buscar sprite por tipo+tier, no solo por tipo).
+
+- `board_sprites.json` actualizado: la hoja `P1_units` ahora documenta la
+  rejilla 4×3 REAL con el mapeo confirmado; nueva hoja `P1b_unit_tiers_missing`
+  (2×2) con los 4 tiers que faltaban para cobertura completa (Campeón,
+  Alabardero, Caballero, Paladín); nota de revisión en la celda de la
+  catapulta (parecía un carromato) — luego el usuario confirmó que la
+  catapulta se entendía bien y se retiró esa nota.
+- A pedido del usuario, faltaba también una hoja de murallas (el usuario la
+  pidió al notar que solo había torre independiente, no tramo de muro ni
+  Torre de Muralla): nueva hoja `P6_walls` (1×3: muralla horizontal, muralla
+  vertical, Torre de Muralla). La Puerta NO necesita imagen propia: el motor
+  ya la dibuja reutilizando el sprite de muralla + una marca que pinta el
+  propio código (decisión de diseño de una corrección anterior).
+- Los prompts de Centro Urbano y Castillo se reescribieron con mucho más
+  detalle tras feedback directo ("le falta detalle y épicidad"): el Centro
+  Urbano ahora pide torreones laterales, campanario con campana y reloj,
+  banderines y vigas decorativas; el Castillo pide doble anillo de almenas,
+  cuatro torreones, rastrillo reforzado y torre del homenaje central —
+  ambos con la instrucción explícita de ser los edificios más detallados e
+  imponentes del set.
+- Se exportó además el mismo contenido como **6 (luego 7) archivos
+  independientes** (`assets/board/group_1_units.json` ...
+  `group_7_walls.json`), uno por hoja, con las normas de estilo YA
+  incrustadas dentro del `full_prompt` de cada celda (autocontenido) — a
+  pedido explícito del usuario, para poder pegar un grupo a la vez en Gemini
+  sin tener que copiar el bloque de estilo global por separado. Generados con
+  un script Python de la sesión a partir de `board_sprites.json` (fuente de
+  verdad; los `group_*.json` se regeneran desde ahí si cambia el spec
+  maestro).
+
+## 2026-07-22 — FASE 9B: integración del arte real generado con Gemini
+
+El usuario generó las 7 hojas completas con Gemini y las subió como un único
+`.zip` (7 PNG). Se investigó primero si las imágenes pegadas directamente en
+el chat quedaban accesibles como archivo — **no**: solo son visibles para
+evaluación visual, no hay un archivo real en el sistema de esta sesión hasta
+que el usuario las sube como adjunto (confirmado con `find` buscando PNG
+recientes: solo aparecían capturas propias de Playwright). Tras pedirle el
+`.zip`, se extrajo y se identificó cada una de las 7 imágenes por inspección
+visual (dimensiones + contenido), confirmando que cubrían las 7 hojas
+completas del spec (incluida la de tiers ya vista antes por separado).
+
+### Recorte y quitado de fondo
+Script Python de la sesión (`Pillow`+`numpy`, no forma parte del repo):
+recorte por celda + quitado de fondo por **flood-fill** desde los bordes de
+cada celda sobre píxeles casi-blancos (conserva intactos los blancos
+internos de la propia ilustración, como brillos de armadura, a diferencia de
+un simple "todo lo blanco es transparente"), más un auto-recorte final al
+bounding box de lo no-transparente.
+
+La división pareja (N filas × M columnas iguales) solo funcionó para 3 de
+las 7 hojas (tiers de unidad, edificios militares — ambas con línea
+divisoria negra real y personajes centrados). Las otras 4 necesitaron un
+enfoque distinto, cada una por una razón distinta, verificadas por prueba
+visual (contact sheet con miniaturas etiquetadas) tras encontrar recortes
+rotos:
+- **Murallas y recursos/props**: sin línea divisoria, pero con separación
+  pareja entre elementos — división pareja sin ajuste extra fue suficiente.
+- **Unidades** (la hoja 4×3): los personajes NO están centrados
+  uniformemente en su celda nominal — el piquetero, por ejemplo, tiene el
+  cuerpo desplazado hacia la celda vecina para dejarle sitio a la lanza
+  larga que "sobresale del borde" (tal como pedía su prompt), así que una
+  división pareja recortaba solo la lanza y dejaba el cuerpo fuera. Se
+  detectan los huecos de tinta reales entre personajes (perfil de densidad
+  de píxeles no-blancos por columna, dentro de la franja de cada fila) y se
+  usa el punto medio de cada hueco como límite de columna real.
+- **Edificios económicos**: Gemini reorganizó la rejilla para darle
+  protagonismo al Centro Urbano y al Castillo — cada uno ocupa una columna
+  ENTERA de dos "filas" de alto (no una celda 3×4 pareja), con las 10
+  celdas restantes acomodadas en las dos columnas sobrantes a 6 filas
+  (incluyendo 2 variantes sin usar de Torre y de un cobertizo, además de la
+  bandera y el carromato ya previstos como celdas libres). Esto no es un
+  simple desalineamiento sino una rejilla genuinamente IRREGULAR, así que se
+  detectaron las líneas divisorias reales (sí tenía línea negra) y se
+  hardcodearon las 10 cajas de recorte a mano.
+- **Texturas de piso**: cada una de las 4 texturas tiene su propio margen
+  blanco asimétrico dentro de su cuadrante (no lo llena parejo), y encima
+  agua/roca son más anchas que pasto/tierra. La detección automática de
+  bbox por fracción de píxeles no-blancos resultó CONSISTENTEMENTE poco
+  fiable en esta hoja concreta (ruido de antialiasing disperso a lo largo de
+  toda la fila hacía que hasta un umbral por fracción, no solo "existe algún
+  píxel", diera rangos incorrectos dos veces seguidas) — se hardcodearon las
+  4 cajas a mano tras verificar los bordes reales por muestreo directo de
+  píxeles.
+
+### Cambios de motor
+- **`SPRITE_FILES`** (índice 760): se añadieron `unit_siege`, `bld_market`,
+  `bld_siegeworkshop` (antes excluidos a propósito por no tener PNG, per
+  comentario de la Fase 5) y los 6 nombres de arte por tier
+  (`unit_infantry_t1`, `unit_infantry_t2`, `unit_pike_t1`, `unit_archer_t1`,
+  `unit_cavalry_t1`, `unit_cavalry_t2`).
+- **`drawUnit`**: antes de dibujar, si la unidad no es héroe y su categoría
+  tiene un tier de línea investigado (`lineTierCount`), intenta primero
+  `drawSprite('unit_'+cat+'_t'+tier, ...)`; si `drawSprite` devuelve `false`
+  (ni el atlas ni el PNG suelto lo tienen), cae al sprite de tipo base de
+  siempre — sin disparar ninguna petición de red nueva, porque los nombres
+  de tier ya están pre-registrados en `SPRITE_FILES` (el chequeo de "existe
+  o no" lo hace el propio `drawSprite`/`spr()` ya existente, no hizo falta
+  ningún mecanismo nuevo). El tier es del BANDO (no de la unidad individual),
+  así que funciona igual en host y cliente MP sin tocar el protocolo — ya
+  viajaba gratis en `serSide`. La insignia de estrellas de la Fase 5 se
+  mantiene sobre la ficha igual que antes (el arte cambia la apariencia
+  general, la insignia sigue precisando el tier exacto de un vistazo).
+- **Atlas regenerado por completo** (`assets/atlas.png`+`assets/atlas.json`):
+  imprescindible — `drawSprite` prueba el atlas ANTES que el PNG suelto, así
+  que sin regenerarlo el juego habría seguido mostrando el pixel-art viejo
+  para los ~30 sprites que ya estaban empaquetados, sin importar que se
+  reemplazaran los PNG de `assets/sprites/`. Script Python de la sesión
+  (empaquetado tipo estantería/"shelf", cada sprite reescalado a ≤240px de
+  lado mayor antes de empaquetar). Antes: 30 sprites, 2.59MB. Ahora: 38
+  sprites, 2.4MB (similar peso total pese a sumar 8 sprites nuevos, gracias
+  al reescalado).
+
+### Verificación
+Se sirvió el juego por **HTTP real** (servidor Node mínimo de la sesión, NO
+`file://`) para que el atlas cargara de verdad tal como en producción
+(`file://` se salta el intento de red a propósito, ver comentario de
+`loadAtlas` en el código):
+- Atlas cargado con éxito: `atlasReady=true`, 38 sprites en `atlasFrames`.
+- 0 errores de consola/`pageerror` en carga, partida, y 300s simulados con
+  IA Difícil.
+- Compra de un tier de mejora en vivo (`buyLineTier('player','infantry',0)`
+  tras fijar la Era del jugador a 2): `lineTierCount` pasó de 0 a 1, el hp de
+  una Milicia recién creada subió de 55 a 74 (`55×1.35≈74`, coincide con
+  `LINE_TIER_MULT`), y la captura de pantalla confirma que la unidad cambia
+  visualmente al sprite de Espadachín (chainmail completo + emblema de cruz
+  en el escudo) en cuanto se investiga, con el hint "Espadachín investigado"
+  visible.
+- Captura con 3 tramos de muralla + puerta central (candado visible) + los 3
+  héroes del Castillo (Espada/Arco/Jinete) renderizados juntos: todo legible,
+  0 errores.
+- Capturas generales de una partida normal confirmando visualmente: terreno
+  de pasto con textura real, árboles/arbustos/vetas de oro y piedra con arte
+  real, Centro Urbano con el nuevo diseño épico, población y recursos
+  funcionando con normalidad.
+
+### Pendiente
+- `obj_bush_unused` (prop decorativo de la hoja de recursos) se recortó pero
+  no se integró al motor (nada lo usa hoy); queda en `assets/sprites/` como
+  posible prop suelto para el futuro.
+- La textura `tile_dirt` tiene un ligero viñeteado más oscuro en el borde
+  (el artista la dibujó como una "mancha" en vez de un cuadrado perfectamente
+  edge-to-edge) — funciona pero no es 100% perfecta al repetirse en mosaico;
+  no bloquea el uso, se puede regenerar más adelante si se nota en juego
+  real.
+- Integrar el arte de `obj_gate`/`bld_wall` (nombres de respaldo legado) no
+  hizo falta tocarlo: siguen con el pixel-art viejo pero son rutas de
+  respaldo que en la práctica no se usan (la Puerta ya reutiliza
+  `bld_wall_h`/`bld_wall_v` nuevos).

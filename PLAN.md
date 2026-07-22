@@ -450,3 +450,17 @@ Si se retoma el proyecto en una sesión nueva: leer `CLAUDE.md` (normas y
 listado de funcionalidades), `filemap.md` (dónde está cada cosa en
 `index.html`) y las últimas entradas de `progress.md` para el contexto
 completo antes de tocar código.
+
+### FASE 9 (nueva, fuera de la numeración F1-F8 original) — Vista de tablero
+
+Iniciada y completada 2026-07-21/22 por pedido directo del usuario: pivote de
+dirección de arte hacia una cámara **cenital estricta** (90°) con estética de
+**ficha de juego de mesa tipo sticker**, sin cambiar la simulación (mismo RTS
+en tiempo real, mismo mapa, misma niebla). Fase A (motor: rejilla de
+colocación para edificios/unidades libres, fichas centradas con trim de
+bando, rotación real al movimiento, refuerzo del efecto de interacción,
+`hitBox` simplificado) y Fase B (arte real de Gemini recortado, fondo
+quitado, integrado con arte propio por tier de mejora de línea, atlas
+regenerado) **ya están fusionadas** — el juego usa el set v2 completo, no
+quedan sprites pixel-art v1 en uso. Detalle completo en `progress.md`
+(entradas 2026-07-21 y 2026-07-22) y `CLAUDE.md` §6.
