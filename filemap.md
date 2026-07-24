@@ -77,7 +77,13 @@ El archivo se organiza en estas secciones (en orden de aparición):
    `setUnitTransform`/`resetTransform` (transform local barato para la
    animación de unidades, sin `save/restore`), y patrones de textura
    `getPattern`/`fillPattern` (suelo/agua/roca; las 4 texturas `tile_*` se
-   quedan FUERA del atlas a propósito, ver `assets/ART.md`). Selección
+   quedan FUERA del atlas a propósito, ver `assets/ART.md`). Las 4 variantes
+   del Centro Urbano por Era (`bld_town`/`bld_town_age2/3/4`) también se
+   excluyen del atlas a propósito (mismo motivo: el atlas las recomprimía a
+   su `MAX_DIM`, y el Centro Urbano se dibuja bastante más grande que ese
+   tope) — siempre cargan su PNG suelto a resolución completa;
+   `ALWAYS_LOOSE` (ver 14, «Arranque + pantalla de carga») las precarga para
+   que no aparezcan sin cargar la primera vez. Selección
    animada (`drawSelBox`/`drawSelRing`) y efectos `pings` (con pool, ver
    9.5). Murallas: `WALL_SP`,
    `WALL_TOWER_EVERY`, `wallSegmentType(pts,i)` (Fase 4: decide si el tramo `i`
@@ -191,7 +197,11 @@ El archivo se organiza en estas secciones (en orden de aparición):
    ~0.9/cuadro tras soltar los dedos y aplica un **clamp elástico** (atracción
    exponencial sin overshoot) si la inercia saca la cámara del mundo — el
    paneo en vivo sigue usando el clamp duro de siempre.
-7. **Economía / entrenamiento**: `queueUnit`, `countQueued`, `tryAdvanceAge`
+7. **Economía / entrenamiento**: `queueUnit` (valida `UNIT[type].reqAge` —
+   Piquetero requiere Era 2, Arquero/Jinete quedan implícitamente gateados
+   porque su edificio —Galería/Establo— tiene `reqAge` propio y no se puede
+   construir antes; host-autoritativo, cubre también IA y comandos MP),
+   `countQueued`, `tryAdvanceAge`
    (multi-era), `buyUpgrade`, `buyEcon`/`nextEcon` (tecnologías de recursos),
    `cancelQueued` (cancela y reembolsa), stats efectivas (`unitAtk`, `unitRange`,
    `unitArmor` por categoría, `gatherRate` por recurso), combate: `computeDamage`
@@ -250,7 +260,15 @@ El archivo se organiza en estas secciones (en orden de aparición):
    usa `nearestGatherFor` con el `rtype` del rally), `removeEntity` (limpia
    también `unitFace`, quita al muerto de `controlGroups` e invalida el grid
    de A* si era una muralla/puerta — Fase 4), `enemyAI` + `DOCTRINE` (3
-   manuales) y `pickWaveTarget` (objetivo estratégico).
+   manuales, con el flag `upgrades` en Normal/Difícil: construye Herrería e
+   investiga sus mejoras/líneas de unidad/tecnologías económicas con las
+   mismas `buyUpgrade`/`buyLineTier`/`buyEcon` del jugador) y `pickWaveTarget`
+   (objetivo estratégico). `buildNew` (dentro de `enemyAI`) hace
+   `rebuildIndex()` tras `entities.push(nb)` — sin eso, el aldeano
+   constructor asignado no encuentra el edificio al cuadro siguiente
+   (`find()` usa un índice que solo se actualiza así) y abandona la obra
+   para siempre; bug real que dejaba a la IA sin poder terminar CASI
+   NINGÚN edificio más allá del Centro Urbano.
 9.5. **Object pools y GC** (Fase 8, bloque junto a la declaración de
    `pings`/`projectiles`): `_projPool`/`allocProjectile`/`freeProjectile` y
    `_pingPool` reutilizan objetos "muertos" en vez de crear uno nuevo por
@@ -277,7 +295,14 @@ El archivo se organiza en estas secciones (en orden de aparición):
     caída, también filtrados por niebla), `drawSparks` (chispas de
     recolección/impacto, `sparks[]`), `drawBursts` (destello dorado de Era/
     mejora, `bursts[]`/`triggerAchievementBurst`, también detectado por diff
-    en `applySnap` para el cliente MP),
+    en `applySnap` para el cliente MP), `drawRuins`/`drawDyingBuildings`/
+    `drawDestructSmoke` (efecto de destrucción de edificios: ruinas de piedra
+    persistentes `ruins[]` —tope `RUINS_MAX`=200—, desvanecido ~650ms
+    `dyingBuildings[]` y humo escalonado `destructSmoke[]`; enganchado en el
+    bucle de muertos de `update()` vía `addDyingBuilding` y, para el cliente
+    MP, en `applySnap` comparando `prevBuildings` —generalizado del antiguo
+    `prevTownCastle`, que solo cubría Centro Urbano/Castillo— contra las
+    entidades vivas de la instantánea),
     `onScreen`, `drawResource`/`drawBuilding` (con `drawDamageFx`: humo/fuego
     por hp, escala de forma CONTINUA con el % de vida perdido —no por
     escalones— y suma chispas cerca del colapso) /`drawUnit` (animación procedural
@@ -389,12 +414,15 @@ El archivo se organiza en estas secciones (en orden de aparición):
     carga** (Fase 8, bloque `Arranque + pantalla de carga`, overlay
     `#loadScreen` con barra `#loadBarFill`/`#loadPct`, z-index por encima del
     resto para que tape el menú hasta estar listo): `bootLoad` llama a
-    `loadAtlas` — si el atlas carga, la barra salta casi al 100% de una vez
-    (1 sola imagen+json); si falla, pide TODOS los PNG sueltos de golpe (en
-    vez de perezosos) y sondea su progreso real cada 80ms hasta que estén
-    todos listos — y `setLoadProgress`/`hideLoadScreen`; `LOAD_MAX_MS` (4s)
-    es un tope de seguridad para que un fallo de red nunca deje al jugador
-    atascado en la carga. El "audio" no ocupa tiempo real de carga (WebAudio
+    `loadAtlas` — si el atlas carga, además espera (`ALWAYS_LOOSE`: los 4
+    nombres `bld_town*`, excluidos del atlas — ver 2.5 y 10 — así que son de
+    carga perezosa y si no se esperaran podría aparecer el "cuadro de
+    temporal" del Centro Urbano en el primer cuadro) a que esos 4 PNG
+    sueltos reporten listos, sondeando cada 80ms; si el atlas falla, pide
+    TODOS los PNG sueltos de golpe (en vez de perezosos) y sondea su
+    progreso real igual — y `setLoadProgress`/`hideLoadScreen`; `LOAD_MAX_MS`
+    (7s) es un tope de seguridad para que un fallo de red nunca deje al
+    jugador atascado en la carga. El "audio" no ocupa tiempo real de carga (WebAudio
     sintetizado, sin archivos; el `AudioContext` de verdad solo arranca tras
     el primer toque, ver 2.55) — solo una fracción simbólica de la barra.
     Termina con `resize()` + `requestAnimationFrame(loop)`.
