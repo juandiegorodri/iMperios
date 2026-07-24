@@ -46,7 +46,7 @@ avanza de Era, investiga mejoras y tecnologías; y **destruye el Centro Urbano
 enemigo** antes de que destruyan el tuyo.
 
 ### Cuadrilátero de combate (×2 de daño)
-Arquero → Milicia → Piquetero → Caballo → Arquero (cada uno fuerte contra el
+Arquero → Milicia → Piquetero → Jinete → Arquero (cada uno fuerte contra el
 siguiente). Los héroes del Castillo heredan la categoría de su tipo.
 
 ### Multijugador (dos pestañas en el menú)
