@@ -4141,6 +4141,7 @@ function enemyAI(dt){
     const ang=Math.random()*Math.PI*2, rad=150+Math.random()*120;
     const nb = makeBuilding('enemy', btype, clamp(town.x+Math.cos(ang)*rad,40,WORLD.w-40), clamp(town.y+Math.sin(ang)*rad,40,WORLD.h-40), false);
     entities.push(nb);
+    rebuildIndex();   // si no, `find(nb.id)` no la encuentra al siguiente cuadro y el constructor la abandona
     builder.state='build'; builder.build=nb.id;
     return true;
   }
