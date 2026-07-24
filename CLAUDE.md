@@ -1197,3 +1197,16 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
   - Verificado headless: tamaño exacto del Centro Urbano, aldeanos fuera de
     su huella, caballería a tamaño comparable con el resto de unidades
     (captura), y regresión completa sin errores de consola.
+- **Caballo/Caballero: tamaño con largo mínimo garantizado y dirección
+  corregida** (2026-07-24):
+  - La familia caballería (Caballo/Caballero/Paladín/Héroe Jinete) ahora
+    fija un LARGO objetivo de 2.2 casillas del tablero (en vez de acotar
+    el ancho por sprite), calculado a partir del aspecto real de cada
+    imagen — notablemente más grandes que el intento anterior.
+  - El Caballo (unidad base) se movía al revés: su PNG mira hacia la
+    derecha, no hacia la izquierda como se había asumido; `faceOffset`
+    corregido y verificado en las 4 direcciones. El Caballero ya estaba
+    bien calibrado (su arte sí mira a la izquierda) y no se tocó.
+  - Verificado headless: largo exacto (88px) confirmado para ambos, las 4
+    direcciones del Caballo con la cabeza liderando, el Caballero con su
+    tier real aplicado moviéndose bien, y regresión completa sin errores.

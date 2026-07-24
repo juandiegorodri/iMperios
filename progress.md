@@ -2592,3 +2592,37 @@ función de origen solo corre en el host).
     Urbano notablemente más grande junto a sus aldeanos; regresión de
     aldeanos-en-murallas (16/16, 0 atrapados) y partida simulada con IA
     Difícil, ambas sin errores de consola.
+- **Caballo/Caballero: tamaño real con largo mínimo garantizado y dirección
+  de movimiento corregida** (2026-07-24): la corrección anterior (área
+  aproximada por sprite) seguía sin ser suficiente — "todavía muy pequeño",
+  y de paso el Caballo base resultó estar moviéndose al revés.
+  - **Largo mínimo de 2.2 casillas**: en vez de acotar el ANCHO por sprite
+    (`UNIT_BOX_W`, tanda anterior), la familia caballería (Caballo/
+    Caballero/Paladín/Héroe Jinete) ahora fija un LARGO objetivo — 2.2
+    casillas del tablero (88px a zoom 1, pedido explícito: "creo que puede
+    ser una buena proporción") — igual para las 4 fichas. `unitTargetH`
+    calcula la altura necesaria dividiendo ese largo por el aspecto REAL
+    del sprite (`spriteAspect`, lee el atlas o el PNG suelto, no un número
+    fijo) y se dibuja SIN tope de ancho (`unitTargetW` devuelve `undefined`
+    para esta familia) — el alto queda libre según el aspecto de cada
+    tier, pero las 4 alcanzan el mismo largo mínimo, bastante más grandes
+    que con el intento anterior (que aún dejaba a Caballo/Héroe Jinete con
+    apenas ~0.54-0.57× la altura de una unidad normal).
+  - **Caballo (unidad base) se movía al revés**: recortando ambos extremos
+    del PNG (`unit_cavalry.png`) se confirmó que el caballo mira hacia la
+    DERECHA en el arte (cabeza+hocico a la derecha, grupa+cola a la
+    izquierda) — lo opuesto de lo asumido en calibraciones anteriores.
+    `UNIT.cavalry.faceOffset` corregido de `Math.PI/2` a `-Math.PI/2`.
+    Verificado en las 4 direcciones cardinales que la cabeza ahora lidera
+    el movimiento. El Caballero (`cavalry_t1`) se revisó con el mismo
+    método (recorte de extremos del PNG) y su calibración (`Math.PI/2`) ya
+    era correcta —su arte SÍ mira a la izquierda, al revés que la base—,
+    así que no se tocó; confirmado en juego con el tier realmente aplicado
+    (no solo el sprite base) moviéndose bien.
+  - Verificado headless: `unitTargetH`/`spriteAspect` dan exactamente 88px
+    de ancho para Caballo y Caballero (calculado y confirmado en pantalla);
+    las 4 direcciones cardinales del Caballo confirmadas con la cabeza
+    liderando tras el cambio de `faceOffset`; el Caballero con su tier real
+    aplicado confirmado moviéndose correctamente hacia la derecha;
+    regresión de aldeanos-en-murallas (16/16, 0 atrapados) y partida
+    simulada con IA Difícil, ambas sin errores de consola.
