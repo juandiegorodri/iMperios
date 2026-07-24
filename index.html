@@ -186,18 +186,12 @@
   .nameRow .nameIcon{ font-size:18px; }
   .nameRow input, #chatInput{ flex:1; min-height:40px; border-radius:10px; border:1px solid var(--line);
     background:#0c0d10; color:var(--txt); padding:0 10px; font-size:15px; }
-  /* Vista previa pasiva del tutorial (10 frames animados) */
-  #tpFrame{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:14px 6px 4px; }
-  #tpIconWrap{ width:96px; height:96px; border-radius:50%; flex:none;
-    background:radial-gradient(circle at 40% 35%, #2a2f3a, #14161a); border:1px solid var(--line);
-    display:flex; align-items:center; justify-content:center; }
-  #tpIcon{ font-size:46px; display:inline-block; }
-  #tpIcon.tpBounce{ animation:tpBounce 1s ease-in-out infinite; }
-  #tpIcon.tpPulse{ animation:tpPulse 1.1s ease-in-out infinite; }
-  #tpIcon.tpSlide{ animation:tpSlide 1.2s ease-in-out infinite; }
-  @keyframes tpBounce{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
-  @keyframes tpPulse{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.18)} }
-  @keyframes tpSlide{ 0%,100%{transform:translateX(-10px)} 50%{transform:translateX(10px)} }
+  /* Vista previa pasiva del tutorial: simulación tipo "grabación de
+     pantalla" en un lienzo propio, reutilizando los sprites reales del
+     juego (ver motor `TP_*`/`tpRenderStep` en el script). */
+  #tpFrame{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:10px 6px 4px; }
+  #tpCanvas{ width:100%; max-width:340px; aspect-ratio:340/190; border-radius:10px;
+    border:1px solid var(--line); background:#3a4a2e; box-shadow:inset 0 0 0 1px #0004; }
   #tpText{ color:var(--txt); font-size:14px; line-height:1.5; text-align:center; margin:0; min-height:44px; }
   #tpDots{ display:flex; justify-content:center; gap:6px; margin-top:4px; }
   #tpDots span{ width:7px; height:7px; border-radius:50%; background:#3a3f47; display:inline-block; }
@@ -359,7 +353,7 @@
   <div class="card" style="width:min(420px,94vw)">
     <h1>🎬 Cómo se juega</h1>
     <div id="tpFrame">
-      <div id="tpIconWrap"><span id="tpIcon">👷</span></div>
+      <canvas id="tpCanvas"></canvas>
       <p id="tpText"></p>
     </div>
     <div id="tpDots"></div>
@@ -823,7 +817,10 @@ const UNIT_LINES = {
 const BLD = {
   // El Centro Urbano se defiende solo (auto-disparo, feedback de juego real):
   // antes no tenía `atk` y no podía hacer nada contra un ataque directo.
-  town:       { name:'Centro Urbano', emoji:'🏛️', hp:2400, size:70, cost:{}, build:0, pop:20,
+  // `size` de Centro Urbano/Castillo calculado para que su huella VISUAL
+  // (size×BLD_VIS_SCALE) sea EXACTAMENTE 4×4 casillas del tablero (pedido
+  // explícito: "son los más importantes y deben ser imponentes").
+  town:       { name:'Centro Urbano', emoji:'🏛️', hp:2400, size:4*FOG_CELL/BLD_VIS_SCALE, cost:{}, build:0, pop:20,
                 atk:11, range:170, cd:1.0 },
   house:      { name:'Casa',          emoji:'🏠', hp:600,  size:40, cost:{wood:50}, build:12, req:[], pop:5 },
   barracks:   { name:'Cuartel',       emoji:'🛡️', hp:1200, size:54, cost:{wood:150}, build:20, req:[] },
@@ -832,7 +829,7 @@ const BLD = {
   blacksmith: { name:'Herrería',      emoji:'🔨', hp:1200, size:54, cost:{wood:150}, build:20, req:[] },
   tower:      { name:'Torre',         emoji:'🗼', hp:1800, size:46, cost:{wood:50,stone:125}, build:18, req:[],
                 atk:9, range:160, cd:0.9 },
-  castle:     { name:'Castillo',      emoji:'🏰', hp:5600, size:74, cost:{stone:400,gold:200}, build:42, req:[],
+  castle:     { name:'Castillo',      emoji:'🏰', hp:5600, size:4*FOG_CELL/BLD_VIS_SCALE, cost:{stone:400,gold:200}, build:42, req:[],
                 pop:50, atk:16, range:210, cd:0.7, reqAge:3 },
   // Edificios de producción: los aldeanos recolectan de ellos (renovable).
   farm:       { name:'Granja',        emoji:'🌾', hp:400,  size:44, cost:{wood:60}, build:14, req:[], produces:'food' },
@@ -972,7 +969,10 @@ let peaceTimer = 0;
 
 // ---------- Estado global ----------
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+// `let` (no `const`): la vista previa del tutorial intercambia `ctx` un
+// instante hacia su propio lienzo pequeño (`withCtx`) para reutilizar
+// `drawSprite` tal cual sin duplicar lógica de dibujo.
+let ctx = canvas.getContext('2d');
 let DPR = Math.min(window.devicePixelRatio || 1, 2);
 
 const cam = { x:0, y:0, zoom:1, min:0.5, max:1.6, vx:0, vy:0 };  // vx/vy: velocidad de inercia del paneo (px mundo/s)
@@ -1161,16 +1161,27 @@ function loadAtlas(cb){
 // Atlas primero (recorte por coordenadas de `atlasFrames`); si no está listo
 // o no tiene ese nombre, cae al PNG suelto (perezoso); si tampoco existe,
 // devuelve false y el llamador dibuja el emoji de respaldo.
-function drawSprite(name, cx, cy, targetH, anchorBottom){
+// `targetW` (opcional): si se pasa, el sprite se ajusta tipo "contain" dentro
+// de la caja targetW×targetH (escala = min(targetH/alto, targetW/ancho)) en
+// vez de forzar SIEMPRE la altura exacta. Necesario para las unidades: el
+// arte de cada tier tiene un aspecto (ancho/alto) muy distinto entre sí (p.ej.
+// el Caballo base es muy "plano" —caballo de perfil— y el Paladín mucho más
+// cuadrado); forzar solo la altura dejaba al más angosto con una fracción del
+// ancho del otro al mismo alto, y se veía "encogido" al evolucionar aunque la
+// altura fuera idéntica. Sin `targetW` el comportamiento es el de siempre
+// (edificios/recursos/iconos de UI, que no tienen este problema).
+function drawSprite(name, cx, cy, targetH, anchorBottom, targetW){
   if(atlasReady && atlasFrames && atlasFrames[name]){
     const f = atlasFrames[name];
-    const sc = targetH/f.h, w = f.w*sc, h = targetH;
+    const sc = targetW!=null ? Math.min(targetH/f.h, targetW/f.w) : targetH/f.h;
+    const w = f.w*sc, h = f.h*sc;
     const dy = anchorBottom ? (cy - h) : (cy - h/2);
     ctx.drawImage(atlasImg, f.x, f.y, f.w, f.h, cx - w/2, dy, w, h);
     return true;
   }
   const img = spr(name); if(!img) return false;
-  const sc = targetH/img.naturalHeight, w = img.naturalWidth*sc, h = targetH;
+  const sc = targetW!=null ? Math.min(targetH/img.naturalHeight, targetW/img.naturalWidth) : targetH/img.naturalHeight;
+  const w = img.naturalWidth*sc, h = img.naturalHeight*sc;
   const dy = anchorBottom ? (cy - h) : (cy - h/2);
   ctx.drawImage(img, cx - w/2, dy, w, h);
   return true;
@@ -4545,7 +4556,7 @@ function drawBuilding(e){
   }
   // selección (corchetes animados)
   if(sel) drawSelBox(s.x, s.y, box*0.58, box*0.58);
-  if(sel) drawSelBeam(s.x, s.y, box*0.58);
+  if(sel) drawBuildingFlicker(s.x, s.y, box*0.58);
   // rally: línea punteada del edificio al punto de reunión + bandera (y el
   // icono del recurso si es un rally encadenado sobre comida/madera/oro/piedra)
   if(sel && e.rally){ const r=worldToScreen(e.rally.x,e.rally.y);
@@ -4703,6 +4714,17 @@ function drawUnit(e){
   // (calibrado a mano mirando cada PNG) para que, sumado a `drawAngle`, la
   // ficha arranque alineada y gire junto con el vector de movimiento real.
   const uH = 30*cam.zoom * (e.anim>0?1.12:1) * hurtPunch;
+  // Caja "contain" (alto Y ancho máximos, ver `drawSprite`): el arte de cada
+  // tier trae un aspecto muy distinto (el Caballo base es un perfil muy
+  // plano; el Paladín, mucho más cuadrado) — sin esto, forzar solo la altura
+  // dejaba a los tiers más "cuadrados" con una fracción del ancho del base a
+  // la misma altura, y se leía como que la unidad se encogía al evolucionar
+  // (feedback de juego real, persistía tras el recorte/rotación de sprites de
+  // una tanda anterior). uW un poco más ancho que alto (la mayoría del set
+  // baseronda ese aspecto); los perfiles muy anchos (caballería) o muy
+  // angostos (Alabardero) quedan limitados por el eje que corresponda, pero
+  // SIEMPRE dentro de una caja comparable, así ningún tier se ve diminuto.
+  const uW = uH*1.25;
   // FASE 9B: arte propio por TIER de línea de mejora (Fase 5) si existe,
   // igual en host y cliente MP (el tier es del BANDO, viaja gratis en
   // `serSide`). Los héroes siempre usan su propia ficha fija, nunca la de
@@ -4713,8 +4735,8 @@ function drawUnit(e){
   const tierKey = tier>0 ? (d.cat+'_t'+tier) : null;
   const faceOff = tierKey!=null ? (TIER_FACE_OFFSET[tierKey]||0) : (d.faceOffset||0);
   setUnitTransform(cx, cy, drawAngle+faceOff, 1);
-  const drewTiered = tier>0 && drawSprite('unit_'+d.cat+'_t'+tier, 0, 0, uH, false);
-  if(!drewTiered && !drawSprite('unit_'+e.type, 0, 0, uH, false)){
+  const drewTiered = tier>0 && drawSprite('unit_'+d.cat+'_t'+tier, 0, 0, uH, false, uW);
+  if(!drewTiered && !drawSprite('unit_'+e.type, 0, 0, uH, false, uW)){
     // respaldo: aura + emoji + estrella de héroe
     if(d.hero){
       ctx.beginPath(); ctx.arc(0, 0, sz*0.7, 0, Math.PI*2);
@@ -4767,22 +4789,10 @@ function drawUnit(e){
     ctx.font=`${11*cam.zoom}px serif`; ctx.fillStyle='#d6b24a'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('💤', bx, by);
   }
-  // Insignia de línea de mejora (Fase 5, mejorada tras feedback de juego real):
-  // antes eran chevrons ▲ sin fondo a 9px, casi invisibles en combate. Ahora es
-  // un óvalo oscuro con borde (mismo lenguaje visual que las demás insignias)
-  // con 1-2 ⭐ según el tier investigado por el bando, para que se note de un
-  // vistazo qué unidades ya están mejoradas. Los héroes no llevan insignia.
-  if(!d.hero){
-    const tier = lineTierCount(e.owner, d.cat);
-    if(tier>0){
-      const bx=s.x, by=s.y-40*cam.zoom, brx=(7+tier*4.5)*cam.zoom, bry=7.5*cam.zoom;
-      ctx.beginPath(); ctx.ellipse(bx,by,brx,bry,0,0,Math.PI*2);
-      ctx.fillStyle='#0b0c0fdd'; ctx.fill();
-      ctx.strokeStyle='#ffd75e'; ctx.lineWidth=1.2; ctx.stroke();
-      ctx.font=`${10*cam.zoom}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('⭐'.repeat(tier), bx, by);
-    }
-  }
+  // La insignia de estrellas sobre la unidad (Fase 5) se quitó por pedido
+  // explícito: el propio arte por tier ya se distingue a simple vista, no
+  // hace falta un indicador aparte (y el nivel se sigue pudiendo consultar
+  // desde el panel del edificio de entrenamiento).
   // barra de vida (si dañado)
   if(e.hp<e.maxHp) drawHpBar(s.x, s.y-30*cam.zoom, 24*cam.zoom, e.hp/e.maxHp, e.owner);
   // selección (anillo pulsante a los pies)
@@ -4802,20 +4812,30 @@ function drawSelRing(cx, cy, r){
 // Haz de luz vertical sobre la unidad/edificio seleccionado: además del
 // anillo/corchetes, ayuda a ver rápido qué está seleccionado en medio del
 // combate (feedback de juego real: "hoy no está siendo fácil" verlo).
+// Más tenue que la primera versión (feedback de juego real: "no debe nacer
+// del blanco porque desentona con la unidad seleccionada") — mezcla normal
+// (sin `lighter`, que sobre fondos claros se quemaba a blanco) y opacidad
+// máxima mucho más baja, solo dorado, nunca blanco puro.
 function drawSelBeam(cx, cy, r){
   const p=selPulse();
-  const h=(48+p*10)*cam.zoom, w=Math.max(4,r*0.7);
+  const h=(40+p*8)*cam.zoom, w=Math.max(3,r*0.5);
   const grad=ctx.createLinearGradient(cx,cy-h,cx,cy);
-  grad.addColorStop(0,'rgba(255,229,153,0)');
-  grad.addColorStop(0.6,`rgba(255,229,153,${0.28+0.18*p})`);
-  grad.addColorStop(1,`rgba(255,229,153,${0.7+0.25*p})`);
-  ctx.save();
-  ctx.globalCompositeOperation='lighter';
+  grad.addColorStop(0,'rgba(255,224,140,0)');
+  grad.addColorStop(0.65,`rgba(255,224,140,${0.08+0.06*p})`);
+  grad.addColorStop(1,`rgba(255,224,140,${0.22+0.1*p})`);
   ctx.fillStyle=grad;
   ctx.beginPath();
   ctx.moveTo(cx-w/2,cy); ctx.lineTo(cx-w*0.15,cy-h); ctx.lineTo(cx+w*0.15,cy-h); ctx.lineTo(cx+w/2,cy);
   ctx.closePath(); ctx.fill();
-  ctx.restore();
+}
+// Titileo (parpadeo) del cuadrado de un edificio seleccionado: los edificios
+// NO llevan el haz de luz de las unidades (pedido explícito), en su lugar el
+// propio recuadro de selección parpadea con un ritmo más rápido que el pulso
+// normal, para notarse igual de claro en medio del combate.
+function drawBuildingFlicker(cx, cy, half){
+  const flick = 0.5 + 0.5*Math.sin(performance.now()/110);
+  ctx.fillStyle = `rgba(255,224,140,${0.05+0.14*flick})`;
+  ctx.fillRect(cx-half, cy-half, half*2, half*2);
 }
 function drawSelBox(cx, cy, hw, hh){
   const p=selPulse(), L=Math.min(hw,hh)*0.5;
@@ -5969,27 +5989,147 @@ myNameInput.addEventListener('input', ()=>{
 myNameInput.addEventListener('change', ()=> setMyName(myNameInput.value));
 myNameInput.addEventListener('blur', ()=> setMyName(myNameInput.value));
 
-// ---------- Vista previa pasiva del tutorial (10 frames, botón del menú) ----------
-const TUT_PREVIEW = [
-  {icon:'👷', anim:'tpPulse', text:'Toca un aldeano para seleccionarlo.'},
-  {icon:'🌳', anim:'tpSlide', text:'Con el aldeano seleccionado, toca un árbol para que recolecte madera.'},
-  {icon:'🍒', anim:'tpSlide', text:'Manda a otro aldeano a recolectar comida (arrástralo con una caja de selección o tócalo).'},
-  {icon:'🏠', anim:'tpBounce', text:'Toca un aldeano, pulsa 🏠 Casa en el panel y coloca los cimientos cerca de tu base.'},
-  {icon:'🏛️', anim:'tpPulse', text:'Toca tu Centro Urbano y entrena un aldeano nuevo desde su cola.'},
-  {icon:'🔦', anim:'tpSlide', text:'Manda una unidad hacia una zona oscura del mapa para explorarla.'},
-  {icon:'🛡️', anim:'tpBounce', text:'Toca un aldeano, pulsa 🛡️ Cuartel y coloca sus cimientos cerca de tu base.'},
-  {icon:'⚔️', anim:'tpPulse', text:'Toca tu Cuartel y entrena una Milicia.'},
-  {icon:'⚒️', anim:'tpBounce', text:'Toca el Centro Urbano y avanza a la Edad de las Herramientas.'},
-  {icon:'🪖', anim:'tpPulse', text:'Pulsa 🪖 «Todo el ejército» (arriba a la derecha) para seleccionar todas tus tropas de un toque.'},
+// ---------- Vista previa pasiva del tutorial: simulación tipo "grabación de
+// pantalla" (10 acciones, botón del menú). Reutiliza `drawSprite` con las
+// gráficas reales del juego (por eso `ctx` es `let`: cada cuadro intercambia
+// el contexto de dibujo hacia el lienzo pequeño de la vista previa vía
+// `withCtx`, sin duplicar arte ni lógica de dibujo) y un círculo blanco que
+// imita el dedo tocando la pantalla. Puramente decorativo: nunca toca el
+// estado real del juego (`entities`, `player`...).
+const TP_W=340, TP_H=190;
+const tpCanvas = document.getElementById('tpCanvas');
+tpCanvas.width = TP_W; tpCanvas.height = TP_H;
+const tpCtx = tpCanvas.getContext('2d');
+function withCtx(c, fn){ const prev=ctx; ctx=c; try{ fn(); } finally{ ctx=prev; } }
+function tpBg(){
+  ctx.fillStyle='#3d4f2e'; ctx.fillRect(0,0,TP_W,TP_H);
+  ctx.fillStyle='#46592f';
+  for(let i=0;i<46;i++){ const x=(i*53+17)%TP_W, y=(i*41+9)%TP_H; ctx.beginPath(); ctx.arc(x,y,1.3,0,Math.PI*2); ctx.fill(); }
+}
+function tpSprite(name, x, y, h, emoji){
+  if(!drawSprite(name, x, y, h, false, h*1.25)){
+    ctx.font=h+'px serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(emoji||'❓', x, y);
+  }
+}
+function tpSelRing(x,y,r){ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.strokeStyle='rgba(255,224,140,.9)'; ctx.lineWidth=2; ctx.stroke(); }
+function tpTeamDot(x,y,r,enemy){ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=enemy?'rgba(220,90,90,.4)':'rgba(110,160,255,.4)'; ctx.fill(); }
+function tpTap(x,y,age){
+  const r=8+age*24;
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.strokeStyle=`rgba(255,255,255,${0.9*(1-age)})`; ctx.lineWidth=3; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fillStyle=`rgba(255,255,255,${0.8*(1-age)})`; ctx.fill();
+}
+function tpTwoFingerDrag(cx,y,spread){
+  for(const dx of [-spread,spread]){
+    ctx.beginPath(); ctx.arc(cx+dx,y,10,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,.5)'; ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=2; ctx.stroke();
+  }
+}
+function tpBar(x,y,w,frac,color){
+  ctx.fillStyle='#000a'; ctx.fillRect(x,y,w,5);
+  ctx.fillStyle=color; ctx.fillRect(x,y,w*Math.max(0,Math.min(1,frac)),5);
+}
+function tpLerpPath(kf,t){
+  if(t<=kf[0].t) return {x:kf[0].x,y:kf[0].y};
+  for(let i=1;i<kf.length;i++){ if(t<=kf[i].t){ const a=kf[i-1],b=kf[i],f=(t-a.t)/((b.t-a.t)||1); return {x:a.x+(b.x-a.x)*f, y:a.y+(b.y-a.y)*f}; } }
+  const l=kf[kf.length-1]; return {x:l.x,y:l.y};
+}
+function tpRenderStep(step,t){
+  tpBg();
+  for(const pr of step.props||[]){
+    if(pr.team) tpTeamDot(pr.x, pr.y+(pr.h||30)*0.42, (pr.h||30)*0.46, pr.team==='enemy');
+    tpSprite(pr.sprite, pr.x, pr.y, pr.h, pr.emoji);
+  }
+  for(const ac of step.actors||[]){
+    if(ac.showAt!=null && t<ac.showAt) continue;
+    if(ac.hideAt!=null && t>=ac.hideAt) continue;
+    const p = ac.path ? tpLerpPath(ac.path,t) : {x:ac.x,y:ac.y};
+    if(ac.team) tpTeamDot(p.x, p.y+(ac.h||26)*0.4, (ac.h||26)*0.42, ac.team==='enemy');
+    const sel = ac.selFrom!=null && t>=ac.selFrom && (ac.selTo==null || t<ac.selTo);
+    if(sel) tpSelRing(p.x,p.y,(ac.h||26)*0.62);
+    const spriteName = (ac.switchAt!=null && t>=ac.switchAt) ? ac.spriteAfter : ac.sprite;
+    tpSprite(spriteName, p.x, p.y, ac.h||26, ac.emoji);
+  }
+  if(step.fx) step.fx(t);
+  for(const tp of step.taps||[]){ if(t>=tp.t && t<tp.t+0.5) tpTap(tp.x,tp.y,(t-tp.t)/0.5); }
+}
+
+const TP_STEPS = [
+  { text:'Toca un aldeano para seleccionarlo.', dur:2.2,
+    actors:[{sprite:'unit_villager', emoji:'👷', x:120,y:110, h:34, selFrom:0.6}],
+    taps:[{t:0.5,x:120,y:110}] },
+  { text:'Con la unidad seleccionada, toca un recurso para que vaya a recolectarlo.', dur:2.8,
+    props:[{sprite:'res_wood', emoji:'🌳', x:262,y:66, h:30}],
+    actors:[{sprite:'unit_villager', emoji:'👷', h:30, selFrom:0,
+      path:[{t:0,x:100,y:135},{t:0.6,x:100,y:135},{t:2.6,x:247,y:82}]}],
+    taps:[{t:0.6,x:262,y:66}] },
+  { text:'Toca un lugar vacío del mapa para deseleccionar.', dur:2.0,
+    actors:[{sprite:'unit_infantry', emoji:'⚔️', x:150,y:110, h:30, selFrom:0, selTo:0.9}],
+    taps:[{t:0.9,x:255,y:155}] },
+  { text:'Toca tu Centro Urbano y entrena una unidad nueva desde su cola.', dur:2.8,
+    props:[{sprite:'bld_town', emoji:'🏛️', x:95,y:112, h:70}],
+    actors:[{sprite:'unit_villager', emoji:'👷', x:155,y:145, h:26, showAt:1.9}],
+    taps:[{t:0.5,x:95,y:112}],
+    fx(t){ if(t>=0.6 && t<1.9) tpBar(60,152,60,(t-0.6)/1.3,'#caa46a'); } },
+  { text:'Toca el Centro Urbano y avanza a la siguiente Era.', dur:3.0,
+    props:[{sprite:'bld_town', emoji:'🏛️', x:170,y:108, h:76}],
+    taps:[{t:0.6,x:170,y:108}],
+    fx(t){
+      if(t>=0.7){ const a=Math.min(1,(t-0.7)/1.0);
+        ctx.beginPath(); ctx.arc(170,86,24+a*30,0,Math.PI*2);
+        ctx.strokeStyle=`rgba(255,214,110,${0.7*(1-a)})`; ctx.lineWidth=3; ctx.stroke(); }
+      ctx.font='12px sans-serif'; ctx.textAlign='center'; ctx.fillStyle='#ffe9b0';
+      ctx.fillText(t<1.4 ? 'Edad Inicial' : 'Edad de las Herramientas ⬆️', 170, 172);
+    } },
+  { text:'Con una unidad militar seleccionada, toca al enemigo para atacarlo.', dur:2.6,
+    actors:[
+      {sprite:'unit_infantry', emoji:'⚔️', h:28, selFrom:0,
+        path:[{t:0,x:110,y:120},{t:0.7,x:110,y:120},{t:1.1,x:172,y:120},{t:1.6,x:120,y:120}]},
+      {sprite:'unit_infantry', emoji:'⚔️', x:232,y:120, h:28, team:'enemy'},
+    ],
+    taps:[{t:0.7,x:232,y:120}],
+    fx(t){ if(t>=1.0 && t<1.6){ const a=(t-1.0)/0.6; ctx.beginPath(); ctx.arc(212,120,4+a*10,0,Math.PI*2); ctx.fillStyle=`rgba(255,235,180,${0.8*(1-a)})`; ctx.fill(); } } },
+  { text:'Arrastra con dos dedos para mover la cámara por el mapa.', dur:2.6,
+    fx(t){
+      const cyc=(t%2.6)/2.6, shift=Math.sin(cyc*Math.PI*2)*55;
+      ctx.font='20px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      for(const [x,y,e] of [[60,55,'🌲'],[260,45,'🪨'],[150,150,'🏠'],[40,140,'💰'],[300,150,'🌳']]) ctx.fillText(e, x+shift, y);
+      tpTwoFingerDrag(TP_W/2 + shift*0.25, 100, 26);
+    } },
+  { text:'Investiga una mejora en el edificio de entrenamiento para potenciar tu unidad.', dur:2.8,
+    props:[{sprite:'bld_barracks', emoji:'🛡️', x:75,y:112, h:56}],
+    actors:[{sprite:'unit_infantry', emoji:'⚔️', x:195,y:122, h:30, switchAt:1.6, spriteAfter:'unit_infantry_t1'}],
+    taps:[{t:0.6,x:75,y:112}],
+    fx(t){ if(t>=1.5 && t<2.1){ const a=(t-1.5)/0.6; ctx.beginPath(); ctx.arc(195,122,14+a*18,0,Math.PI*2); ctx.strokeStyle=`rgba(255,214,110,${0.8*(1-a)})`; ctx.lineWidth=3; ctx.stroke(); } } },
+  { text:'Con tropas seleccionadas, toca un edificio enemigo para atacarlo.', dur:2.8,
+    props:[{sprite:'bld_house', emoji:'🏠', x:252,y:110, h:46, team:'enemy'}],
+    actors:[{sprite:'unit_infantry', emoji:'⚔️', h:28, selFrom:0,
+      path:[{t:0,x:90,y:132},{t:0.6,x:90,y:132},{t:1.7,x:217,y:120}]}],
+    taps:[{t:0.6,x:252,y:110}],
+    fx(t){ if(t>=1.7){ const a=Math.min(1,(t-1.7)/0.9); tpBar(222,150,60,1-a*0.6,'#c0455a');
+      if((t*6)%1<0.3){ ctx.beginPath(); ctx.arc(230,108,5,0,Math.PI*2); ctx.fillStyle='rgba(255,230,160,.9)'; ctx.fill(); } } } },
+  { text:'Toca un aldeano y coloca una Torre o muralla para defenderte.', dur:2.8,
+    actors:[{sprite:'unit_villager', emoji:'👷', x:120,y:135, h:28, selFrom:0}],
+    taps:[{t:0.6,x:230,y:108}],
+    fx(t){ if(t<0.6) return; const a=Math.min(1,(t-0.6)/1.8);
+      ctx.save(); ctx.globalAlpha=0.4+0.6*a; tpSprite('bld_tower',230,108,46,'🗼'); ctx.restore();
+      if(a<1) tpBar(200,142,60,a,'#8fc7e8');
+    } },
 ];
-let tpIdx=0;
+let tpIdx=0, tpAnimId=null, tpStart=0;
+function tpLoop(now){
+  const step = TP_STEPS[tpIdx];
+  const t = ((now-tpStart)/1000) % step.dur;
+  withCtx(tpCtx, ()=>tpRenderStep(step, t));
+  tpAnimId = requestAnimationFrame(tpLoop);
+}
 function renderTutPreview(){
-  const f=TUT_PREVIEW[tpIdx];
-  const icon=document.getElementById('tpIcon');
-  icon.textContent=f.icon;
-  icon.className=''; void icon.offsetWidth; icon.className=f.anim;   // reinicia la animación CSS en cada frame
-  document.getElementById('tpText').textContent='Paso '+(tpIdx+1)+'/10 — '+f.text;
-  document.getElementById('tpDots').innerHTML = TUT_PREVIEW.map((_,i)=>'<span class="'+(i===tpIdx?'on':'')+'"></span>').join('');
+  const step = TP_STEPS[tpIdx];
+  document.getElementById('tpText').textContent = 'Paso '+(tpIdx+1)+'/10 — '+step.text;
+  document.getElementById('tpDots').innerHTML = TP_STEPS.map((_,i)=>'<span class="'+(i===tpIdx?'on':'')+'"></span>').join('');
+  tpStart = performance.now();
+  if(tpAnimId) cancelAnimationFrame(tpAnimId);
+  tpAnimId = requestAnimationFrame(tpLoop);
 }
 document.getElementById('btnGoTutPreview').addEventListener('click', ()=>{
   tpIdx=0; renderTutPreview();
@@ -5998,9 +6138,10 @@ document.getElementById('btnGoTutPreview').addEventListener('click', ()=>{
   document.getElementById('startScreen').classList.add('hidden');
   document.getElementById('tutPreviewScreen').classList.remove('hidden');
 });
-document.getElementById('tpPrev').addEventListener('click', ()=>{ tpIdx=(tpIdx-1+TUT_PREVIEW.length)%TUT_PREVIEW.length; renderTutPreview(); });
-document.getElementById('tpNext').addEventListener('click', ()=>{ tpIdx=(tpIdx+1)%TUT_PREVIEW.length; renderTutPreview(); });
+document.getElementById('tpPrev').addEventListener('click', ()=>{ tpIdx=(tpIdx-1+TP_STEPS.length)%TP_STEPS.length; renderTutPreview(); });
+document.getElementById('tpNext').addEventListener('click', ()=>{ tpIdx=(tpIdx+1)%TP_STEPS.length; renderTutPreview(); });
 document.getElementById('tpClose').addEventListener('click', ()=>{
+  if(tpAnimId){ cancelAnimationFrame(tpAnimId); tpAnimId=null; }   // no seguir animando en segundo plano
   document.getElementById('tutPreviewScreen').classList.add('hidden');
   document.getElementById('startScreen').classList.remove('hidden');
 });

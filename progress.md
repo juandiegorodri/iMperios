@@ -2441,3 +2441,70 @@ función de origen solo corre en el host).
     doblada confirmada (`BLD.town.hp===2400`, etc.); regresión de
     aldeanos-en-murallas (16 tramos/16 aldeanos, 0 atrapados) y partida
     simulada con IA Difícil, ambas sin errores de consola.
+- **Corrección de tamaño real al evolucionar, selección más sobria, Centro
+  Urbano/Castillo imponentes y tutorial simulado** (2026-07-24): tanda de
+  correcciones tras jugar con las mejoras anteriores.
+  - **Se quitó el sistema de estrellas de nivel**: la insignia de óvalo+⭐
+    sobre la unidad (Fase 5) ya no existe — el propio arte por tier ya se
+    distingue a simple vista, no hacía falta un indicador aparte.
+  - **Arreglado el encogimiento real al evolucionar** (Caballero/Paladín,
+    Alabardero): la causa raíz NO era el recorte de los PNG (ya corregido en
+    una tanda anterior) sino que `drawSprite` forzaba SIEMPRE la misma
+    ALTURA para cualquier sprite, dejando que el ANCHO variara libremente
+    según el aspecto de cada imagen — y el arte de cada tier tiene aspectos
+    muy distintos entre sí (el Caballo base es un perfil muy plano/ancho,
+    aspecto 3.48; el Paladín es mucho más cuadrado, aspecto 1.82), así que a
+    la misma altura el tier salía con bastante menos ancho que el base y se
+    leía como "encogido". `drawSprite` ahora acepta un `targetW` opcional:
+    con él, ajusta tipo "contain" (`sc = min(targetH/alto, targetW/ancho)`)
+    en vez de forzar solo la altura; `drawUnit` lo usa para TODAS las
+    unidades (base y tier) con una caja de `uH×uH*1.25`, así el ancho queda
+    acotado consistentemente sin importar el aspecto de cada sprite.
+  - **Haz de selección de unidades más tenue**: opacidad máxima mucho más
+    baja y se quitó el `globalCompositeOperation:'lighter'` (que sobre
+    fondos claros se quemaba a blanco y desentonaba con la unidad) — ahora
+    es un dorado suave, nunca blanco.
+  - **Edificios: titileo en vez de haz de luz**: los edificios seleccionados
+    ya no llevan el cono de luz de las unidades (pedido explícito); en su
+    lugar `drawBuildingFlicker` rellena el propio cuadrado de selección con
+    un parpadeo (más rápido que el pulso normal de los corchetes).
+  - **Centro Urbano y Castillo a 4×4 casillas**: su `size` en `BLD` se
+    calcula ahora como `4*FOG_CELL/BLD_VIS_SCALE` para que su huella VISUAL
+    sea EXACTAMENTE 160×160px (4×4 celdas del tablero) — bastante más
+    imponentes que el resto de edificios, acorde a ser los más importantes.
+  - **Tutorial: simulación tipo "grabación de pantalla"**: la vista previa
+    pasiva del menú (botón 🎬 Ver tutorial) pasó de 10 iconos con animación
+    CSS a 10 mini-animaciones reales en un `<canvas>` propio, reutilizando
+    `drawSprite` con las MISMAS gráficas del juego (`ctx` pasó de `const` a
+    `let` para poder intercambiarlo un instante hacia el lienzo pequeño de
+    la vista previa vía `withCtx`, sin duplicar arte ni lógica de dibujo) y
+    un círculo blanco que imita el dedo tocando la pantalla (`tpTap`).
+    Motor genérico (`tpRenderStep`) interpretando un guion declarativo por
+    paso (props estáticos, actores con trayectoria interpolada/selección/
+    cambio de sprite en el tiempo, toques, y un `fx(t)` opcional para
+    efectos a medida) para las 10 acciones pedidas: seleccionar unidad,
+    llevarla a recolectar, deseleccionar, entrenar una unidad nueva (con
+    barra de progreso), subir de Era (destello + cambio de texto), atacar
+    una unidad enemiga, moverse por el mapa (simulación de arrastre de dos
+    dedos con el fondo desplazándose), mejorar una unidad (cambia de sprite
+    base a su tier con un destello), atacar un edificio enemigo (con su
+    barra de vida bajando) y construir una Torre/muralla (fantasma
+    translúcido que se solidifica con una barra de progreso). Puramente
+    decorativo: nunca toca `entities`/`player`, dibuja solo sobre su propio
+    lienzo.
+  - **Pendiente, requiere un archivo del usuario**: el Centro Urbano
+    cambiando de gráfica por Era (3 imágenes pegadas en el chat) no se pudo
+    integrar en esta tanda — no hay forma de extraer una imagen pegada
+    directamente en la conversación a un archivo en disco con las
+    herramientas disponibles (a diferencia de una vez subida como archivo,
+    p.ej. el `.zip` de `board_sprites.json` de la Fase 9B). Falta que el
+    usuario las suba como archivo para poder optimizarlas/darles
+    transparencia e integrarlas.
+  - Verificado headless: los 10 pasos del tutorial recorridos con la
+    animación corriendo, sin errores de consola; Alabardero y Caballero
+    (tier 1) renderizados uno junto al otro a tamaño consistente (captura);
+    Centro Urbano confirmado a 160×160px de huella visual exacta (4×4
+    celdas) con captura mostrándolo notablemente más grande que antes,
+    corchetes + titileo visibles y sin estrellas; regresión de
+    aldeanos-en-murallas (16/16, 0 atrapados) y partida simulada con IA
+    Difícil, ambas sin errores de consola.
