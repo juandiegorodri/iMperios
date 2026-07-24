@@ -757,8 +757,12 @@ const UNIT = {
               cost:{food:35,wood:25}, train:15, faceOffset:-Math.PI/2 },
   archer:   { name:'Arquero',   emoji:'🏹', cat:'archer',   hp:55, atk:5.42, speed:55, range:92, cd:1.2, pop:1,
               cost:{wood:40,gold:25}, train:17, faceOffset:-Math.PI/2 },
+  // faceOffset recalibrado (feedback de juego real: "se mueve en sentido
+  // contrario"): en el PNG el caballo mira hacia la DERECHA (cabeza a la
+  // derecha, grupa/cola a la izquierda), no hacia la izquierda como se
+  // había asumido antes — confirmado recortando ambos extremos del sprite.
   cavalry:  { name:'Caballo',   emoji:'🐎', cat:'cavalry',  hp:52, atk:6.87, speed:96, range:18, cd:1.4, pop:1,
-              cost:{food:70,gold:40}, train:21, faceOffset:Math.PI/2 },
+              cost:{food:70,gold:40}, train:21, faceOffset:-Math.PI/2 },
   // Héroes (Castillo): versiones potentes de cada categoría.
   hero_sword:  { name:'Héroe Espada', emoji:'🦸', cat:'infantry', hero:true, hp:200, atk:18, speed:60, range:18, cd:1.0, pop:2,
                  cost:{food:120,gold:120}, train:30, faceOffset:0 },
@@ -787,19 +791,35 @@ const TIER_FACE_OFFSET = {
   cavalry_t2: Math.PI/2,
 };
 // Ancho de la caja "contain" por sprite (`drawUnit`), como múltiplo de `uH`.
-// La familia caballería (perfil de caballo, MUY plano — aspecto ancho/alto
-// hasta 3.5) quedaba con muy poca altura bajo la caja genérica (ancho fijo
-// ×1.25: como el ancho manda, la altura resultante bajaba a ~0.36×uH) y se
-// veía "muy chiquita" (feedback de juego real). Estos valores se calculan
-// para que cada sprite ocupe un ÁREA parecida a un token normal (h≈uH/√aspecto,
-// w=h×aspecto) en vez de recortarle el ancho a todos por igual — se ven
-// notablemente más grandes sin perder la consistencia de tamaño entre tiers
-// al evolucionar. El resto de unidades (aspecto ~1-1.4) sigue con el 1.25
-// genérico, sin cambios.
-const UNIT_BOX_W = {
-  cavalry: 1.87, cavalry_t1: 1.53, cavalry_t2: 1.35, hero_cav: 1.74,
-};
-function unitBoxW(spriteKey, uH){ return (UNIT_BOX_W[spriteKey]!=null ? UNIT_BOX_W[spriteKey] : 1.25) * uH; }
+// Sigue usándose para el resto de unidades (aspecto ~1-1.4): 1.25 genérico.
+function unitBoxW(spriteKey, uH){ return 1.25 * uH; }
+// Familia caballería (perfil de caballo, MUY plano — aspecto ancho/alto
+// hasta 3.5): acotar el ancho con la caja genérica las dejaba con muy poca
+// altura y se veían "muy chiquitas" incluso después de calibrar un ancho
+// propio por sprite (feedback de juego real: "todavía muy pequeño"). En vez
+// de acotar el ancho, se fija un LARGO objetivo (2.2 casillas del tablero,
+// pedido explícito — "creo que puede ser una buena proporción") igual para
+// las 4 fichas (Caballo/Caballero/Paladín/Héroe Jinete): sin tope de ancho,
+// el alto sale de dividir ese largo por el aspecto REAL del sprite
+// (`spriteAspect`, leído del atlas o del PNG suelto, no un número fijo por
+// si el arte cambiara), así ninguna se ve más grande/chica que las demás al
+// evolucionar y las 4 alcanzan el mismo largo mínimo.
+const CAVALRY_SPRITES = new Set(['cavalry','cavalry_t1','cavalry_t2','hero_cav']);
+const CAVALRY_LEN_CELLS = 2.2;
+function spriteAspect(name){
+  if(atlasReady && atlasFrames && atlasFrames[name]){ const f=atlasFrames[name]; return f.w/f.h; }
+  const img = spr(name);
+  if(img && img.naturalWidth && img.naturalHeight) return img.naturalWidth/img.naturalHeight;
+  return null;
+}
+function unitTargetH(spriteKey, fullName, uH){
+  if(CAVALRY_SPRITES.has(spriteKey)){
+    const asp = spriteAspect(fullName);
+    if(asp) return (CAVALRY_LEN_CELLS*FOG_CELL*(uH/30))/asp;
+  }
+  return uH;
+}
+function unitTargetW(spriteKey, uH){ return CAVALRY_SPRITES.has(spriteKey) ? undefined : unitBoxW(spriteKey, uH); }
 
 // Líneas de mejora por Era (Fase 5): cada tier sube ~+35% hp/atk de TODAS las
 // unidades vivas y futuras de esa categoría (aplica a `unitAtk` dinámicamente
@@ -4748,9 +4768,9 @@ function drawUnit(e){
   // plano; el Paladín, mucho más cuadrado) — sin esto, forzar solo la altura
   // dejaba a los tiers más "cuadrados" con una fracción del ancho del base a
   // la misma altura, y se leía como que la unidad se encogía al evolucionar.
-  // El ancho de la caja (`unitBoxW`) es 1.25×alto por defecto, salvo la
-  // familia caballería (`UNIT_BOX_W`), calibrada aparte para que no se vea
-  // "chiquita" (ver comentario junto a `UNIT_BOX_W`).
+  // El ancho de la caja (`unitBoxW`) es 1.25×alto por defecto; la familia
+  // caballería usa en cambio un LARGO objetivo fijo (`unitTargetH`/
+  // `CAVALRY_SPRITES`, ver comentario junto a `CAVALRY_LEN_CELLS`).
   // FASE 9B: arte propio por TIER de línea de mejora (Fase 5) si existe,
   // igual en host y cliente MP (el tier es del BANDO, viaja gratis en
   // `serSide`). Los héroes siempre usan su propia ficha fija, nunca la de
@@ -4761,8 +4781,9 @@ function drawUnit(e){
   const tierKey = tier>0 ? (d.cat+'_t'+tier) : null;
   const faceOff = tierKey!=null ? (TIER_FACE_OFFSET[tierKey]||0) : (d.faceOffset||0);
   setUnitTransform(cx, cy, drawAngle+faceOff, 1);
-  const drewTiered = tier>0 && drawSprite('unit_'+d.cat+'_t'+tier, 0, 0, uH, false, unitBoxW(tierKey, uH));
-  if(!drewTiered && !drawSprite('unit_'+e.type, 0, 0, uH, false, unitBoxW(e.type, uH))){
+  const tieredName = 'unit_'+d.cat+'_t'+tier, baseName = 'unit_'+e.type;
+  const drewTiered = tier>0 && drawSprite(tieredName, 0, 0, unitTargetH(tierKey, tieredName, uH), false, unitTargetW(tierKey, uH));
+  if(!drewTiered && !drawSprite(baseName, 0, 0, unitTargetH(e.type, baseName, uH), false, unitTargetW(e.type, uH))){
     // respaldo: aura + emoji + estrella de héroe
     if(d.hero){
       ctx.beginPath(); ctx.arc(0, 0, sz*0.7, 0, Math.PI*2);
