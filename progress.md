@@ -2626,3 +2626,112 @@ función de origen solo corre en el host).
     aplicado confirmado moviéndose correctamente hacia la derecha;
     regresión de aldeanos-en-murallas (16/16, 0 atrapados) y partida
     simulada con IA Difícil, ambas sin errores de consola.
+- **Jinete, permisos de entrenamiento por Era, Centro Urbano en calidad
+  completa, pantalla de carga, efecto de destrucción de edificios e IA
+  mucho más completa** (2026-07-24): tanda de 6 pedidos explícitos,
+  siguiendo por primera vez el proceso ahora formalizado en `CLAUDE.md`
+  §4.1 (implementar todo → despachar un agente de verificación → corregir
+  → recién entonces subir).
+  - **Unidad "Caballo" renombrada a "Jinete"** en `UNIT.cavalry.name`, el
+    párrafo del cuadrilátero del menú, `UPG.swords.desc` y el botón del
+    Establo (ahora usa `d.name` dinámico en vez de texto fijo).
+  - **Permisos de entrenamiento por Era** (pedido explícito, antes se podía
+    entrenar cualquier unidad desde el primer momento): Era Inicial solo
+    Aldeano y Milicia; Galería de Tiro y Establo pasan a tener
+    `reqAge:2`/`reqAge:3` (deshabilitados hasta entonces, ni siquiera se
+    pueden construir); `UNIT.pike.reqAge=2` habilita el Piquetero en el
+    Cuartel recién en la Edad de las Herramientas. Validado en DOS lugares:
+    el panel (`buildingButtons`, con subtexto del nombre de la Era cuando
+    está bloqueado) y, más importante, dentro de `queueUnit` mismo (host
+    autoritativo) — así ni la IA ni un comando de red de un cliente MP
+    pueden saltárselo.
+  - **Gráficas del Centro Urbano por Era reprocesadas en calidad completa**:
+    las 3 imágenes por Era (subidas de nuevo por el usuario) se recortaron
+    SIN reducir su resolución esta vez (987×1438 / 994×1433 / 994×1431,
+    frente a los 900px de tope de la tanda anterior) — la pérdida de nitidez
+    reportada ("no se ve en la misma calidad que los otros edificios") no
+    era por el recorte en sí sino porque el atlas de sprites (`MAX_DIM=240`)
+    las recomprimía a 240px y el motor las reescalaba de vuelta a 240-384px
+    en pantalla (el Centro Urbano ocupa 6×6 casillas desde una tanda
+    anterior). Solución: excluir los 4 nombres `bld_town*` del empaquetado
+    del atlas (`assets/atlas.json` regenerado, de 41 a 37 sprites) para que
+    `drawSprite` caiga siempre a su PNG suelto de resolución completa.
+  - **Pantalla de carga precarga también los sprites sueltos**: al excluir
+    esos 4 del atlas, se volvían de carga perezosa (solo se pedían por red
+    la primera vez que hacía falta dibujarlos) — como el Centro Urbano
+    existe desde el cuadro 1, esto agravaba justo el bug de "cuadro de
+    temporal" que se pedía arreglar. `bootLoad()` ahora espera
+    explícitamente (`ALWAYS_LOOSE`, lista con los 4 nombres) a que los 4
+    reporten `sprites[n].ready` antes de ocultar `#loadScreen`, además del
+    atlas; `LOAD_MAX_MS` subido de 4 a 7s (red de seguridad) para no
+    trabar al jugador si la red falla.
+  - **Efecto de destrucción de edificios** (humo + desvanecido + ruinas):
+    tres arrays nuevos fuera de `entities`, mismo patrón que
+    `corpses`/`sparks`/`dust`/`bursts` — `dyingBuildings` (fade ~650ms,
+    dibuja el sprite/emoji con opacidad decreciente y un leve hundimiento),
+    `destructSmoke` (12 puffs escalonados por edificio, ~900-1400ms cada
+    uno) y `ruins` (persiste indefinidamente, 6-9 piedras dispersas por
+    ruina, generadas una sola vez con `genRuinStones`; tope de seguridad
+    `RUINS_MAX=200`). Enganchado en el bucle de "muertos" de `update()`
+    (`addDyingBuilding(d)` antes de `removeEntity(d)`) y, para que el
+    cliente multijugador (que no simula muertes) también lo vea, se
+    generalizó `prevTownCastle` (solo Centro Urbano/Castillo) a
+    `prevBuildings` — CUALQUIER edificio detectado como desaparecido entre
+    instantáneas dispara el mismo efecto en `applySnap`. Dibujado en
+    `render()`: `drawRuins()` a nivel de suelo (junto a huellas/cadáveres),
+    `drawDyingBuildings()` intercalado con los edificios vivos, y
+    `drawDestructSmoke()` en la capa decorativa superior (junto a chispas/
+    destellos).
+  - **IA mucho más completa** (pedido explícito: "muy básica, solo ataca el
+    centro urbano, no hace mejoras de unidades"): nuevo flag de doctrina
+    `upgrades` (`false` en Fácil, `true` en Normal/Difícil) que hace que el
+    enemigo construya Herrería e investigue, con las MISMAS funciones que
+    usa el jugador (`buyUpgrade`/`buyLineTier`/`buyEcon`), sus mejoras de
+    herrería (flechas/espadas/escudos/hachas), las líneas de mejora de
+    unidad por categoría (Espadachín/Campeón, Alabardero, Arquero de Tiro
+    Largo, Caballero/Paladín) y las tecnologías económicas de los 4
+    recursos — antes la IA nunca investigaba nada de esto.
+  - **Bug crítico pre-existente encontrado y corregido durante la
+    verificación** (no estaba en el pedido original, pero bloqueaba por
+    completo el punto anterior): `buildNew()` —la función que usa la IA
+    para levantar CUALQUIER edificio (Cuartel, Galería, Establo, Herrería,
+    Granja, Torres, Castillo...)— hacía `entities.push(nb)` sin llamar
+    `rebuildIndex()`. Como `find(id)` usa un índice `Map` que solo se
+    actualiza con `rebuildIndex()`, el aldeano asignado a construir no
+    encontraba el edificio recién creado en el cuadro siguiente
+    (`find(e.build)` devolvía `undefined`), abandonaba la obra y volvía a
+    recolectar — dejando el edificio a medio construir PARA SIEMPRE (con
+    `hasBuilding(...,false)` bloqueando cualquier reintento). Reproducido
+    primero en el commit ANTERIOR a esta tanda (confirmando que no lo
+    introdujo este cambio) simulando ~120s de una partida Normal: el
+    Cuartel enemigo quedaba en progreso 0 para siempre y la IA nunca
+    llegaba a construir nada más. Con el fix (una línea,
+    `rebuildIndex()` después de `entities.push(nb)`), la misma simulación
+    construye Cuartel, Galería, Establo, Herrería y Casas con normalidad y
+    la IA investiga sus 12 tecnologías/mejoras disponibles en Era III. Este
+    hallazgo explica en gran medida por qué la IA se sentía "muy básica" —
+    sin poder terminar CASI NINGÚN edificio más allá del Centro Urbano
+    inicial, no tenía forma real de crecer su economía o ejército.
+  - **Proceso de desarrollo formalizado en `CLAUDE.md`** (pedido explícito,
+    nueva sección §4.1): para cualquier tanda con más de un cambio,
+    implementar TODO en una sola pasada → despachar un subagente (`Agent`)
+    a probar cada funcionalidad con evidencia concreta → corregir lo que
+    falle (repitiendo la verificación si el ajuste no es trivial) → recién
+    entonces actualizar documentación y commit → push → PR → main.
+  - Verificado: un subagente de verificación se despachó primero pero
+    agotó su límite de sesión a mitad de las pruebas (alcanzó a confirmar
+    varios puntos y, sin que se le pidiera, alcanzó a hacer un commit local
+    a la rama de feature con el código ya implementado — sin tocar `main`
+    ni abrir PR). Se completó la verificación manualmente con Playwright
+    headless cubriendo los 6 puntos: rename confirmado en runtime; bloqueo
+    real de `queueUnit` en Era 1 y desbloqueo en Era 2 confirmado con
+    cambios de recursos/cola; las 4 gráficas del Centro Urbano confirmadas
+    FUERA del atlas y a resolución completa (708×1023 hasta 994×1438),
+    captura a zoom 3.2× sin blur visible; pantalla de carga confirmada
+    esperando los 4 sprites sueltos antes de ocultarse; efecto de
+    destrucción confirmado paso a paso (humo+ruinas al morir, desvanecido
+    completo a los ~650ms, ruinas persistentes) con captura; IA Normal
+    simulada ~375s investigando las 12 tecnologías disponibles y
+    construyendo Cuartel/Galería/Establo/Herrería/Casas sin quedar
+    atascada, IA Fácil confirmada sin investigar nada (`upgrades:false`);
+    0 errores de consola en todas las pruebas.

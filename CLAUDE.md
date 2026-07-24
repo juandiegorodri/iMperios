@@ -63,6 +63,34 @@ Ejecutar con: `node test.cjs` usando
 `require('/opt/node22/lib/node_modules/playwright')` y
 `executablePath: '/opt/pw-browsers/chromium'`.
 
+### 4.1 Proceso estándar para una tanda con varias correcciones/funcionalidades
+
+> Aplica **siempre** que una tanda de trabajo incluya más de un cambio (lo
+> habitual: el usuario pide una lista de correcciones/funcionalidades en un
+> solo mensaje). No hace falta que el usuario lo pida cada vez — es el
+> proceso por defecto del proyecto.
+
+1. **Implementar TODO en una sola pasada**: escribir el código de cada
+   corrección/funcionalidad de la tanda antes de verificar nada, y hacer un
+   chequeo de sintaxis del `index.html` completo (`node --check` sobre el
+   contenido del `<script>`) apenas termine de escribirse el código.
+2. **Despachar un subagente (herramienta `Agent`) para probar la tanda**: no
+   basta con las pruebas Playwright propias hechas al vuelo mientras se
+   escribe el código — al terminar de implementar TODO, lanzar un agente
+   (`subagent_type` general-purpose está bien) con un prompt que liste,
+   funcionalidad por funcionalidad, qué se implementó y qué debe verificar de
+   cada una (con capturas/`page.evaluate` sobre el estado real del juego,
+   igual que en la sección 4 de arriba), y que reporte cuáles pasan y cuáles
+   fallan con evidencia concreta (no solo "funciona"/"no funciona").
+3. **Corregir lo que el agente reporte como fallido** y, si el ajuste es no
+   trivial, repetir el paso 2 (otro agente, o el mismo si sigue disponible)
+   sobre lo corregido antes de continuar.
+4. **Solo cuando todo esté verificado como correcto**: actualizar la
+   documentación obligatoria (sección 5 de abajo) y recién ahí commit → push
+   → PR en borrador → (si el usuario pidió subir a `main`) marcar el PR listo
+   y fusionar → sincronizar la rama con `main` (sección 3). Nunca fusionar a
+   `main` con verificaciones pendientes o fallidas.
+
 ---
 
 ## 5. NORMAS DE DOCUMENTACIÓN (obligatorias)
@@ -1210,3 +1238,52 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
   - Verificado headless: largo exacto (88px) confirmado para ambos, las 4
     direcciones del Caballo con la cabeza liderando, el Caballero con su
     tier real aplicado moviéndose bien, y regresión completa sin errores.
+- **Jinete, permisos por Era, Centro Urbano en calidad completa, pantalla
+  de carga, efecto de destrucción de edificios e IA mucho más completa**
+  (2026-07-24):
+  - **"Caballo" renombrado a "Jinete"** en toda la UI (`UNIT.cavalry.name`,
+    párrafo del cuadrilátero, descripción de la mejora de Forja de Espadas,
+    botón del Establo).
+  - **Permisos de entrenamiento por Era** (antes se podía entrenar
+    cualquier unidad desde el primer momento): Era Inicial solo Aldeano y
+    Milicia; Galería de Tiro y Establo deshabilitados (ni se pueden
+    construir) hasta Era 2/3 respectivamente (`BLD.range.reqAge`/
+    `BLD.stable.reqAge`); el Piquetero requiere Era 2 (`UNIT.pike.reqAge`).
+    Validado en el panel (con subtexto de la Era requerida) y, sobre todo,
+    dentro de `queueUnit` (host autoritativo, cubre también IA y comandos
+    de red MP).
+  - **Gráficas del Centro Urbano por Era en calidad completa**: las 4
+    variantes (`bld_town`/`bld_town_age2/3/4`) se excluyeron del atlas de
+    sprites (que las recomprimía a 240px y luego el motor las reescalaba
+    de vuelta, perdiendo nitidez visible en un edificio de 6×6 casillas) —
+    ahora siempre cargan su PNG suelto a resolución completa.
+  - **Pantalla de carga precarga también esos 4 sprites sueltos** (al
+    quedar fuera del atlas, se volvían de carga perezosa) antes de ocultar
+    `#loadScreen`, eliminando el "cuadro de temporal" que aparecía
+    mientras cargaban.
+  - **Efecto de destrucción de edificios**: humo (`destructSmoke`, 12
+    puffs escalonados), desvanecido de ~650ms (`dyingBuildings`) y ruinas
+    de piedra persistentes (`ruins`, tope de seguridad 200) en el mismo
+    lugar donde estaba el edificio; sincronizado también en el cliente
+    multijugador (`prevBuildings` en `applySnap`, generalizado del antiguo
+    `prevTownCastle` que solo cubría Centro Urbano/Castillo).
+  - **IA mucho más completa**: nuevo flag de doctrina `upgrades`
+    (Normal/Difícil) hace que el enemigo construya Herrería e investigue
+    sus mejoras, las líneas de mejora de unidad por categoría y las
+    tecnologías económicas de los 4 recursos — antes nunca investigaba
+    nada de esto, ni tenía Herrería.
+  - **Bug crítico corregido** (encontrado en la verificación, no en el
+    pedido original, pre-existente desde antes de esta tanda): `buildNew()`
+    —la construcción de la IA— no llamaba `rebuildIndex()` tras añadir el
+    edificio a `entities`, así que el aldeano constructor lo "perdía" al
+    cuadro siguiente (`find()` no lo encontraba) y volvía a recolectar,
+    dejando CUALQUIER edificio de la IA (Cuartel, Galería, Establo,
+    Herrería, Granjas, Torres, Castillo...) a medio construir para
+    siempre. Este bug —no la falta de lógica de mejoras— era la razón de
+    fondo por la que la IA se sentía "muy básica": casi nunca lograba
+    construir nada más allá del Centro Urbano inicial.
+  - Verificado headless (con un agente de verificación, primera vez que se
+    sigue el proceso formal de la sección 4.1): rename, permisos por Era,
+    calidad/exclusión del atlas del Centro Urbano, pantalla de carga,
+    efecto de destrucción y la IA investigando sus 12 mejoras/tecnologías
+    disponibles sin quedarse atascada construyendo — 0 errores de consola.

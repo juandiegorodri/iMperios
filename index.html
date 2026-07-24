@@ -460,7 +460,7 @@
       <h1>⚔️ Configurar partida</h1>
     </div>
     <p>Destruye el Centro Urbano enemigo. Cuadrilátero:
-    Arquero &gt; Milicia &gt; Piquetero &gt; Caballo &gt; Arquero.</p>
+    Arquero &gt; Milicia &gt; Piquetero &gt; Jinete &gt; Arquero.</p>
 
     <div class="opt" data-opt="map">
       <div class="opt-title">🗺️ Mapa</div>
@@ -753,15 +753,19 @@ const UNIT = {
               cost:{food:50}, train:11, faceOffset:Math.PI },
   infantry: { name:'Milicia',   emoji:'⚔️', cat:'infantry', hp:55, atk:6, speed:56, range:16, cd:1.1, pop:1,
               cost:{food:60}, train:14, faceOffset:-Math.PI/2 },
+  // `reqAge:2` (pedido explícito: en la Era Inicial solo se pueden entrenar
+  // Aldeano y Milicia en el Cuartel; el Piquetero se habilita en la Era de
+  // las Herramientas). Ver `queueUnit` y el panel del Cuartel.
   pike:     { name:'Piquetero', emoji:'🔱', cat:'pike',     hp:60, atk:6, speed:52, range:18, cd:1.2, pop:1,
-              cost:{food:35,wood:25}, train:15, faceOffset:-Math.PI/2 },
+              cost:{food:35,wood:25}, train:15, faceOffset:-Math.PI/2, reqAge:2 },
   archer:   { name:'Arquero',   emoji:'🏹', cat:'archer',   hp:55, atk:5.42, speed:55, range:92, cd:1.2, pop:1,
               cost:{wood:40,gold:25}, train:17, faceOffset:-Math.PI/2 },
   // faceOffset recalibrado (feedback de juego real: "se mueve en sentido
   // contrario"): en el PNG el caballo mira hacia la DERECHA (cabeza a la
   // derecha, grupa/cola a la izquierda), no hacia la izquierda como se
   // había asumido antes — confirmado recortando ambos extremos del sprite.
-  cavalry:  { name:'Caballo',   emoji:'🐎', cat:'cavalry',  hp:52, atk:6.87, speed:96, range:18, cd:1.4, pop:1,
+  // Renombrado de "Caballo" a "Jinete" (pedido explícito).
+  cavalry:  { name:'Jinete',   emoji:'🐎', cat:'cavalry',  hp:52, atk:6.87, speed:96, range:18, cd:1.4, pop:1,
               cost:{food:70,gold:40}, train:21, faceOffset:-Math.PI/2 },
   // Héroes (Castillo): versiones potentes de cada categoría.
   hero_sword:  { name:'Héroe Espada', emoji:'🦸', cat:'infantry', hero:true, hp:200, atk:18, speed:60, range:18, cd:1.0, pop:2,
@@ -860,8 +864,11 @@ const BLD = {
                 atk:11, range:170, cd:1.0 },
   house:      { name:'Casa',          emoji:'🏠', hp:600,  size:40, cost:{wood:50}, build:12, req:[], pop:5 },
   barracks:   { name:'Cuartel',       emoji:'🛡️', hp:1200, size:54, cost:{wood:150}, build:20, req:[] },
-  range:      { name:'Galería de Tiro',emoji:'🎯', hp:1200, size:54, cost:{wood:175}, build:22, req:['barracks'] },
-  stable:     { name:'Establo',       emoji:'🐴', hp:1200, size:54, cost:{wood:175}, build:22, req:['barracks'] },
+  // Permisos por Era (pedido explícito): en la Era Inicial no tiene sentido
+  // poder construir de entrada TODOS los edificios militares — Galería y
+  // Establo quedan deshabilitados hasta la Era de las Herramientas/Feudal.
+  range:      { name:'Galería de Tiro',emoji:'🎯', hp:1200, size:54, cost:{wood:175}, build:22, req:['barracks'], reqAge:2 },
+  stable:     { name:'Establo',       emoji:'🐴', hp:1200, size:54, cost:{wood:175}, build:22, req:['barracks'], reqAge:3 },
   blacksmith: { name:'Herrería',      emoji:'🔨', hp:1200, size:54, cost:{wood:150}, build:20, req:[] },
   tower:      { name:'Torre',         emoji:'🗼', hp:1800, size:46, cost:{wood:50,stone:125}, build:18, req:[],
                 atk:9, range:160, cd:0.9 },
@@ -932,7 +939,7 @@ const ECON = {
 // Mejoras de la herrería
 const UPG = {
   arrows: { name:'Flechas de Punta de Hierro', emoji:'🏹', cost:{wood:100,gold:75}, desc:'+1 atq y +1 rango a Arqueros' },
-  swords: { name:'Forja de Espadas',           emoji:'⚔️', cost:{food:100,gold:75}, desc:'+1 atq a Milicia y Caballos' },
+  swords: { name:'Forja de Espadas',           emoji:'⚔️', cost:{food:100,gold:75}, desc:'+1 atq a Milicia y Jinetes' },
   shields:{ name:'Escudos de Madera',          emoji:'🛡️', cost:{wood:100,stone:75}, desc:'+1 armadura a todas las unidades' },
   axes:   { name:'Hachas Afiladas',            emoji:'🪓', cost:{food:75,wood:75}, desc:'Aldeanos recolectan +25%' },
 };
@@ -1043,6 +1050,17 @@ let sparks = [];             // chispas cortas: recolección (madera/piedra/oro)
 let dust = [];                // polvo bajo la caballería en movimiento rápido
 let bursts = [];              // destello dorado al avanzar de Era o completar una mejora/tecnología
 let shakeT = 0, shakeMag = 0; // sacudida de cámara (solo render, nunca toca cam.x/y "de verdad")
+// Destrucción de edificios (pedido explícito: "mucho humo y que se desvanece
+// el edificio, y que luego queden como unas ruinas"): `dyingBuildings` guarda
+// una foto fija (x,y,btype,owner) del edificio justo al morir y se dibuja con
+// opacidad decreciente unos cientos de ms (fuera de `entities`, igual que
+// `corpses`); `destructSmoke` es una ráfaga de humo denso y corto; `ruins`
+// SÍ persiste el resto de la partida (no se le quita nunca, salvo el tope de
+// seguridad de abajo) — un montículo de piedra en el mismo sitio.
+let dyingBuildings = [];
+let destructSmoke = [];
+let ruins = [];
+const RUINS_MAX = 200;   // tope de seguridad (partidas larguísimas con muchos edificios perdidos)
 const unitFace = new Map(); // id → {x,y,face,walking}: animación procedural (bamboleo/volteo)
 // --- Object pools (Fase 8): evitan crear un objeto nuevo por cada disparo o
 // ping (que en combates grandes son decenas por segundo) reutilizando los
@@ -1679,13 +1697,15 @@ function applySnap(m){
   // Estado previo para reconstruir efectos puramente visuales (el cliente no
   // simula daño ni muertes): flash al bajar hp y cadáveres de unidades que
   // desaparecieron entre instantáneas.
-  const prevHp = {}, prevUnits = {}, prevTownCastle = {};
+  const prevHp = {}, prevUnits = {}, prevBuildings = {};
   for(const e of entities){
     if(e.hp!==undefined) prevHp[e.id] = e.hp;
     if(e.kind==='unit') prevUnits[e.id] = { x:e.x, y:e.y, type:e.type, owner:e.owner };
-    // Sacudida de cámara: para detectar en el cliente que un Centro Urbano/
-    // Castillo desapareció entre instantáneas (el cliente no simula muertes).
-    if(e.kind==='building' && (e.btype==='town'||e.btype==='castle')) prevTownCastle[e.id] = true;
+    // Para detectar en el cliente que un edificio desapareció entre
+    // instantáneas (el cliente no simula muertes): sacudida de cámara para
+    // Centro Urbano/Castillo, y efecto de destrucción (humo+ruinas) para
+    // cualquier edificio.
+    if(e.kind==='building') prevBuildings[e.id] = { x:e.x, y:e.y, btype:e.btype, owner:e.owner };
   }
   const prevTrained = player.stats.trained, prevLostB = player.stats.lostB + enemy.stats.lostB, prevBuilt = player.stats.built;
   // Destello dorado (Era/mejora): diff de antes/después sobre `player`/`enemy`
@@ -1724,10 +1744,15 @@ function applySnap(m){
       corpses.push({ x:u.x, y:u.y, type:u.type, owner:u.owner, face:1, t0:nowTs });
     }
   }
-  // Sacudida de cámara: un Centro Urbano/Castillo que existía antes de esta
-  // instantánea y ya no está entre las entidades vivas acaba de caer.
-  for(const id in prevTownCastle){
-    if(!liveIds.has(+id)) triggerShake(7, 0.4);
+  // Un edificio que existía antes de esta instantánea y ya no está entre las
+  // entidades vivas acaba de caer: efecto de destrucción (humo+ruinas) para
+  // cualquiera, y sacudida de cámara extra para Centro Urbano/Castillo.
+  for(const id in prevBuildings){
+    if(!liveIds.has(+id)){
+      const b = prevBuildings[id];
+      addDyingBuilding(b);
+      if(b.btype==='town' || b.btype==='castle') triggerShake(7, 0.4);
+    }
   }
   projectiles = (m.shots||[]).map(o=>({ id:o.i, x0:o.x0, y0:o.y0, x1:o.x1, y1:o.y1, t:o.t, dur:o.dur, owner:o.o, kind:o.k||'arrow' }));
   // SFX de flecha: suena cuando aparece un proyectil NUEVO respecto a la
@@ -1817,7 +1842,7 @@ function clientStartFromInit(m){
   matchNames.player = myName || 'Tú'; matchNames.enemy = sanitizeName(m.cfg.hostName) || 'Rival';
   terrain = m.terrain||[]; bridge = m.bridge||null;
   entities=[]; selection=[]; placement=null; pings=[]; frameWalls=[];
-  projectiles=[]; corpses=[]; footprints=[]; sparks=[]; dust=[]; bursts=[]; shakeT=0; unitFace.clear(); alertFlags={player:false,enemy:false}; invalidatePathGrid();
+  projectiles=[]; corpses=[]; footprints=[]; sparks=[]; dust=[]; bursts=[]; dyingBuildings=[]; destructSmoke=[]; ruins=[]; shakeT=0; unitFace.clear(); alertFlags={player:false,enemy:false}; invalidatePathGrid();
   orderMode=null; controlGroups=[[],[],[]]; for(let gi=0;gi<3;gi++) updateGroupBadge(gi);
   cam.vx=0; cam.vy=0;
   player.mods=freshMods(); enemy.mods=freshMods();
@@ -2012,7 +2037,7 @@ function applySaveObject(save){
     }
   }
   selection=[]; placement=null; pings=[]; frameWalls=[];
-  projectiles=[]; corpses=[]; footprints=[]; sparks=[]; dust=[]; bursts=[]; shakeT=0; unitFace.clear(); alertFlags={player:false,enemy:false};
+  projectiles=[]; corpses=[]; footprints=[]; sparks=[]; dust=[]; bursts=[]; dyingBuildings=[]; destructSmoke=[]; ruins=[]; shakeT=0; unitFace.clear(); alertFlags={player:false,enemy:false};
   orderMode=null;
   controlGroups = save.groups || [[],[],[]];
   for(let gi=0;gi<3;gi++) cleanControlGroup(gi);
@@ -2253,7 +2278,7 @@ function startGame(cfg){
   matchNames.player = myName || 'Tú';
   if(!inMP()) matchNames.enemy = pickAiName();   // en MP lo fija quien llama (hello/clientStartFromInit)
   entities = []; selection = []; nextId = 1; placement = null; terrain = []; bridge = null;
-  frameWalls = []; pings = []; projectiles = []; corpses = []; footprints = []; sparks = []; dust = []; bursts = []; shakeT = 0; unitFace.clear();
+  frameWalls = []; pings = []; projectiles = []; corpses = []; footprints = []; sparks = []; dust = []; bursts = []; dyingBuildings = []; destructSmoke = []; ruins = []; shakeT = 0; unitFace.clear();
   alertFlags = {player:false, enemy:false}; invalidatePathGrid();
   orderMode = null; controlGroups = [[],[],[]]; for(let gi=0;gi<3;gi++) updateGroupBadge(gi);
   cam.vx = 0; cam.vy = 0;
@@ -2731,6 +2756,10 @@ function queueUnit(b, type){
   if(net.mode==='client'){ netSend({t:'cmd', c:'train', b:b.id, u:type}); return; }
   const s = side(b.owner);
   const d = UNIT[type];
+  // Permisos por Era (Piquetero requiere Edad de las Herramientas): validado
+  // aquí (host autoritativo) y no solo en el panel, para que ni la IA ni un
+  // comando de red puedan saltárselo.
+  if(d.reqAge && s.age < d.reqAge){ if(b.owner==='player') showHint('Requiere '+AGES[d.reqAge].name+'.'); return; }
   if(popCount(b.owner) + countQueued(b.owner) >= popCap(b.owner)){ if(b.owner==='player') showHint('Población al máximo. Construye Casas o un Castillo.'); return; }
   if(!canAfford(s, d.cost)){ if(b.owner==='player') showHint('Recursos insuficientes.'); return; }
   pay(s, d.cost);
@@ -3601,6 +3630,8 @@ function update(dt){
     }
     else if(d.kind==='building'){
       own.stats.lostB++; playSfx('destroyed');
+      // Efecto de destrucción (humo + desvanecido + ruinas de piedra).
+      addDyingBuilding(d);
       // Sacudida de cámara (pedido explícito de efectos visuales): solo para
       // los edificios "grandes" (Centro Urbano/Castillo), un momento que
       // define la partida — no se dispara por cualquier edificio menor para
@@ -4110,6 +4141,7 @@ function enemyAI(dt){
     const ang=Math.random()*Math.PI*2, rad=150+Math.random()*120;
     const nb = makeBuilding('enemy', btype, clamp(town.x+Math.cos(ang)*rad,40,WORLD.w-40), clamp(town.y+Math.sin(ang)*rad,40,WORLD.h-40), false);
     entities.push(nb);
+    rebuildIndex();   // si no, `find(nb.id)` no la encuentra al siguiente cuadro y el constructor la abandona
     builder.state='build'; builder.build=nb.id;
     return true;
   }
@@ -4128,11 +4160,41 @@ function enemyAI(dt){
     else if(buildNew('barracks')) {}
     else if(buildNew('range')) {}
     else if(buildNew('stable')) {}
+    // Herrería (Normal/Difícil): imprescindible para poder investigar las
+    // mejoras de la herrería (`buyUpgrade`) más abajo.
+    else if(D.upgrades && buildNew('blacksmith')) {}
     else if(D.econ && countBuildings('enemy','farm')<2 && buildNew('farm',true)) {}
     else if(D.econ && !hasBuilding('enemy','goldmine',false) && buildNew('goldmine',true)) {}
     else if(D.tower && countBuildings('enemy','tower')<(difficulty==='hard'?3:1) && buildNew('tower',true)) {}
     else if(D.castle && enemy.age>=3 && buildNew('castle')) {}
     else if(D.siege && enemy.age>=3 && buildNew('siegeworkshop')) {}
+  }
+
+  // --- TECNOLOGÍAS Y MEJORAS (Normal/Difícil, pedido explícito: "no hace
+  // mejoras de unidades") — mismas funciones que usa el jugador
+  // (`buyUpgrade`/`buyLineTier`/`buyEcon`), una compra por tipo y por tick
+  // como mucho, solo si sobran recursos tras lo de arriba.
+  if(D.upgrades){
+    if(hasBuilding('enemy','blacksmith')){
+      for(const k of ['arrows','swords','shields','axes']){
+        if(!enemy.upg[k] && canAfford(enemy, UPG[k].cost)){ buyUpgrade('enemy', k); break; }
+      }
+    }
+    for(const cat of ['infantry','pike','archer','cavalry']){
+      const line = UNIT_LINES[cat];
+      for(let i=0;i<line.tiers.length;i++){
+        const t = line.tiers[i];
+        if(enemy.upg[t.key]) continue;
+        if(i===0 || enemy.upg[line.tiers[i-1].key]){
+          if(enemy.age>=t.reqAge && canAfford(enemy, t.cost)) buyLineTier('enemy', cat, i);
+        }
+        break;
+      }
+    }
+    for(const res of ['food','wood','gold','stone']){
+      const nx = nextEcon('enemy', res);
+      if(nx && enemy.age>=nx.tier.reqAge && canAfford(enemy, nx.tier.cost)) buyEcon('enemy', res, nx.idx);
+    }
   }
 
   // --- PRODUCCIÓN MILITAR ---
@@ -4178,17 +4240,20 @@ const DOCTRINE = {
   // FÁCIL: economía mínima, solo Milicia, ataca SIEMPRE el Centro Urbano, oleadas
   // grandes y lentas. Sin economía avanzada, torres ni castillos.
   easy:   { tick:7, ageTarget:2, maxVills:8,  econ:false, tower:false, castle:false, heroes:false, siege:false,
-            minArmy:9, waveCd:75, target:'town' },
+            upgrades:false, minArmy:9, waveCd:75, target:'town' },
   // NORMAL: avanza a Era III, construye granjas/minas y torres, ejército variado,
-  // ataca el edificio o la unidad MÁS CERCANA (presiona el frente) y se defiende.
+  // ataca el edificio o la unidad MÁS CERCANA (presiona el frente), se defiende
+  // y AHORA investiga mejoras de herrería/línea de unidad/economía como un
+  // jugador real (`upgrades:true`).
   normal: { tick:5, ageTarget:3, maxVills:12, econ:true,  tower:true,  castle:false, heroes:false, siege:false,
-            minArmy:7, waveCd:55, target:'nearest' },
-  // DIFÍCIL: llega a Era Imperial, economía completa, torres, castillo, HÉROES y
-  // ASEDIO (Fase 5: 1-2 catapultas cuando el jugador levanta murallas). Objetivos
+            upgrades:true, minArmy:7, waveCd:55, target:'nearest' },
+  // DIFÍCIL: llega a Era Imperial, economía completa, torres, castillo, HÉROES,
+  // ASEDIO (Fase 5: 1-2 catapultas cuando el jugador levanta murallas) y TODAS
+  // las mejoras (herrería, línea de unidad, tecnologías económicas). Objetivos
   // ESTRATÉGICOS: primero neutraliza defensas (torres/castillo), luego arrasa la
   // economía (aldeanos y edificios de producción) y por último el Centro.
   hard:   { tick:3, ageTarget:4, maxVills:16, econ:true,  tower:true,  castle:true,  heroes:true,  siege:true,
-            minArmy:5, waveCd:38, target:'strategic' },
+            upgrades:true, minArmy:5, waveCd:38, target:'strategic' },
 };
 
 // Elige el objetivo de una oleada según la doctrina.
@@ -4245,6 +4310,7 @@ function render(){
   ctx.fillStyle=(MAPS[mapTheme]&&MAPS[mapTheme].ground)||'#1a1d16'; ctx.fillRect(0,0,viewW(),viewH());
   drawGround();
   drawTerrain();
+  drawRuins();
   drawFootprints();
   drawDust();
   drawCorpses();
@@ -4258,10 +4324,12 @@ function render(){
   sorted.sort((a,b)=>a.y-b.y);
   for(const e of sorted){ if(e.kind==='resource') drawResource(e); }
   for(const e of sorted){ if(e.kind==='building') drawBuilding(e); }
+  drawDyingBuildings();
   for(const e of sorted){ if(e.kind==='unit') drawUnit(e); }
   drawProjectiles();
   drawSparks();
   drawBursts();
+  drawDestructSmoke();
   drawFogOverlay();   // capa de niebla sobre todo lo anterior (terreno+entidades)
   drawTutorialTarget();   // Fase 6: anillo pulsante sobre el objetivo del paso actual del tutorial
 
@@ -5055,6 +5123,97 @@ function drawDust(){
   }
 }
 
+// --- Destrucción de edificios: humo denso + desvanecido + ruinas persistentes
+// (pedido explícito de efectos visuales). `addDyingBuilding(d)` se llama justo
+// al morir un edificio (host/partida local en el bucle de "muertos" de
+// `update()`, cliente MP por diff de snapshot en `applySnap`) con la entidad
+// YA sin vida — solo lee x/y/btype/owner, así que también sirve con el objeto
+// "plano" que reconstruye el cliente MP a partir del snapshot anterior.
+const DYING_BLD_LIFE = 650;   // ms de desvanecido antes de dejar solo las ruinas
+function addDyingBuilding(d){
+  dyingBuildings.push({ x:d.x, y:d.y, btype:d.btype, owner:d.owner, t0:performance.now() });
+  addDestructSmoke(d.x, d.y, BLD[d.btype].size);
+  if(ruins.length>=RUINS_MAX) ruins.shift();
+  ruins.push({ x:d.x, y:d.y, size:BLD[d.btype].size, stones:genRuinStones() });
+}
+function drawDyingBuildings(){
+  const now=performance.now();
+  for(let i=dyingBuildings.length-1;i>=0;i--){
+    const b=dyingBuildings[i], age=now-b.t0;
+    if(age>=DYING_BLD_LIFE){ const last=dyingBuildings.length-1; if(i!==last) dyingBuildings[i]=dyingBuildings[last]; dyingBuildings.pop(); continue; }
+    if(!onScreen(b)) continue;
+    const d=BLD[b.btype]; if(!d) continue;
+    const s=worldToScreen(b.x,b.y);
+    const box=d.size*(d.wall?1.15:BLD_VIS_SCALE)*cam.zoom;
+    const f=age/DYING_BLD_LIFE;
+    const spriteName = b.btype==='town' ? townSpriteName(b.owner) : (d.gate?'bld_wall':'bld_'+b.btype);
+    ctx.globalAlpha = 1-f;
+    if(!drawSprite(spriteName, s.x, s.y-f*10*cam.zoom, box, false)){
+      ctx.font=`${Math.floor(d.size*0.55*cam.zoom)}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(d.emoji, s.x, s.y);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+// Ráfaga de humo denso al caer un edificio: varias bocanadas oscuras
+// escalonadas (`t0` futuro por partícula) que suben y se disipan más lento y
+// más grande que el humo continuo de `drawDamageFx` (edificio ya dañado).
+function addDestructSmoke(x, y, size){
+  const n = 12;
+  for(let i=0;i<n;i++){
+    const ang=Math.random()*Math.PI*2, rad=Math.random()*size*0.35;
+    destructSmoke.push({
+      x:x+Math.cos(ang)*rad, y:y+Math.sin(ang)*rad,
+      t0:performance.now()+i*35, life:900+Math.random()*500,
+      size:size*(0.32+Math.random()*0.3),
+    });
+  }
+}
+function drawDestructSmoke(){
+  const now=performance.now();
+  for(let i=destructSmoke.length-1;i>=0;i--){
+    const p=destructSmoke[i], age=now-p.t0;
+    if(age<0) continue;   // todavía no le toca (escalonado)
+    if(age>=p.life){ const last=destructSmoke.length-1; if(i!==last) destructSmoke[i]=destructSmoke[last]; destructSmoke.pop(); continue; }
+    const f=age/p.life;
+    const s=worldToScreen(p.x, p.y-f*44);
+    if(s.x<-40||s.x>viewW()+40||s.y<-40||s.y>viewH()+40) continue;
+    const r=(p.size*0.5+f*p.size*0.9)*cam.zoom;
+    ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI*2);
+    ctx.fillStyle=`rgba(35,34,32,${0.6*(1-f)})`;
+    ctx.fill();
+  }
+}
+// Ruinas: montículo de piedras irregulares (procedural, sin sprite propio)
+// que queda en el sitio del edificio destruido — persiste el resto de la
+// partida. `genRuinStones` fija la disposición una sola vez al crearse.
+const RUIN_GRAYS = ['#6b6b64','#5a5a54','#807a6e','#4d4d48','#767065'];
+function genRuinStones(){
+  const n = 6+Math.floor(Math.random()*4);
+  const arr=[];
+  for(let i=0;i<n;i++){
+    const ang=Math.random()*Math.PI*2, rad=Math.random()*0.3;
+    arr.push({ dx:Math.cos(ang)*rad, dy:Math.sin(ang)*rad*0.55, rx:0.13+Math.random()*0.12, ry:0.09+Math.random()*0.07,
+      rot:Math.random()*Math.PI, c:RUIN_GRAYS[i%RUIN_GRAYS.length] });
+  }
+  return arr;
+}
+function drawRuins(){
+  for(const r of ruins){
+    if(!onScreen(r)) continue;
+    const s=worldToScreen(r.x,r.y);
+    const box=r.size*BLD_VIS_SCALE*cam.zoom*0.62;
+    ctx.beginPath(); ctx.ellipse(s.x, s.y+box*0.08, box*0.5, box*0.4, 0, 0, Math.PI*2);
+    ctx.fillStyle='rgba(0,0,0,.2)'; ctx.fill();
+    for(const st of r.stones){
+      ctx.beginPath();
+      ctx.ellipse(s.x+st.dx*box, s.y+st.dy*box, st.rx*box, st.ry*box, st.rot, 0, Math.PI*2);
+      ctx.fillStyle=st.c; ctx.fill();
+      ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.lineWidth=1; ctx.stroke();
+    }
+  }
+}
+
 // --- Chispas cortas: recolección (madera/piedra/oro/comida) e impacto cuerpo
 // a cuerpo. Un puñado de partículas que saltan desde el punto de contacto y
 // caen con un arco simple (mismo truco de "falso eje Z" que ya usan las
@@ -5820,16 +5979,20 @@ function buildingButtons(b){
     }
   }
   else if(b.btype==='barracks'){
+    // Permisos por Era (pedido explícito): en la Era Inicial solo Milicia;
+    // el Piquetero se habilita en la Era de las Herramientas (`UNIT.pike.reqAge`).
     for(const t of ['infantry','pike']){ const d=UNIT[t];
-      actionsEl.appendChild(btnEl(d.name, costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,t), 'unit_'+t)); }
+      const ageOk = !d.reqAge || player.age>=d.reqAge;
+      const sub = ageOk ? costStr(d.cost) : AGES[d.reqAge].name;
+      actionsEl.appendChild(btnEl(d.name, sub, '', ageOk&&canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,t), 'unit_'+t)); }
     appendLineTierButtons(['infantry','pike']);
   }
   else if(b.btype==='range'){ const d=UNIT.archer;
-    actionsEl.appendChild(btnEl('Arquero', costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'archer'), 'unit_archer'));
+    actionsEl.appendChild(btnEl(d.name, costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'archer'), 'unit_archer'));
     appendLineTierButtons(['archer']);
   }
   else if(b.btype==='stable'){ const d=UNIT.cavalry;
-    actionsEl.appendChild(btnEl('Caballo', costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'cavalry'), 'unit_cavalry'));
+    actionsEl.appendChild(btnEl(d.name, costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,'cavalry'), 'unit_cavalry'));
     appendLineTierButtons(['cavalry']);
   }
   else if(b.btype==='siegeworkshop'){ const d=UNIT.siege;
@@ -6525,7 +6688,16 @@ document.getElementById('btnQuickHelpClose').addEventListener('click', ()=>{
 // fracción simbólica de la barra, sin bloquear nada. Tope de tiempo
 // (`LOAD_MAX_MS`) para que un fallo de red nunca deje al jugador atascado en
 // la pantalla de carga.
-const LOAD_MAX_MS = 4000;
+// Bajado a un tope algo mayor (antes 4000): ahora la barra también espera a
+// los PNG sueltos de "siempre precargar" (`ALWAYS_LOOSE`, pesan más al no
+// recomprimirse — feedback de juego real: "no le reduzcas calidad").
+const LOAD_MAX_MS = 7000;
+// Sprites que se excluyeron A PROPÓSITO del atlas compartido (necesitan su
+// resolución completa: el Centro Urbano se ve muy grande en pantalla y el
+// atlas los recomprimía a 240px, perdiendo calidad frente al resto de
+// edificios). Se precargan SIEMPRE como PNG suelto, aunque el atlas cargue
+// bien, para que no aparezca el respaldo "temporal" mientras llegan por red.
+const ALWAYS_LOOSE = ['bld_town','bld_town_age2','bld_town_age3','bld_town_age4'];
 function setLoadProgress(frac){
   const fill=document.getElementById('loadBarFill'), pct=document.getElementById('loadPct');
   const p = Math.round(clamp(frac,0,1)*100);
@@ -6544,20 +6716,37 @@ function bootLoad(){
     setLoadProgress(1);
     hideLoadScreen();
   }
+  // Precarga `names` como PNG suelto y mueve la barra de `baseFrac` a
+  // `baseFrac+span` según cuántos ya estén listos; termina solo cuando
+  // TODOS lo están (o al tope de tiempo general, ver abajo).
+  function waitLoose(names, baseFrac, span){
+    for(const n of names) ensureLooseSprite(n);
+    const total = names.length;
+    if(!total){ finish(); return; }
+    pollHandle = setInterval(()=>{
+      const done = names.filter(n=> sprites[n] && sprites[n].ready).length;
+      setLoadProgress(baseFrac + span*(done/total));
+      if(done>=total) finish();
+    }, 80);
+  }
   setLoadProgress(0.05);
   loadAtlas((ok)=>{
     if(finished) return;
-    if(ok){ setLoadProgress(0.95); finish(); return; }
-    // Atlas no disponible: recae en los PNG sueltos (los pedimos todos ahora,
+    if(ok){
+      // Camino feliz: el atlas cubre casi todo, pero el Centro Urbano se
+      // excluyó a propósito (necesita más resolución de la que el atlas
+      // ofrece) — sin esto, aparecía el respaldo "temporal" mientras
+      // llegaba por red la primera vez que se dibujaba (feedback de juego
+      // real: "a veces no alcanza a cargar la imagen").
+      setLoadProgress(0.5);
+      waitLoose(ALWAYS_LOOSE, 0.5, 0.45);
+      return;
+    }
+    // Atlas no disponible: recae en TODOS los PNG sueltos (los pedimos ahora,
     // en vez de perezosos, para que la barra tenga sentido y el juego
     // arranque con los sprites ya listos en vez de ir apareciendo en marcha).
-    for(const n of SPRITE_FILES) ensureLooseSprite(n);
-    const total = SPRITE_FILES.length;
-    pollHandle = setInterval(()=>{
-      const done = SPRITE_FILES.filter(n=> sprites[n] && sprites[n].ready).length;
-      setLoadProgress(0.1 + 0.85*(done/total));
-      if(done>=total) finish();
-    }, 80);
+    setLoadProgress(0.1);
+    waitLoose(SPRITE_FILES, 0.1, 0.85);
   });
   setTimeout(finish, LOAD_MAX_MS);
 }
