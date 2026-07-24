@@ -182,6 +182,26 @@
   .panelHead h1{ margin:0; font-size:19px; flex:1; text-align:left; }
   #joinIp{ flex:2 1 auto; min-width:180px; min-height:44px; border-radius:10px; border:1px solid var(--line);
     background:#0c0d10; color:var(--txt); padding:0 10px; font-size:16px; }
+  .nameRow{ display:flex; align-items:center; gap:8px; padding:0 2px 4px; }
+  .nameRow .nameIcon{ font-size:18px; }
+  .nameRow input, #chatInput{ flex:1; min-height:40px; border-radius:10px; border:1px solid var(--line);
+    background:#0c0d10; color:var(--txt); padding:0 10px; font-size:15px; }
+  /* Vista previa pasiva del tutorial (10 frames animados) */
+  #tpFrame{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:14px 6px 4px; }
+  #tpIconWrap{ width:96px; height:96px; border-radius:50%; flex:none;
+    background:radial-gradient(circle at 40% 35%, #2a2f3a, #14161a); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; }
+  #tpIcon{ font-size:46px; display:inline-block; }
+  #tpIcon.tpBounce{ animation:tpBounce 1s ease-in-out infinite; }
+  #tpIcon.tpPulse{ animation:tpPulse 1.1s ease-in-out infinite; }
+  #tpIcon.tpSlide{ animation:tpSlide 1.2s ease-in-out infinite; }
+  @keyframes tpBounce{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+  @keyframes tpPulse{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.18)} }
+  @keyframes tpSlide{ 0%,100%{transform:translateX(-10px)} 50%{transform:translateX(10px)} }
+  #tpText{ color:var(--txt); font-size:14px; line-height:1.5; text-align:center; margin:0; min-height:44px; }
+  #tpDots{ display:flex; justify-content:center; gap:6px; margin-top:4px; }
+  #tpDots span{ width:7px; height:7px; border-radius:50%; background:#3a3f47; display:inline-block; }
+  #tpDots span.on{ background:var(--accent); }
   #endStats{ width:100%; border-collapse:collapse; margin:6px 0 16px; font-size:14px; }
   #endStats th,#endStats td{ padding:7px 10px; border-bottom:1px solid var(--line); text-align:right; }
   #endStats th:first-child,#endStats td:first-child{ text-align:left; color:var(--muted); font-weight:500; }
@@ -206,6 +226,26 @@
   #btnMiniToggle{ position:relative; width:44px; height:44px; border-radius:22px; background:#1b1e24cc;
     border:1px solid var(--line); color:var(--txt); font-size:17px; display:flex; align-items:center;
     justify-content:center; }
+  /* Barra de puntaje en vivo (esquina inferior-derecha, sobre el minimapa) */
+  #scoreBoard{ display:flex; flex-direction:column; gap:3px; background:#1b1e24cc; border:1px solid var(--line);
+    border-radius:8px; padding:6px 9px; min-width:150px; box-shadow:0 2px 10px #0008; }
+  #scoreBoard.hidden{ display:none; }
+  .sbRow{ display:flex; align-items:center; gap:6px; font-size:12px; }
+  .sbDot{ width:9px; height:9px; border-radius:50%; flex:none; }
+  .sbRow.me .sbDot{ background:#6fa8ff; }
+  .sbRow.foe .sbDot{ background:#ff6f6f; }
+  .sbName{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--txt); }
+  .sbScore{ font-weight:700; color:var(--accent); font-variant-numeric:tabular-nums; }
+  /* Chat (solo multijugador) */
+  #chatPanel{ position:fixed; left:8px; bottom:70px; z-index:12; width:min(280px,72vw);
+    background:#1b1e24ee; border:1px solid var(--line); border-radius:10px; padding:8px;
+    box-shadow:0 2px 10px #0008; }
+  #chatPanel.hidden{ display:none; }
+  #chatLog{ max-height:160px; overflow-y:auto; font-size:12.5px; display:flex; flex-direction:column; gap:3px; }
+  .chatLine{ word-break:break-word; color:var(--txt); }
+  .chatLine b{ color:#8fb8ff; }
+  .chatLine.mine b{ color:#ffd75e; }
+  #chatPanel input{ flex:1; min-width:0; }
   /* Botón temporal de alerta de ataque ("⚔️ ir al ataque") en #util */
   #btnAlert{ display:none; }
   #btnAlert.show{ display:flex; border-color:var(--bad); animation:alertPulse 1s infinite; }
@@ -265,6 +305,16 @@
   <div class="ub" id="btnSound" title="Sonido">🔊</div>
   <div class="ub" id="btnSave" title="Guardar / cargar">💾</div>
   <div class="ub" id="btnSettings" title="Ajustes">⚙️</div>
+  <div class="ub hidden" id="btnChat" title="Chat">💬<span class="badge hidden" id="chatBadge">•</span></div>
+</div>
+
+<!-- Chat (solo multijugador): mensajes de texto entre los dos jugadores. -->
+<div id="chatPanel" class="hidden">
+  <div id="chatLog"></div>
+  <div class="row" style="gap:6px; margin-top:6px">
+    <input id="chatInput" maxlength="140" autocomplete="off" placeholder="Escribe un mensaje…">
+    <button class="btn" id="btnChatSend">Enviar</button>
+  </div>
 </div>
 
 <div id="hint" class="hidden"></div>
@@ -299,8 +349,38 @@
   </div>
 </div>
 
+<!-- Vista previa pasiva del tutorial (botón "🎬 Ver tutorial" del menú): 10
+     frames con un icono animado + una frase corta, SIN depender de una
+     partida en curso — a diferencia del tutorial guiado de 10 pasos (Fase 6),
+     que exige jugar de verdad para avanzar. Pensado para que un jugador
+     nuevo entienda las acciones básicas antes de empezar (feedback de juego
+     real: "las instrucciones están complicadas de entender"). -->
+<div id="tutPreviewScreen" class="overlay hidden">
+  <div class="card" style="width:min(420px,94vw)">
+    <h1>🎬 Cómo se juega</h1>
+    <div id="tpFrame">
+      <div id="tpIconWrap"><span id="tpIcon">👷</span></div>
+      <p id="tpText"></p>
+    </div>
+    <div id="tpDots"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="tpPrev">⬅ Anterior</button>
+      <button class="btn" id="tpNext">Siguiente ➡</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn big" id="tpClose">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Minimapa: terreno+niebla+unidades en miniatura; toca/arrastra para mover la cámara -->
 <div id="minimapWrap">
+  <!-- Barra de puntaje en vivo: nombres de los dos jugadores + puntuación
+       que se va actualizando durante toda la partida (esquina inf. derecha). -->
+  <div id="scoreBoard">
+    <div class="sbRow me"><span class="sbDot"></span><span class="sbName" id="sbNameP">Tú</span><span class="sbScore" id="sbScoreP">0</span></div>
+    <div class="sbRow foe"><span class="sbDot"></span><span class="sbName" id="sbNameE">Rival</span><span class="sbScore" id="sbScoreE">0</span></div>
+  </div>
   <canvas id="minimap" width="160" height="92"></canvas>
   <div class="ub" id="btnMiniToggle" title="Minimapa">🗺️</div>
 </div>
@@ -343,6 +423,10 @@
       <div class="gameSubtitle">RTS táctico en tiempo real — para iPad</div>
     </div>
     <div class="titleMenu">
+      <div class="nameRow">
+        <span class="nameIcon">🎖️</span>
+        <input id="myNameInput" maxlength="16" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Tu alias (opcional)">
+      </div>
       <div class="opt hidden" id="continueRow">
         <button class="bigMenuBtn continue" id="btnContinue">
           <span class="bmIcon">▶</span>
@@ -360,6 +444,10 @@
       <button class="bigMenuBtn" id="btnGoLoad">
         <span class="bmIcon">💾</span>
         <span class="bmLabel">Partidas guardadas<br><small>3 ranuras locales</small></span>
+      </button>
+      <button class="bigMenuBtn" id="btnGoTutPreview">
+        <span class="bmIcon">🎬</span>
+        <span class="bmLabel">Ver tutorial<br><small>10 pasos animados, sin jugar</small></span>
       </button>
       <button class="bigMenuBtn" id="btnSettingsMenu">
         <span class="bmIcon">⚙️</span>
@@ -389,6 +477,15 @@
         <button class="opt-b" data-val="cliffs"><span class="obIcon">⛰️</span><span class="obLabel">Riscos</span></button>
       </div>
       <div class="opt-desc" id="mapDesc"></div>
+    </div>
+
+    <div class="opt" data-opt="mapSize">
+      <div class="opt-title">📐 Tamaño de mapa</div>
+      <div class="opt-row">
+        <button class="opt-b" data-val="small"><span class="obIcon">🔹</span><span class="obLabel">Pequeño</span></button>
+        <button class="opt-b" data-val="large"><span class="obIcon">🔷</span><span class="obLabel">Grande</span></button>
+        <button class="opt-b" data-val="huge"><span class="obIcon">🟦</span><span class="obLabel">Enorme</span></button>
+      </div>
     </div>
 
     <div class="opt" data-opt="res">
@@ -601,19 +698,32 @@
    ========================================================================= */
 
 // ---------- Configuración / definiciones de datos ----------
-const WORLD = { w: 2600, h: 1500 };
+// Tamaño de mapa (menú principal): WORLD se escala sobre esta base según
+// `gameConfig.mapSize` (ver `applyMapSize`). `const WORLD` sigue siendo el
+// MISMO objeto siempre (solo se mutan `.w`/`.h`), así que el resto del código
+// que lee `WORLD.w`/`WORLD.h` no necesita cambios.
+const BASE_WORLD = { w: 2600, h: 1500 };
+const MAP_SIZE_MULT = { small:1, large:1.5, huge:2 };
+const WORLD = { w: BASE_WORLD.w, h: BASE_WORLD.h };
 const POP_MAX = 200;        // tope absoluto de población
 const BONUS = 2;            // multiplicador de daño contra la presa ideal
 const AGGRO = 130;          // radio de auto-defensa de unidades militares
 const AMOVE_RANGE = 150;    // radio de auto-aggro continuo durante ataque-mover
 const MAX_AGE = 4;
 
-// Niebla de guerra: rejilla ~40px/celda sobre todo el mundo (65×38 celdas).
+// Niebla de guerra: rejilla ~40px/celda sobre todo el mundo. `FOG_COLS`/
+// `FOG_ROWS` son `let` (no `const`) porque `applyMapSize` los recalcula
+// cuando cambia el tamaño de mapa elegido en el menú.
 const FOG_CELL = 40;
-const FOG_COLS = Math.ceil(WORLD.w/FOG_CELL);   // 65
-const FOG_ROWS = Math.ceil(WORLD.h/FOG_CELL);   // 38
+let FOG_COLS = Math.ceil(WORLD.w/FOG_CELL);   // 65 en mapa pequeño
+let FOG_ROWS = Math.ceil(WORLD.h/FOG_CELL);   // 38 en mapa pequeño
 const VISION_UNIT = 180;    // radio de visión de una unidad
 const VISION_BLD   = 220;   // radio de visión de un edificio
+// Radio máximo (Fase "aldeanos no se regalan al enemigo") en el que un
+// aldeano inactivo busca una fuente de recurso nueva por sí mismo al agotar
+// la suya; más allá de esto se queda quieto en vez de alejarse hacia zonas
+// peligrosas. ~5 casillas del tablero (`FOG_CELL`).
+const IDLE_GATHER_RADIUS = FOG_CELL*5;
 
 // FASE 9 — Vista de tablero: los EDIFICIOS se colocan encajados en la misma
 // rejilla que ya usan niebla/pathfinding/minimapa (FOG_CELL=40px), para que se
@@ -708,43 +818,45 @@ const UNIT_LINES = {
 };
 
 // Definición de edificios. `pop` = población que aporta; `reqAge` = era mínima.
+// Vida de todos los edificios ×2 (feedback de juego real: "está siendo muy
+// fácil destruirlos") — aplicado directamente sobre los valores base de abajo.
 const BLD = {
   // El Centro Urbano se defiende solo (auto-disparo, feedback de juego real):
   // antes no tenía `atk` y no podía hacer nada contra un ataque directo.
-  town:       { name:'Centro Urbano', emoji:'🏛️', hp:1200, size:70, cost:{}, build:0, pop:20,
+  town:       { name:'Centro Urbano', emoji:'🏛️', hp:2400, size:70, cost:{}, build:0, pop:20,
                 atk:11, range:170, cd:1.0 },
-  house:      { name:'Casa',          emoji:'🏠', hp:300,  size:40, cost:{wood:50}, build:12, req:[], pop:5 },
-  barracks:   { name:'Cuartel',       emoji:'🛡️', hp:600,  size:54, cost:{wood:150}, build:20, req:[] },
-  range:      { name:'Galería de Tiro',emoji:'🎯', hp:600,  size:54, cost:{wood:175}, build:22, req:['barracks'] },
-  stable:     { name:'Establo',       emoji:'🐴', hp:600,  size:54, cost:{wood:175}, build:22, req:['barracks'] },
-  blacksmith: { name:'Herrería',      emoji:'🔨', hp:600,  size:54, cost:{wood:150}, build:20, req:[] },
-  tower:      { name:'Torre',         emoji:'🗼', hp:900,  size:46, cost:{wood:50,stone:125}, build:18, req:[],
+  house:      { name:'Casa',          emoji:'🏠', hp:600,  size:40, cost:{wood:50}, build:12, req:[], pop:5 },
+  barracks:   { name:'Cuartel',       emoji:'🛡️', hp:1200, size:54, cost:{wood:150}, build:20, req:[] },
+  range:      { name:'Galería de Tiro',emoji:'🎯', hp:1200, size:54, cost:{wood:175}, build:22, req:['barracks'] },
+  stable:     { name:'Establo',       emoji:'🐴', hp:1200, size:54, cost:{wood:175}, build:22, req:['barracks'] },
+  blacksmith: { name:'Herrería',      emoji:'🔨', hp:1200, size:54, cost:{wood:150}, build:20, req:[] },
+  tower:      { name:'Torre',         emoji:'🗼', hp:1800, size:46, cost:{wood:50,stone:125}, build:18, req:[],
                 atk:9, range:160, cd:0.9 },
-  castle:     { name:'Castillo',      emoji:'🏰', hp:2800, size:74, cost:{stone:400,gold:200}, build:42, req:[],
+  castle:     { name:'Castillo',      emoji:'🏰', hp:5600, size:74, cost:{stone:400,gold:200}, build:42, req:[],
                 pop:50, atk:16, range:210, cd:0.7, reqAge:3 },
   // Edificios de producción: los aldeanos recolectan de ellos (renovable).
-  farm:       { name:'Granja',        emoji:'🌾', hp:200,  size:44, cost:{wood:60}, build:14, req:[], produces:'food' },
-  goldmine:   { name:'Mina de Oro',   emoji:'⛏️', hp:280,  size:46, cost:{wood:100}, build:18, req:[], produces:'gold' },
-  quarry:     { name:'Mina de Piedra',emoji:'🪨', hp:280,  size:46, cost:{wood:100}, build:18, req:[], produces:'stone' },
-  lumbercamp: { name:'Bosquero',      emoji:'🌲', hp:200,  size:44, cost:{wood:40}, build:14, req:[], plants:true },
+  farm:       { name:'Granja',        emoji:'🌾', hp:400,  size:44, cost:{wood:60}, build:14, req:[], produces:'food' },
+  goldmine:   { name:'Mina de Oro',   emoji:'⛏️', hp:560,  size:46, cost:{wood:100}, build:18, req:[], produces:'gold' },
+  quarry:     { name:'Mina de Piedra',emoji:'🪨', hp:560,  size:46, cost:{wood:100}, build:18, req:[], produces:'stone' },
+  lumbercamp: { name:'Bosquero',      emoji:'🌲', hp:400,  size:44, cost:{wood:40}, build:14, req:[], plants:true },
   // Murallas (se colocan con la herramienta de muralla, no en el menú normal).
-  wall:       { name:'Muralla',       emoji:'🧱', hp:700,  size:30, cost:{stone:5},  build:5, req:[], wall:true },
+  wall:       { name:'Muralla',       emoji:'🧱', hp:1400, size:30, cost:{stone:5},  build:5, req:[], wall:true },
   // Coste y tiempo de mejora IGUALES a los de una Torre real (feedback de
   // juego real: antes costaba solo 20 piedra y se convertía al instante, así
   // que una muralla de 5 tramos sacaba 5 Torres de Muralla casi gratis y sin
   // esperar — ventaja excesiva). Ver `upgradeWallToTower`: ahora paga este
   // coste y tarda `build` segundos en convertirse (progreso real, no instante).
-  wall_tower: { name:'Torre de Muralla',emoji:'🏯',hp:1100, size:38, cost:{wood:50,stone:125}, build:18, req:[], wall:true,
+  wall_tower: { name:'Torre de Muralla',emoji:'🏯',hp:2200, size:38, cost:{wood:50,stone:125}, build:18, req:[], wall:true,
                 atk:8, range:155, cd:1.0 },
   // Puerta (Fase 4): tramo central de una muralla trazada de ≥3 tramos. Deja
   // pasar a las unidades PROPIAS y bloquea a las rivales SIEMPRE (como una
   // muralla normal); si se cierra manualmente (`b.closed`), bloquea a todos,
   // incluido el dueño. HP menor que la Torre de Muralla.
-  gate:       { name:'Puerta',        emoji:'🚪', hp:600,  size:34, cost:{stone:12}, build:7, req:[], wall:true, gate:true },
+  gate:       { name:'Puerta',        emoji:'🚪', hp:1200, size:34, cost:{stone:12}, build:7, req:[], wall:true, gate:true },
   // Fase 5: Taller de Asedio (entrena Catapultas, req. Cuartel + Era Feudal) y
   // Mercado (intercambia recursos por oro, req. Era de las Herramientas).
-  siegeworkshop: { name:'Taller de Asedio', emoji:'🏭', hp:650, size:56, cost:{wood:200,stone:50}, build:26, req:['barracks'], reqAge:3 },
-  market:        { name:'Mercado',          emoji:'🏪', hp:500, size:50, cost:{wood:150}, build:20, req:[], reqAge:2 },
+  siegeworkshop: { name:'Taller de Asedio', emoji:'🏭', hp:1300, size:56, cost:{wood:200,stone:50}, build:26, req:['barracks'], reqAge:3 },
+  market:        { name:'Mercado',          emoji:'🏪', hp:1000, size:50, cost:{wood:150}, build:20, req:[], reqAge:2 },
 };
 
 // Guarnición (Fase 5): torres/castillo aceptan arqueros (más flechas por
@@ -819,7 +931,33 @@ const MAPS = {
   cliffs:  { name:'Riscos',      ground:'#2e2a22' },
 };
 // Configuración elegida en el menú (valores por defecto).
-const gameConfig = { map:'plains', res:'standard', speed:'normal', diff:'normal', pos:'left', peace:'0', garrison:'off' };
+const gameConfig = { map:'plains', res:'standard', speed:'normal', diff:'normal', pos:'left', peace:'0', garrison:'off', mapSize:'small' };
+
+// --- Alias del jugador y nombre de la IA ---
+// Sin caracteres especiales ni inyección: solo letras (con acentos/ñ),
+// números y espacios, tope de 16 caracteres. Se persiste en localStorage.
+const NAME_KEY = 'imperios_name';
+const NAME_MAX = 16;
+function sanitizeName(raw){
+  if(!raw) return '';
+  return String(raw).normalize('NFC').replace(/[^\p{L}\p{N} ]/gu, '').trim().slice(0, NAME_MAX);
+}
+let myName = sanitizeName(localStorage.getItem(NAME_KEY) || '');
+function setMyName(raw){
+  myName = sanitizeName(raw);
+  try{ localStorage.setItem(NAME_KEY, myName); }catch(_){}
+}
+// Nombres graciosos para la IA en partidas de 1 jugador (nunca en MP: ahí el
+// "rival" es el nombre real del otro jugador humano).
+const FUNNY_AI_NAMES = [
+  'BarbaRosa','JuanaLaCuerda','GuillermoElComelón','RodrigoPataDePalo','MartaTresQuesos',
+  'OsvaldoElTerrible','CleotildeHachazos','PepeElMadrugador','DoñaAsfaltoDuro','FelipeSinMiedo',
+  'LaGorgojaFeroz','TiburcioMazorca','ReinaChicharrónIV','NorbertoElLento','AgripinaCienBatallas',
+];
+function pickAiName(){ return FUNNY_AI_NAMES[Math.floor(Math.random()*FUNNY_AI_NAMES.length)]; }
+// Nombres mostrados en la barra de puntaje/resumen (ver `applyMapSize`,
+// `startGame`, `clientStartFromInit`, `netOnMessage`).
+let matchNames = { player:'Tú', enemy:'Rival' };
 
 let gameSpeed = 1;          // multiplicador de velocidad de la partida
 let mapTheme = 'plains';    // mapa activo
@@ -898,6 +1036,24 @@ let fogT = 0;             // temporizador de recálculo (~150ms)
 const fogCanvas = document.createElement('canvas');   // capa de niebla, baja resolución (FOG_COLS×FOG_ROWS)
 fogCanvas.width = FOG_COLS; fogCanvas.height = FOG_ROWS;
 const fogCtx = fogCanvas.getContext('2d', { willReadFrequently:false });
+
+// Aplica el tamaño de mapa elegido (Pequeño/Grande/Enorme): escala `WORLD` y
+// reconstruye TODO lo que dependía de sus dimensiones al cargar la página
+// (rejilla de niebla + su lienzo de baja resolución, grid de A*). Se llama al
+// principio de `startGame`/`clientStartFromInit`/`applySaveObject`, ANTES de
+// generar el mapa, la niebla o el minimapa.
+function applyMapSize(size){
+  const m = MAP_SIZE_MULT[size] || 1;
+  WORLD.w = Math.round(BASE_WORLD.w*m);
+  WORLD.h = Math.round(BASE_WORLD.h*m);
+  FOG_COLS = Math.ceil(WORLD.w/FOG_CELL);
+  FOG_ROWS = Math.ceil(WORLD.h/FOG_CELL);
+  fogExplored = new Uint8Array(FOG_COLS*FOG_ROWS);
+  fogVisible  = new Uint8Array(FOG_COLS*FOG_ROWS);
+  fogCanvas.width = FOG_COLS; fogCanvas.height = FOG_ROWS;
+  invalidatePathGrid();
+  cam.min = size==='huge' ? 0.32 : size==='large' ? 0.4 : 0.5;
+}
 
 // Alertas de ataque: throttle por "zona" (celda gruesa de 200px) para no saturar.
 const ALERT_ZONE = 200, ALERT_COOLDOWN = 8000, ALERT_BTN_MS = 10000;
@@ -1272,7 +1428,7 @@ function netJoinStart(ip){
   if(netBlockedByHttps()) return;
   net.mode='client'; net.kind='lan';
   netStatus('Conectando a '+ip+'…');
-  netConnect(ip, ()=>{ netSend({t:'hello', role:'client'}); netStatus('Conectado. Esperando al anfitrión…'); });
+  netConnect(ip, ()=>{ netSend({t:'hello', role:'client', name:myName}); netStatus('Conectado. Esperando al anfitrión…'); });
 }
 
 // ---------- Transporte B: WebRTC (PeerJS), cargado bajo demanda ----------
@@ -1336,7 +1492,7 @@ function clientTryReconnect(){
   if(net.ready || Date.now()>net.reconnDeadline || !net.peer || net.peer.destroyed) return;
   try{
     const conn = net.peer.connect(peerIdFor(net.onlineCode), { reliable:true });
-    wireOnlineConn(conn, ()=>{ netSend({t:'hello', role:'client'}); paused=false; showHint('¡Reconectado!'); netStatus('Reconectado.'); });
+    wireOnlineConn(conn, ()=>{ netSend({t:'hello', role:'client', name:myName}); paused=false; showHint('¡Reconectado!'); netStatus('Reconectado.'); });
     conn.on('error', ()=> setTimeout(clientTryReconnect, 3000));
   }catch(_){ setTimeout(clientTryReconnect, 3000); }
   setTimeout(()=>{ if(!net.ready) clientTryReconnect(); }, 4000);
@@ -1373,7 +1529,7 @@ function netOnlineJoinStart(code){
     peer.on('open', ()=>{
       netStatus('Conectando a la sala '+code.toUpperCase()+'…');
       const conn = peer.connect(peerIdFor(code), { reliable:true });
-      wireOnlineConn(conn, ()=>{ netSend({t:'hello', role:'client'}); netStatus('Conectado. Esperando al anfitrión…'); });
+      wireOnlineConn(conn, ()=>{ netSend({t:'hello', role:'client', name:myName}); netStatus('Conectado. Esperando al anfitrión…'); });
       conn.on('error', ()=>{ const m='No se pudo conectar. Revisa el código, o probad "Red local".'; if(!netFreeIfIdle(m)) netStatus(m); });
     });
     peer.on('error', err=>{ const m='Error de señalización ('+err.type+'). Revisa el código, o probad "Red local".'; if(!netFreeIfIdle(m)) netStatus(m); });
@@ -1582,12 +1738,16 @@ function interpClientPositions(){
 
 // --- Mensajería ---
 function netOnMessage(m){
+  if(m.t==='chat'){ receiveChatMessage(m.from, m.msg); return; }   // MP: en ambos sentidos, sin importar host/cliente
   if(net.mode==='host'){
     if(m.t==='hello' && m.role==='client'){
       // Robustez (Fase 7 punto 4): si YA hay partida en curso, este 'hello' es
       // una reconexión (mismo código online, o un segundo intento en LAN) —
       // no reiniciar la partida, solo reenviar el estado actual con `init`.
-      if(!running){ netStatus('¡Jugador conectado! Empezando partida…'); startGame(gameConfig); }
+      if(!running){
+        matchNames.enemy = sanitizeName(m.name) || 'Rival';
+        netStatus('¡Jugador conectado! Empezando partida…'); startGame(gameConfig);
+      }
       else { netStatus('Jugador reconectado. Reenviando estado…'); netSendInit(); }
     }
     else if(m.t==='cmd') hostHandleCmd(m);
@@ -1601,10 +1761,12 @@ function netSendInit(){
   // Reinicia la base de deltas: el `init` (y el próximo tick periódico)
   // siempre van completos, así el cliente reconectado arranca sincronizado.
   net.lastSentEnts = null; net.fullT = 0;
-  netSend({ t:'init', cfg:{ map:mapTheme }, terrain, bridge, snap:makeSnap() });
+  netSend({ t:'init', cfg:{ map:mapTheme, mapSize:gameConfig.mapSize||'small', hostName:matchNames.player }, terrain, bridge, snap:makeSnap() });
 }
 function clientStartFromInit(m){
   mapTheme = m.cfg.map; gameSpeed = 1;
+  applyMapSize(m.cfg.mapSize||'small');
+  matchNames.player = myName || 'Tú'; matchNames.enemy = sanitizeName(m.cfg.hostName) || 'Rival';
   terrain = m.terrain||[]; bridge = m.bridge||null;
   entities=[]; selection=[]; placement=null; pings=[]; frameWalls=[];
   projectiles=[]; corpses=[]; footprints=[]; sparks=[]; dust=[]; bursts=[]; shakeT=0; unitFace.clear(); alertFlags={player:false,enemy:false}; invalidatePathGrid();
@@ -1615,6 +1777,7 @@ function clientStartFromInit(m){
   applySnap(m.snap);
   buildMinimapTerrain(); resetFog(); positionMinimap();   // niebla + minimapa (Fase 2, cliente MP)
   gameOver=false; paused=false; running=true;
+  resetChat();
   const t=entities.find(e=>e.kind==='building'&&e.owner==='player'&&e.btype==='town');
   cam.zoom=1; if(t) centerOn(t.x,t.y);
   document.getElementById('startScreen').classList.add('hidden');
@@ -1779,6 +1942,9 @@ function saveSummary(save){
 }
 function applySaveObject(save){
   Object.assign(gameConfig, save.cfg||{});
+  applyMapSize(gameConfig.mapSize||'small');   // reconstruye WORLD/niebla ANTES de restaurar fog/entidades
+  matchNames.player = myName || 'Tú';
+  if(!inMP()) matchNames.enemy = pickAiName();
   mapTheme = save.mapTheme; gameSpeed = save.gameSpeed; difficulty = save.difficulty;
   nextId = save.nextId||1;
   terrain = save.terrain||[]; bridge = save.bridge||null;
@@ -1819,6 +1985,7 @@ function applySaveObject(save){
   buildMinimapTerrain(); recomputeFog(); positionMinimap();
 
   gameOver=false; paused=false; running=true;
+  resetChat();
   const t = entities.find(e=>e.kind==='building'&&e.owner==='player'&&e.btype==='town');
   cam.zoom=1; if(t) centerOn(t.x,t.y);
 
@@ -2034,6 +2201,9 @@ function startGame(cfg){
   mapTheme = cfg.map;
   garrisonEnabled = cfg.garrison === 'on';
   peaceTimer = Number(cfg.peace)||0;
+  applyMapSize(cfg.mapSize||'small');
+  matchNames.player = myName || 'Tú';
+  if(!inMP()) matchNames.enemy = pickAiName();   // en MP lo fija quien llama (hello/clientStartFromInit)
   entities = []; selection = []; nextId = 1; placement = null; terrain = []; bridge = null;
   frameWalls = []; pings = []; projectiles = []; corpses = []; footprints = []; sparks = []; dust = []; bursts = []; shakeT = 0; unitFace.clear();
   alertFlags = {player:false, enemy:false}; invalidatePathGrid();
@@ -2058,18 +2228,24 @@ function startGame(cfg){
   const eBase = playerLeft? right : left;
 
   entities.push(makeBuilding('player','town', pBase.x, pBase.y, true));
-  for(let i=0;i<3;i++) entities.push(makeUnit('player','villager', pBase.x+(playerLeft?90:-90), pBase.y-60+i*55));
+  const pVillIds=[];
+  for(let i=0;i<3;i++){ const v=makeUnit('player','villager', pBase.x+(playerLeft?90:-90), pBase.y-60+i*55); entities.push(v); pVillIds.push(v.id); }
   entities.push(makeBuilding('enemy','town', eBase.x, eBase.y, true));
   for(let i=0;i<3;i++) entities.push(makeUnit('enemy','villager', eBase.x+(playerLeft?-90:90), eBase.y-60+i*55));
 
   // Generar recursos/terreno según el mapa
   generateMap(mapTheme, pBase, eBase);
   rebuildIndex();
+  // Cada aldeano inicial del jugador arranca recolectando un recurso distinto
+  // (comida/madera/oro) en vez de quedar idle — feedback de juego real: antes
+  // había que mandarlos a mano uno a uno.
+  assignStartingVillagers(pVillIds);
   buildMinimapTerrain(); resetFog(); positionMinimap();   // niebla + minimapa (Fase 2)
 
   cam.zoom = 1;
   centerOn(pBase.x, pBase.y);
 
+  resetChat();
   document.getElementById('startScreen').classList.add('hidden');
   document.getElementById('endScreen').classList.add('hidden');
   updateActionPanel();
@@ -2104,16 +2280,27 @@ function spawnResourceCluster(cx, cy, weights){
 
 // Generador de mapas: distribuye recursos y figuras de terreno por tema.
 function generateMap(theme, pBase, eBase){
+  // Mapas Grande/Enorme (`applyMapSize`): los offsets fijos de abajo estaban
+  // calibrados para el mapa Pequeño (BASE_WORLD); se escalan proporcionalmente
+  // y se generan más clusters/obstáculos sueltos según el ÁREA del mapa, para
+  // que un mapa más grande no se sienta vacío.
+  const mapScale = WORLD.w / BASE_WORLD.w;
+  const areaScale = (WORLD.w*WORLD.h) / (BASE_WORLD.w*BASE_WORLD.h);
+  const S = (n)=>n*mapScale;
   // Cada base siempre tiene un cluster equilibrado para arrancar
   spawnResourceCluster(pBase.x + (pBase.x<WORLD.w/2?130:-130), pBase.y+120);
   spawnResourceCluster(eBase.x + (eBase.x<WORLD.w/2?130:-130), eBase.y-120);
   const cx=WORLD.w/2, cy=WORLD.h/2;
 
   if(theme==='plains'){
-    spawnResourceCluster(cx, cy-230);
-    spawnResourceCluster(cx, cy+230);
-    spawnResourceCluster(cx-380, cy);
-    spawnResourceCluster(cx+380, cy);
+    spawnResourceCluster(cx, cy-S(230));
+    spawnResourceCluster(cx, cy+S(230));
+    spawnResourceCluster(cx-S(380), cy);
+    spawnResourceCluster(cx+S(380), cy);
+    for(let i=0;i<Math.round(6*(areaScale-1));i++){
+      const x=300+Math.random()*(WORLD.w-600), y=120+Math.random()*(WORLD.h-240);
+      spawnResourceCluster(x, y);
+    }
   }
   else if(theme==='river'){
     // Río VERTICAL en el centro: separa a los dos jugadores (izq./der.).
@@ -2123,35 +2310,35 @@ function generateMap(theme, pBase, eBase){
     const gy0=cy-70, gy1=cy+70;
     bridge = { x0:rx0, x1:rx1, y0:gy0, y1:gy1 };
     terrain.push({ kind:'bridge', x:rx0, y:gy0, w:140, h:140 });
-    spawnResourceCluster(cx-420, cy-260);
-    spawnResourceCluster(cx+420, cy+260);
-    spawnResourceCluster(cx-360, cy+260, {food:5, wood:3});
-    spawnResourceCluster(cx+360, cy-260, {gold:3, stone:3});
+    spawnResourceCluster(cx-S(420), cy-S(260));
+    spawnResourceCluster(cx+S(420), cy+S(260));
+    spawnResourceCluster(cx-S(360), cy+S(260), {food:5, wood:3});
+    spawnResourceCluster(cx+S(360), cy-S(260), {gold:3, stone:3});
   }
   else if(theme==='forest'){
     // Selva negra: mucha madera repartida formando bosque
     spawnResourceCluster(cx, cy, {wood:8, gold:2});
-    for(let i=0;i<10;i++){
+    for(let i=0;i<Math.round(10*areaScale);i++){
       const x=300+Math.random()*(WORLD.w-600), y=120+Math.random()*(WORLD.h-240);
       if(Math.abs(x-pBase.x)<220 && Math.abs(y-pBase.y)<160) continue;
       if(Math.abs(x-eBase.x)<220 && Math.abs(y-eBase.y)<160) continue;
       spawnResourceCluster(x, y, {wood:6});
     }
-    spawnResourceCluster(cx-400, cy, {gold:3, stone:2, food:3});
-    spawnResourceCluster(cx+400, cy, {gold:3, stone:2, food:3});
+    spawnResourceCluster(cx-S(400), cy, {gold:3, stone:2, food:3});
+    spawnResourceCluster(cx+S(400), cy, {gold:3, stone:2, food:3});
   }
   else if(theme==='cliffs'){
     // Riscos: bloques de roca (obstáculos) y mucha piedra/oro
-    for(let i=0;i<6;i++){
+    for(let i=0;i<Math.round(6*areaScale);i++){
       const w=120+Math.random()*160, h=70+Math.random()*120;
       const x=400+Math.random()*(WORLD.w-800-w), y=120+Math.random()*(WORLD.h-240-h);
       if(Math.abs(x-pBase.x)<260 || Math.abs(x-eBase.x)<260) continue;
       terrain.push({ kind:'cliff', x, y, w, h });
     }
-    spawnResourceCluster(cx, cy-220, {stone:5, gold:3});
-    spawnResourceCluster(cx, cy+220, {stone:5, gold:3});
-    spawnResourceCluster(cx-360, cy, {food:4, wood:3});
-    spawnResourceCluster(cx+360, cy, {food:4, wood:3});
+    spawnResourceCluster(cx, cy-S(220), {stone:5, gold:3});
+    spawnResourceCluster(cx, cy+S(220), {stone:5, gold:3});
+    spawnResourceCluster(cx-S(360), cy, {food:4, wood:3});
+    spawnResourceCluster(cx+S(360), cy, {food:4, wood:3});
   }
 }
 
@@ -2676,8 +2863,8 @@ function nearestResourceOfType(e, rtype){
 }
 // Busca la fuente más cercana de un recurso: nodo natural o edificio productor propio.
 function bldHasReserve(o){ return o.reserve===undefined || o.reserve>0; }
-function nearestGatherFor(e, rtype){
-  let best=null, bd=1e9;
+function nearestGatherFor(e, rtype, maxDist){
+  let best=null, bd=maxDist||1e9;
   for(const o of entities){
     let ok=false;
     if(o.kind==='resource' && o.rtype===rtype && o.amount>0) ok=true;
@@ -2687,8 +2874,8 @@ function nearestGatherFor(e, rtype){
   return best;
 }
 // Fuente de recurso más cercana de CUALQUIER tipo (nodo o edificio productor propio).
-function nearestAnyResource(e){
-  let best=null, bd=1e9;
+function nearestAnyResource(e, maxDist){
+  let best=null, bd=maxDist||1e9;
   for(const o of entities){
     let ok=false;
     if(o.kind==='resource' && o.amount>0) ok=true;
@@ -2699,6 +2886,16 @@ function nearestAnyResource(e){
 }
 // Tipo de recurso de una fuente (nodo o edificio productor).
 function srcRtype(o){ return o.kind==='building' ? BLD[o.btype].produces : o.rtype; }
+// Reparto inicial (feedback de juego real: "cada aldeano debe enfocarse en un
+// recurso distinto para ayudar al jugador"): comida/madera/oro, uno cada uno.
+function assignStartingVillagers(ids){
+  const types=['food','wood','gold'];
+  ids.forEach((id,i)=>{
+    const v=find(id); if(!v) return;
+    const node = nearestGatherFor(v, types[i%types.length]) || nearestAnyResource(v);
+    if(node){ v.state='gather'; v.gather=node; v.lastRtype=srcRtype(node); }
+  });
+}
 
 // Un aldeano inactivo busca trabajo: 1) terminar construcciones, 2) seguir con
 // su recurso, 3) el recurso disponible más cercano.
@@ -2713,8 +2910,12 @@ function autoAssignIdle(e){
   }
   if(bestB){ e.state='build'; e.build=bestB.id; return; }
   // 2) y 3) recurso: preferir el último tipo recolectado; si no, el más cercano.
-  let node = e.lastRtype ? nearestGatherFor(e, e.lastRtype) : null;
-  if(!node) node = nearestAnyResource(e);
+  // Limitado a `IDLE_GATHER_RADIUS` (feedback de juego real: un aldeano que
+  // se aleja solo a buscar el siguiente recurso puede terminar cerca del
+  // rival y "regalarse"). Si no hay nada cerca, se queda quieto (sigue idle)
+  // en vez de alejarse.
+  let node = e.lastRtype ? nearestGatherFor(e, e.lastRtype, IDLE_GATHER_RADIUS) : null;
+  if(!node) node = nearestAnyResource(e, IDLE_GATHER_RADIUS);
   if(node){ e.state='gather'; e.gather=node; e.lastRtype = srcRtype(node); }
 }
 
@@ -2883,6 +3084,66 @@ function militaryValue(owner){
   for(const e of entities){ if(e.kind==='unit'&&e.owner===owner&&e.type!=='villager'&&e.hp>0) v+=costTotal(UNIT[e.type].cost); }
   return v;
 }
+// Puntuación en vivo (barra de puntaje, esquina inf. derecha): combina
+// recursos, ejército vivo, era, edificios/tropas producidos y bajas — una
+// sola cifra fácil de comparar de un vistazo entre los dos bandos.
+function computeScore(sideObj, owner){
+  return Math.round(
+    totalRes(sideObj) + militaryValue(owner)*1.5 +
+    sideObj.stats.kills*40 + sideObj.stats.built*25 + sideObj.stats.trained*4 +
+    (sideObj.age-1)*150 - sideObj.stats.losses*8 - sideObj.stats.lostB*15
+  );
+}
+function updateScoreBoard(){
+  const box=document.getElementById('scoreBoard'); if(!box) return;
+  document.getElementById('sbNameP').textContent = matchNames.player;
+  document.getElementById('sbNameE').textContent = matchNames.enemy;
+  document.getElementById('sbScoreP').textContent = computeScore(player,'player');
+  document.getElementById('sbScoreE').textContent = computeScore(enemy,'enemy');
+}
+
+// --- Chat (solo multijugador) ---
+let chatLog = [];
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+function renderChatLog(){
+  const el=document.getElementById('chatLog'); if(!el) return;
+  el.innerHTML = chatLog.map(c=>'<div class="chatLine'+(c.mine?' mine':'')+'"><b>'+escapeHtml(c.from)+':</b> '+escapeHtml(c.msg)+'</div>').join('');
+  el.scrollTop = el.scrollHeight;
+}
+function appendChatLine(from, msg, mine){
+  chatLog.push({from,msg,mine});
+  if(chatLog.length>50) chatLog.shift();
+  renderChatLog();
+}
+function resetChat(){ chatLog=[]; renderChatLog(); const p=document.getElementById('chatPanel'); if(p) p.classList.add('hidden');
+  const b=document.getElementById('chatBadge'); if(b) b.classList.add('hidden');
+  const btn=document.getElementById('btnChat'); if(btn) btn.classList.toggle('hidden', !inMP());
+}
+function toggleChatPanel(){
+  const p=document.getElementById('chatPanel'); if(!p) return;
+  p.classList.toggle('hidden');
+  if(!p.classList.contains('hidden')){
+    const b=document.getElementById('chatBadge'); if(b) b.classList.add('hidden');
+    const inp=document.getElementById('chatInput'); if(inp) inp.focus();
+    renderChatLog();
+  }
+}
+function sendChatMessage(){
+  if(!inMP()) return;
+  const inp=document.getElementById('chatInput'); if(!inp) return;
+  const text=(inp.value||'').trim().slice(0,140);
+  if(!text) return;
+  inp.value='';
+  const from = matchNames.player;
+  netSend({t:'chat', from, msg:text});
+  appendChatLine(from, text, true);
+}
+function receiveChatMessage(from, msg){
+  if(typeof msg!=='string' || !msg) return;
+  appendChatLine(String(from||matchNames.enemy).slice(0,NAME_MAX)||'Rival', msg.slice(0,140), false);
+  const p=document.getElementById('chatPanel');
+  if(p && p.classList.contains('hidden')){ const b=document.getElementById('chatBadge'); if(b) b.classList.remove('hidden'); }
+}
 function sampleTimeline(){
   const prevT = gameTimeline.length ? gameTimeline[gameTimeline.length-1].t : 0;
   gameTimeline.push({ t: prevT+TIMELINE_INTERVAL,
@@ -2944,7 +3205,7 @@ function loop(now){
   // no cada cuadro. Corre también en el cliente MP (no simula, pero sí "ve").
   if(running && !gameOver){
     fogT-=dt; if(fogT<=0){ fogT=0.15; recomputeFog(); }
-    minimapT-=dt; if(minimapT<=0){ minimapT=0.22; drawMinimap(); }
+    minimapT-=dt; if(minimapT<=0){ minimapT=0.22; drawMinimap(); updateScoreBoard(); }
     updateCameraInertia(dt);   // inercia del paneo de 2 dedos (puramente de cliente/cámara)
     // Fase 6: sondeo del tutorial (~3/s, un solo jugador) y muestreo de la
     // línea de tiempo (solo host/partida local: el cliente MP no simula).
@@ -4284,6 +4545,7 @@ function drawBuilding(e){
   }
   // selección (corchetes animados)
   if(sel) drawSelBox(s.x, s.y, box*0.58, box*0.58);
+  if(sel) drawSelBeam(s.x, s.y, box*0.58);
   // rally: línea punteada del edificio al punto de reunión + bandera (y el
   // icono del recurso si es un rally encadenado sobre comida/madera/oro/piedra)
   if(sel && e.rally){ const r=worldToScreen(e.rally.x,e.rally.y);
@@ -4525,6 +4787,7 @@ function drawUnit(e){
   if(e.hp<e.maxHp) drawHpBar(s.x, s.y-30*cam.zoom, 24*cam.zoom, e.hp/e.maxHp, e.owner);
   // selección (anillo pulsante a los pies)
   if(sel) drawSelRing(s.x+lungeX, s.y+lungeY, sz*0.66);
+  if(sel) drawSelBeam(s.x+lungeX, s.y+lungeY, sz*0.66);
   // (el disparo del arquero se ve como flecha real en `projectiles[]`)
 }
 
@@ -4535,6 +4798,24 @@ function drawSelRing(cx, cy, r){
   const p=selPulse();
   ctx.strokeStyle=`rgba(255,224,140,${0.55+0.4*p})`; ctx.lineWidth=2.5;
   ctx.beginPath(); ctx.arc(cx,cy,r+p*2*cam.zoom,0,Math.PI*2); ctx.stroke();
+}
+// Haz de luz vertical sobre la unidad/edificio seleccionado: además del
+// anillo/corchetes, ayuda a ver rápido qué está seleccionado en medio del
+// combate (feedback de juego real: "hoy no está siendo fácil" verlo).
+function drawSelBeam(cx, cy, r){
+  const p=selPulse();
+  const h=(48+p*10)*cam.zoom, w=Math.max(4,r*0.7);
+  const grad=ctx.createLinearGradient(cx,cy-h,cx,cy);
+  grad.addColorStop(0,'rgba(255,229,153,0)');
+  grad.addColorStop(0.6,`rgba(255,229,153,${0.28+0.18*p})`);
+  grad.addColorStop(1,`rgba(255,229,153,${0.7+0.25*p})`);
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.fillStyle=grad;
+  ctx.beginPath();
+  ctx.moveTo(cx-w/2,cy); ctx.lineTo(cx-w*0.15,cy-h); ctx.lineTo(cx+w*0.15,cy-h); ctx.lineTo(cx+w/2,cy);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
 }
 function drawSelBox(cx, cy, hw, hh){
   const p=selPulse(), L=Math.min(hw,hh)*0.5;
@@ -5119,20 +5400,17 @@ function handleTap(p){
   selection=[]; updateActionPanel();
 }
 
+// Selección rápida por doble toque: SOLO ejército (feedback de juego real,
+// "el doble clic solo debe funcionar con ejército") — ni aldeanos ni
+// edificios disparan la selección masiva; en esos casos cae a un toque normal.
 function handleDoubleTap(p){
   const {ent}=pickAt(p);
-  if(ent && ent.owner==='player' && ent.kind==='unit'){
+  if(ent && ent.owner==='player' && ent.kind==='unit' && UNIT[ent.type].cat!=='villager'){
     // seleccionar todas las del mismo tipo visibles en pantalla
     selection = entities.filter(e=>e.kind==='unit'&&e.owner==='player'&&e.type===ent.type&&!e.garrisonedIn&&onScreen(e)).map(e=>e.id);
     pingEntities(selection, true);
     updateActionPanel();
     showHint('Seleccionados todos los '+UNIT[ent.type].name+'.');
-  } else if(ent && ent.owner==='player' && ent.kind==='building'){
-    // seleccionar todos los edificios del mismo tipo (visibles o no, son fijos)
-    selection = entities.filter(e=>e.kind==='building'&&e.owner==='player'&&e.btype===ent.btype).map(e=>e.id);
-    pingEntities(selection, true);
-    updateActionPanel();
-    showHint('Seleccionados todos los '+BLD[ent.btype].name+'.');
   } else { handleTap(p); }
 }
 
@@ -5663,11 +5941,75 @@ function showMenuPanel(name){
     p.classList.toggle('hidden', p.getAttribute('data-panel')!==name);
   });
 }
-document.getElementById('btnGoSetup').addEventListener('click', ()=>showMenuPanel('setup'));
-document.getElementById('btnGoMp').addEventListener('click', ()=>showMenuPanel('mp'));
+// El jugador HOME que crea una sala multijugador pasa PRIMERO por el mismo
+// panel de configuración que la partida contra la IA (mapa/tamaño/recursos/
+// velocidad/tregua/etc, feedback de juego real: "hace falta cuadrar las
+// opciones para que el que crea la partida las seleccione") — `pendingHostAction`
+// recuerda qué transporte usar cuando pulse "Empezar partida".
+let pendingHostAction = null;   // null | 'online' | 'lan'
+function resetHostPending(){
+  pendingHostAction = null;
+  document.getElementById('btnStart').textContent = '▶ Empezar partida';
+  const d=document.querySelector('#startScreen .opt[data-opt="diff"]'); if(d) d.classList.remove('hidden');
+}
+function enterSetupForHost(action){
+  pendingHostAction = action;
+  document.getElementById('btnStart').textContent = '🌐 Crear sala con estas opciones';
+  // La IA no existe en multijugador: no tiene sentido elegir su dificultad.
+  const d=document.querySelector('#startScreen .opt[data-opt="diff"]'); if(d) d.classList.add('hidden');
+  showMenuPanel('setup');
+}
+// ---------- Alias del jugador (persistido, sin caracteres especiales) ----------
+const myNameInput = document.getElementById('myNameInput');
+myNameInput.value = myName;
+myNameInput.addEventListener('input', ()=>{
+  const clean = sanitizeName(myNameInput.value);
+  if(clean !== myNameInput.value) myNameInput.value = clean;   // corta al vuelo si escribe algo no permitido
+});
+myNameInput.addEventListener('change', ()=> setMyName(myNameInput.value));
+myNameInput.addEventListener('blur', ()=> setMyName(myNameInput.value));
+
+// ---------- Vista previa pasiva del tutorial (10 frames, botón del menú) ----------
+const TUT_PREVIEW = [
+  {icon:'👷', anim:'tpPulse', text:'Toca un aldeano para seleccionarlo.'},
+  {icon:'🌳', anim:'tpSlide', text:'Con el aldeano seleccionado, toca un árbol para que recolecte madera.'},
+  {icon:'🍒', anim:'tpSlide', text:'Manda a otro aldeano a recolectar comida (arrástralo con una caja de selección o tócalo).'},
+  {icon:'🏠', anim:'tpBounce', text:'Toca un aldeano, pulsa 🏠 Casa en el panel y coloca los cimientos cerca de tu base.'},
+  {icon:'🏛️', anim:'tpPulse', text:'Toca tu Centro Urbano y entrena un aldeano nuevo desde su cola.'},
+  {icon:'🔦', anim:'tpSlide', text:'Manda una unidad hacia una zona oscura del mapa para explorarla.'},
+  {icon:'🛡️', anim:'tpBounce', text:'Toca un aldeano, pulsa 🛡️ Cuartel y coloca sus cimientos cerca de tu base.'},
+  {icon:'⚔️', anim:'tpPulse', text:'Toca tu Cuartel y entrena una Milicia.'},
+  {icon:'⚒️', anim:'tpBounce', text:'Toca el Centro Urbano y avanza a la Edad de las Herramientas.'},
+  {icon:'🪖', anim:'tpPulse', text:'Pulsa 🪖 «Todo el ejército» (arriba a la derecha) para seleccionar todas tus tropas de un toque.'},
+];
+let tpIdx=0;
+function renderTutPreview(){
+  const f=TUT_PREVIEW[tpIdx];
+  const icon=document.getElementById('tpIcon');
+  icon.textContent=f.icon;
+  icon.className=''; void icon.offsetWidth; icon.className=f.anim;   // reinicia la animación CSS en cada frame
+  document.getElementById('tpText').textContent='Paso '+(tpIdx+1)+'/10 — '+f.text;
+  document.getElementById('tpDots').innerHTML = TUT_PREVIEW.map((_,i)=>'<span class="'+(i===tpIdx?'on':'')+'"></span>').join('');
+}
+document.getElementById('btnGoTutPreview').addEventListener('click', ()=>{
+  tpIdx=0; renderTutPreview();
+  // `#startScreen` es un overlay hermano posterior en el DOM (mismo z-index):
+  // hay que ocultarlo mientras se ve la vista previa, si no tapa sus clics.
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('tutPreviewScreen').classList.remove('hidden');
+});
+document.getElementById('tpPrev').addEventListener('click', ()=>{ tpIdx=(tpIdx-1+TUT_PREVIEW.length)%TUT_PREVIEW.length; renderTutPreview(); });
+document.getElementById('tpNext').addEventListener('click', ()=>{ tpIdx=(tpIdx+1)%TUT_PREVIEW.length; renderTutPreview(); });
+document.getElementById('tpClose').addEventListener('click', ()=>{
+  document.getElementById('tutPreviewScreen').classList.add('hidden');
+  document.getElementById('startScreen').classList.remove('hidden');
+});
+
+document.getElementById('btnGoSetup').addEventListener('click', ()=>{ resetHostPending(); showMenuPanel('setup'); });
+document.getElementById('btnGoMp').addEventListener('click', ()=>{ resetHostPending(); showMenuPanel('mp'); });
 document.getElementById('btnGoLoad').addEventListener('click', ()=>{ refreshSaveUI(); showMenuPanel('load'); });
 document.querySelectorAll('#startScreen .backBtn[data-back]').forEach(b=>{
-  b.addEventListener('click', ()=>showMenuPanel('title'));
+  b.addEventListener('click', ()=>{ resetHostPending(); showMenuPanel('title'); });
 });
 
 // ---------- Menú principal: selección de opciones ----------
@@ -5693,6 +6035,13 @@ document.querySelectorAll('#startScreen .opt').forEach(group=>{
   });
 });
 document.getElementById('btnStart').addEventListener('click',()=>{
+  if(pendingHostAction){
+    const action=pendingHostAction; pendingHostAction=null;
+    document.getElementById('btnStart').textContent = '▶ Empezar partida';
+    showMenuPanel('mp');
+    if(action==='online') netOnlineHostStart(); else netHostStart();
+    return;
+  }
   if(inMP()){ netStatus('En multijugador la partida empieza sola cuando el otro jugador se conecta.'); return; }
   startGame(gameConfig);
 });
@@ -5715,7 +6064,7 @@ document.getElementById('mpTabLan').addEventListener('click', ()=>{
 });
 
 // ---------- Multijugador: Online (WebRTC/PeerJS, código de sala) ----------
-document.getElementById('btnOnlineHost').addEventListener('click', ()=>{ if(!inMP()) netOnlineHostStart(); });
+document.getElementById('btnOnlineHost').addEventListener('click', ()=>{ if(!inMP()) enterSetupForHost('online'); });
 document.getElementById('btnOnlineJoin').addEventListener('click', ()=>{
   document.getElementById('onlineJoinRow').classList.toggle('hidden');
 });
@@ -5732,7 +6081,7 @@ document.getElementById('btnCopyCode').addEventListener('click', ()=>{
 });
 
 // ---------- Multijugador: Red local (WebSocket, IP) ----------
-document.getElementById('btnHost').addEventListener('click', ()=>{ if(!inMP()) netHostStart(); });
+document.getElementById('btnHost').addEventListener('click', ()=>{ if(!inMP()) enterSetupForHost('lan'); });
 document.getElementById('btnJoin').addEventListener('click', ()=>{
   document.getElementById('joinRow').classList.toggle('hidden');
 });
@@ -5861,6 +6210,9 @@ function selectControlGroup(idx, center){
 // ---------- Sonido: botón e inicialización en el primer gesto (Safari/iOS) ----------
 document.getElementById('btnSound').textContent = soundOn ? '🔊' : '🔇';
 document.getElementById('btnSound').addEventListener('click', ()=>{ ensureAudio(); setSoundOn(!soundOn); });
+document.getElementById('btnChat').addEventListener('click', toggleChatPanel);
+document.getElementById('btnChatSend').addEventListener('click', sendChatMessage);
+document.getElementById('chatInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); sendChatMessage(); } });
 document.addEventListener('pointerdown', ensureAudio, {once:true, passive:true});
 document.addEventListener('pointerdown', ()=>{ if(audioCtx && audioCtx.state==='suspended') audioCtx.resume(); }, {passive:true});
 

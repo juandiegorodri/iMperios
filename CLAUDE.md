@@ -1090,3 +1090,51 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     cardinales, huellas confirmadas tras la Catapulta, y el repro de
     murallas (16 tramos/16 aldeanos) sin ningún `blockedByWall===true`;
     regresión adicional sin errores de consola.
+- **Tanda grande de mejoras pedidas tras jugar: automatización, selección,
+  mapa, partida/menú y tutorial accesible** (2026-07-24):
+  - **Aldeanos iniciales repartidos**: los 3 aldeanos del jugador arrancan
+    recolectando comida/madera/oro (uno cada uno) en vez de quedar idle.
+  - **Radio de búsqueda de recurso limitado** (`IDLE_GATHER_RADIUS`, 5
+    casillas/200px): un aldeano que agota su recurso ya no viaja lejos a
+    buscar el siguiente (podía terminar cerca de la base rival); si no hay
+    nada cerca, se queda quieto en vez de alejarse.
+  - **Doble toque de selección rápida solo para ejército**: ya no aplica a
+    aldeanos ni edificios (cae a un toque normal en esos casos).
+  - **Haz de luz vertical sobre lo seleccionado**: además del anillo/
+    corchetes, un cono de luz translúcido sube desde cada unidad/edificio
+    seleccionado para verlo claro en medio del combate.
+  - **Selector de tamaño de mapa** (Pequeño/Grande ×1.5/Enorme ×2, menú de
+    configuración): `WORLD` y las rejillas de niebla/A* se reconstruyen al
+    tamaño elegido; el generador de mapas escala sus clusters de recursos y
+    añade más al área extra. Se sincroniza al cliente MP y se guarda/
+    restaura en las partidas guardadas.
+  - **Barra de puntaje en vivo** (esquina inferior derecha, sobre el
+    minimapa): nombres de los dos bandos + una puntuación que se actualiza
+    durante toda la partida (recursos, ejército vivo, era, bajas, producción).
+  - **Alias del jugador + nombres graciosos para la IA**: input en el menú
+    principal (máx. 16 caracteres, saneado sin símbolos ni HTML — protegido
+    contra inyección), persistido. La IA usa un nombre al azar (BarbaRosa,
+    JuanaLaCuerda, GuillermoElComelón…) en cada partida de un jugador; en MP
+    viaja el alias real de cada humano.
+  - **El anfitrión de una sala MP elige las opciones de la partida**: "Crear
+    sala"/"Crear partida" ya no aloja directo — lleva primero al panel de
+    configuración (mapa/tamaño/recursos/velocidad/tregua/etc.) y solo abre
+    la sala al pulsar "Empezar partida" con esas opciones ya elegidas.
+  - **Chat multijugador** (botón 💬, solo visible en MP): mensajes de texto
+    simples entre los dos jugadores sobre el transporte de red ya existente;
+    el texto se escapa al pintarse.
+  - **Vida de edificios ×2**: todos los edificios de `BLD` duplicaron su hp
+    (estaba siendo muy fácil destruirlos).
+  - **Botón "🎬 Ver tutorial"** en el menú principal: presentación PASIVA de
+    10 frames con icono animado y frase corta, navegable, sin depender de
+    una partida en curso — para entender los controles antes de jugar (a
+    diferencia del tutorial guiado de 10 pasos de la Fase 6, que exige jugar
+    de verdad).
+  - Verificado headless: reparto inicial de aldeanos por recurso, aldeano
+    lejos de cualquier fuente se queda idle, doble toque en aldeano cae a
+    selección simple, `render()` sin errores con la nueva capa de selección,
+    alias saneado al vuelo, vista previa del tutorial navega y cierra bien,
+    mapa Enorme confirmado en `WORLD`/niebla, flujo de "Crear sala" no aloja
+    hasta confirmar opciones, mensaje de chat simulado recibido, vida de
+    edificios doblada confirmada, regresión de aldeanos-en-murallas y
+    partida simulada con IA Difícil — todo sin errores de consola.
