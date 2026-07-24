@@ -1182,3 +1182,18 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
   - Verificado headless: los 12 pasos recorridos sin errores, capturas de
     cada gesto nuevo/corregido, `townSpriteName` confirmado por Era, y
     regresión completa sin errores de consola.
+- **Icono de oro plateado, caballería demasiado chica y Centro Urbano 1.5×
+  más grande** (2026-07-24):
+  - **Icono de oro**: `🪙` (se veía plateado en iPad) reemplazado por `💰`
+    en toda la interfaz — consistente con `RES.gold.emoji`.
+  - **Caballería más grande**: nueva `UNIT_BOX_W` calibra el ancho de la
+    caja "contain" por sprite (Caballo/Caballero/Paladín/Héroe Jinete) para
+    preservar un área de token parecida en vez de forzarlos todos al mismo
+    ancho — se veían "muy chiquitos" con la caja genérica.
+  - **Centro Urbano 1.5× más grande**: de 4×4 a 6×6 casillas del tablero
+    (240px de huella visual); el Castillo queda igual. Ajustado el offset
+    de los aldeanos iniciales y del cluster de recursos de cada base para
+    que no queden dentro de la huella nueva.
+  - Verificado headless: tamaño exacto del Centro Urbano, aldeanos fuera de
+    su huella, caballería a tamaño comparable con el resto de unidades
+    (captura), y regresión completa sin errores de consola.
