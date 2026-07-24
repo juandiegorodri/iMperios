@@ -1138,3 +1138,35 @@ hojas fuente en `assets/_raw/`. Mantener el **respaldo de emoji** en el motor.
     hasta confirmar opciones, mensaje de chat simulado recibido, vida de
     edificios doblada confirmada, regresión de aldeanos-en-murallas y
     partida simulada con IA Difícil — todo sin errores de consola.
+- **Corrección de tamaño real al evolucionar, selección más sobria, Centro
+  Urbano/Castillo imponentes y tutorial simulado** (2026-07-24):
+  - **Se quitó el sistema de estrellas de nivel** sobre las unidades: el
+    arte por tier ya se distingue solo, no hacía falta la insignia aparte.
+  - **Arreglado el encogimiento real al evolucionar** (Caballero/Paladín,
+    Alabardero): `drawSprite` forzaba siempre la misma altura y dejaba el
+    ancho libre según el aspecto de cada sprite; ahora acepta una caja
+    "contain" (alto y ancho máximos) usada por todas las unidades, así el
+    ancho queda acotado sin importar cuán distinto sea el aspecto del arte
+    de cada tier.
+  - **Haz de selección de unidades más tenue**: mucha menos opacidad y sin
+    blending "lighter" (ya no se quema a blanco).
+  - **Edificios: titileo del cuadrado en vez del haz de luz**: los
+    edificios seleccionados parpadean su propio recuadro en vez de llevar
+    el cono de luz de las unidades.
+  - **Centro Urbano y Castillo a 4×4 casillas**: huella visual exacta de
+    160×160px, bastante más imponentes que el resto de edificios.
+  - **Tutorial: simulación tipo "grabación de pantalla"**: la vista previa
+    pasiva (botón 🎬 Ver tutorial) pasó de iconos con animación CSS a 10
+    mini-animaciones reales en un `<canvas>` propio con las gráficas reales
+    del juego y un círculo blanco que imita el dedo tocando la pantalla,
+    para: seleccionar unidad, llevarla a hacer una acción, deseleccionar,
+    crear unidad, subir de Era, atacar unidad, moverse por el mapa, mejorar
+    unidad, atacar edificio y construir torre/muralla defensiva.
+  - **Pendiente**: el Centro Urbano cambiando de gráfica por Era (imágenes
+    que el usuario pegó en el chat) no se pudo integrar — no hay forma de
+    extraer una imagen pegada en la conversación a un archivo; falta que el
+    usuario la suba como archivo para procesarla e integrarla.
+  - Verificado headless: los 10 pasos del tutorial recorridos sin errores;
+    unidades de tier a tamaño consistente (captura); Centro Urbano a
+    160×160px exactos con corchetes+titileo y sin estrellas; regresión de
+    aldeanos-en-murallas y partida simulada con IA Difícil sin errores.
