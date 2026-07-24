@@ -63,6 +63,34 @@ Ejecutar con: `node test.cjs` usando
 `require('/opt/node22/lib/node_modules/playwright')` y
 `executablePath: '/opt/pw-browsers/chromium'`.
 
+### 4.1 Proceso estándar para una tanda con varias correcciones/funcionalidades
+
+> Aplica **siempre** que una tanda de trabajo incluya más de un cambio (lo
+> habitual: el usuario pide una lista de correcciones/funcionalidades en un
+> solo mensaje). No hace falta que el usuario lo pida cada vez — es el
+> proceso por defecto del proyecto.
+
+1. **Implementar TODO en una sola pasada**: escribir el código de cada
+   corrección/funcionalidad de la tanda antes de verificar nada, y hacer un
+   chequeo de sintaxis del `index.html` completo (`node --check` sobre el
+   contenido del `<script>`) apenas termine de escribirse el código.
+2. **Despachar un subagente (herramienta `Agent`) para probar la tanda**: no
+   basta con las pruebas Playwright propias hechas al vuelo mientras se
+   escribe el código — al terminar de implementar TODO, lanzar un agente
+   (`subagent_type` general-purpose está bien) con un prompt que liste,
+   funcionalidad por funcionalidad, qué se implementó y qué debe verificar de
+   cada una (con capturas/`page.evaluate` sobre el estado real del juego,
+   igual que en la sección 4 de arriba), y que reporte cuáles pasan y cuáles
+   fallan con evidencia concreta (no solo "funciona"/"no funciona").
+3. **Corregir lo que el agente reporte como fallido** y, si el ajuste es no
+   trivial, repetir el paso 2 (otro agente, o el mismo si sigue disponible)
+   sobre lo corregido antes de continuar.
+4. **Solo cuando todo esté verificado como correcto**: actualizar la
+   documentación obligatoria (sección 5 de abajo) y recién ahí commit → push
+   → PR en borrador → (si el usuario pidió subir a `main`) marcar el PR listo
+   y fusionar → sincronizar la rama con `main` (sección 3). Nunca fusionar a
+   `main` con verificaciones pendientes o fallidas.
+
 ---
 
 ## 5. NORMAS DE DOCUMENTACIÓN (obligatorias)
