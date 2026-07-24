@@ -280,7 +280,7 @@
 <div id="topbar">
   <div class="res">🍖 <span id="rFood">0</span><span class="rate" id="rateFood">+0/s</span></div>
   <div class="res">🪵 <span id="rWood">0</span><span class="rate" id="rateWood">+0/s</span></div>
-  <div class="res">🪙 <span id="rGold">0</span><span class="rate" id="rateGold">+0/s</span></div>
+  <div class="res">💰 <span id="rGold">0</span><span class="rate" id="rateGold">+0/s</span></div>
   <div class="res">🪨 <span id="rStone">0</span><span class="rate" id="rateStone">+0/s</span></div>
   <div class="res">👥 <span id="rPop">0</span></div>
   <div id="era">Edad Inicial</div>
@@ -786,6 +786,20 @@ const TIER_FACE_OFFSET = {
   cavalry_t1: Math.PI/2,
   cavalry_t2: Math.PI/2,
 };
+// Ancho de la caja "contain" por sprite (`drawUnit`), como múltiplo de `uH`.
+// La familia caballería (perfil de caballo, MUY plano — aspecto ancho/alto
+// hasta 3.5) quedaba con muy poca altura bajo la caja genérica (ancho fijo
+// ×1.25: como el ancho manda, la altura resultante bajaba a ~0.36×uH) y se
+// veía "muy chiquita" (feedback de juego real). Estos valores se calculan
+// para que cada sprite ocupe un ÁREA parecida a un token normal (h≈uH/√aspecto,
+// w=h×aspecto) en vez de recortarle el ancho a todos por igual — se ven
+// notablemente más grandes sin perder la consistencia de tamaño entre tiers
+// al evolucionar. El resto de unidades (aspecto ~1-1.4) sigue con el 1.25
+// genérico, sin cambios.
+const UNIT_BOX_W = {
+  cavalry: 1.87, cavalry_t1: 1.53, cavalry_t2: 1.35, hero_cav: 1.74,
+};
+function unitBoxW(spriteKey, uH){ return (UNIT_BOX_W[spriteKey]!=null ? UNIT_BOX_W[spriteKey] : 1.25) * uH; }
 
 // Líneas de mejora por Era (Fase 5): cada tier sube ~+35% hp/atk de TODAS las
 // unidades vivas y futuras de esa categoría (aplica a `unitAtk` dinámicamente
@@ -817,10 +831,12 @@ const UNIT_LINES = {
 const BLD = {
   // El Centro Urbano se defiende solo (auto-disparo, feedback de juego real):
   // antes no tenía `atk` y no podía hacer nada contra un ataque directo.
-  // `size` de Centro Urbano/Castillo calculado para que su huella VISUAL
-  // (size×BLD_VIS_SCALE) sea EXACTAMENTE 4×4 casillas del tablero (pedido
-  // explícito: "son los más importantes y deben ser imponentes").
-  town:       { name:'Centro Urbano', emoji:'🏛️', hp:2400, size:4*FOG_CELL/BLD_VIS_SCALE, cost:{}, build:0, pop:20,
+  // `size` del Castillo calculado para que su huella VISUAL (size×BLD_VIS_SCALE)
+  // sea EXACTAMENTE 4×4 casillas del tablero (pedido explícito: "son los más
+  // importantes y deben ser imponentes"). El Centro Urbano se agrandó otra
+  // vez después (pedido explícito: "por lo menos 1.5 de lo que es hoy") a
+  // 6×6 casillas — 1.5× de las 4×4 anteriores.
+  town:       { name:'Centro Urbano', emoji:'🏛️', hp:2400, size:6*FOG_CELL/BLD_VIS_SCALE, cost:{}, build:0, pop:20,
                 atk:11, range:170, cd:1.0 },
   house:      { name:'Casa',          emoji:'🏠', hp:600,  size:40, cost:{wood:50}, build:12, req:[], pop:5 },
   barracks:   { name:'Cuartel',       emoji:'🛡️', hp:1200, size:54, cost:{wood:150}, build:20, req:[] },
@@ -2241,9 +2257,9 @@ function startGame(cfg){
 
   entities.push(makeBuilding('player','town', pBase.x, pBase.y, true));
   const pVillIds=[];
-  for(let i=0;i<3;i++){ const v=makeUnit('player','villager', pBase.x+(playerLeft?90:-90), pBase.y-60+i*55); entities.push(v); pVillIds.push(v.id); }
+  for(let i=0;i<3;i++){ const v=makeUnit('player','villager', pBase.x+(playerLeft?150:-150), pBase.y-60+i*55); entities.push(v); pVillIds.push(v.id); }
   entities.push(makeBuilding('enemy','town', eBase.x, eBase.y, true));
-  for(let i=0;i<3;i++) entities.push(makeUnit('enemy','villager', eBase.x+(playerLeft?-90:90), eBase.y-60+i*55));
+  for(let i=0;i<3;i++) entities.push(makeUnit('enemy','villager', eBase.x+(playerLeft?-150:150), eBase.y-60+i*55));
 
   // Generar recursos/terreno según el mapa
   generateMap(mapTheme, pBase, eBase);
@@ -2299,9 +2315,11 @@ function generateMap(theme, pBase, eBase){
   const mapScale = WORLD.w / BASE_WORLD.w;
   const areaScale = (WORLD.w*WORLD.h) / (BASE_WORLD.w*BASE_WORLD.h);
   const S = (n)=>n*mapScale;
-  // Cada base siempre tiene un cluster equilibrado para arrancar
-  spawnResourceCluster(pBase.x + (pBase.x<WORLD.w/2?130:-130), pBase.y+120);
-  spawnResourceCluster(eBase.x + (eBase.x<WORLD.w/2?130:-130), eBase.y-120);
+  // Cada base siempre tiene un cluster equilibrado para arrancar (offset
+  // agrandado junto con el Centro Urbano, para que el cluster no aparezca
+  // pisando su huella visual, ahora de 6×6 casillas).
+  spawnResourceCluster(pBase.x + (pBase.x<WORLD.w/2?190:-190), pBase.y+150);
+  spawnResourceCluster(eBase.x + (eBase.x<WORLD.w/2?190:-190), eBase.y-150);
   const cx=WORLD.w/2, cy=WORLD.h/2;
 
   if(theme==='plains'){
@@ -2665,7 +2683,7 @@ document.getElementById('btnAlert').addEventListener('click', ()=>{
 function canAfford(s, cost){ for(const k in cost){ if((s.res[k]||0) < cost[k]) return false; } return true; }
 function pay(s, cost){ for(const k in cost){ s.res[k]-=cost[k]; } }
 function costStr(cost){
-  const ico={food:'🍖',wood:'🪵',gold:'🪙',stone:'🪨'};
+  const ico={food:'🍖',wood:'🪵',gold:'💰',stone:'🪨'};
   return Object.keys(cost).map(k=>ico[k]+cost[k]).join(' ') || 'Gratis';
 }
 function popCount(owner){ return entities.filter(e=>e.kind==='unit'&&e.owner===owner).length; }
@@ -4729,13 +4747,10 @@ function drawUnit(e){
   // tier trae un aspecto muy distinto (el Caballo base es un perfil muy
   // plano; el Paladín, mucho más cuadrado) — sin esto, forzar solo la altura
   // dejaba a los tiers más "cuadrados" con una fracción del ancho del base a
-  // la misma altura, y se leía como que la unidad se encogía al evolucionar
-  // (feedback de juego real, persistía tras el recorte/rotación de sprites de
-  // una tanda anterior). uW un poco más ancho que alto (la mayoría del set
-  // baseronda ese aspecto); los perfiles muy anchos (caballería) o muy
-  // angostos (Alabardero) quedan limitados por el eje que corresponda, pero
-  // SIEMPRE dentro de una caja comparable, así ningún tier se ve diminuto.
-  const uW = uH*1.25;
+  // la misma altura, y se leía como que la unidad se encogía al evolucionar.
+  // El ancho de la caja (`unitBoxW`) es 1.25×alto por defecto, salvo la
+  // familia caballería (`UNIT_BOX_W`), calibrada aparte para que no se vea
+  // "chiquita" (ver comentario junto a `UNIT_BOX_W`).
   // FASE 9B: arte propio por TIER de línea de mejora (Fase 5) si existe,
   // igual en host y cliente MP (el tier es del BANDO, viaja gratis en
   // `serSide`). Los héroes siempre usan su propia ficha fija, nunca la de
@@ -4746,8 +4761,8 @@ function drawUnit(e){
   const tierKey = tier>0 ? (d.cat+'_t'+tier) : null;
   const faceOff = tierKey!=null ? (TIER_FACE_OFFSET[tierKey]||0) : (d.faceOffset||0);
   setUnitTransform(cx, cy, drawAngle+faceOff, 1);
-  const drewTiered = tier>0 && drawSprite('unit_'+d.cat+'_t'+tier, 0, 0, uH, false, uW);
-  if(!drewTiered && !drawSprite('unit_'+e.type, 0, 0, uH, false, uW)){
+  const drewTiered = tier>0 && drawSprite('unit_'+d.cat+'_t'+tier, 0, 0, uH, false, unitBoxW(tierKey, uH));
+  if(!drewTiered && !drawSprite('unit_'+e.type, 0, 0, uH, false, unitBoxW(e.type, uH))){
     // respaldo: aura + emoji + estrella de héroe
     if(d.hero){
       ctx.beginPath(); ctx.arc(0, 0, sz*0.7, 0, Math.PI*2);
@@ -5660,7 +5675,7 @@ function updateActionPanel(){
     if(b.built && produces && ps>1) info += ` · ⚡ x${ps.toFixed(1)} (${countBuildings('player',b.btype)})`;
     if(BLD[b.btype].pop) info += ` · 👥 +${BLD[b.btype].pop}`;
     if(b.built && BLD[b.btype].produces && b.reserve!==undefined){
-      const ico={food:'🍖',wood:'🪵',gold:'🪙',stone:'🪨'}[BLD[b.btype].produces];
+      const ico={food:'🍖',wood:'🪵',gold:'💰',stone:'🪨'}[BLD[b.btype].produces];
       info += b.reserve<=0
         ? ` · <b style="color:#d05a5a">agotada</b> (repara para recargar 500)`
         : ` · ${ico} reserva ${Math.ceil(b.reserve)}/${b.maxReserve}`;
@@ -5801,8 +5816,8 @@ function buildingButtons(b){
   else if(b.btype==='market'){
     const ico={food:'🍖',wood:'🪵',stone:'🪨'};
     for(const r of ['food','wood','stone']){
-      actionsEl.appendChild(btnEl('Vender '+ico[r]+MARKET_QTY, '+🪙'+MARKET_SELL_GOLD, '', (player.res[r]||0)>=MARKET_QTY, ()=>marketTrade('player','sell',r)));
-      actionsEl.appendChild(btnEl('Comprar '+ico[r]+MARKET_QTY, '-🪙'+MARKET_BUY_GOLD, '', (player.res.gold||0)>=MARKET_BUY_GOLD, ()=>marketTrade('player','buy',r)));
+      actionsEl.appendChild(btnEl('Vender '+ico[r]+MARKET_QTY, '+💰'+MARKET_SELL_GOLD, '', (player.res[r]||0)>=MARKET_QTY, ()=>marketTrade('player','sell',r)));
+      actionsEl.appendChild(btnEl('Comprar '+ico[r]+MARKET_QTY, '-💰'+MARKET_BUY_GOLD, '', (player.res.gold||0)>=MARKET_BUY_GOLD, ()=>marketTrade('player','buy',r)));
     }
   }
   else if(b.btype==='blacksmith'){
@@ -5817,7 +5832,7 @@ function buildingButtons(b){
       actionsEl.appendChild(btnEl(d.name, costStr(d.cost), '', canAfford(player,d.cost)&&pop<cap, ()=>queueUnit(b,t), 'unit_'+t)); }
   }
   else if(BLD[b.btype].produces){
-    const ico={food:'🍖',wood:'🪵',gold:'🪙',stone:'🪨'}[BLD[b.btype].produces];
+    const ico={food:'🍖',wood:'🪵',gold:'💰',stone:'🪨'}[BLD[b.btype].produces];
     actionsEl.appendChild(btnEl('ℹ️ Producción', ico+' renovable', '', false, ()=>{}));
   }
   else if(b.btype==='wall'){

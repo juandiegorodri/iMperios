@@ -2558,3 +2558,37 @@ función de origen solo corre en el host).
     captura del Centro Urbano en Edad Feudal mostrando la gráfica nueva
     dentro de su huella de 4×4 casillas; regresión de aldeanos-en-murallas
     (16/16, 0 atrapados) y partida simulada con IA Difícil sin errores.
+- **Icono de oro plateado, caballería demasiado chica y Centro Urbano 1.5×
+  más grande** (2026-07-24): 3 correcciones puntuales tras feedback de
+  juego real en iPad.
+  - **Icono de oro corregido**: la barra superior (y varios sitios más:
+    rally de edificio de producción, botones del Mercado) usaban `🪙`
+    (moneda), que Apple/iPadOS dibuja en tonos plateados/grises — "no se ve
+    dorado, se ve como una luna plateada". Reemplazado por `💰` en TODOS los
+    sitios, el mismo emoji que ya usaba `RES.gold.emoji` (consistente en
+    todo el juego, y de lectura dorada en cualquier plataforma).
+  - **Caballería más grande**: la caja "contain" genérica (ancho fijo
+    ×1.25×alto) dejaba a los sprites MUY anchos —el Caballo base es un
+    perfil de caballo casi plano, aspecto ancho/alto hasta 3.5— con una
+    altura final de apenas ~0.36× la de una unidad normal, y se veían "muy
+    chiquitos". Nueva `UNIT_BOX_W` (`cavalry`/`cavalry_t1`/`cavalry_t2`/
+    `hero_cav`): ancho de caja calibrado por sprite para preservar un ÁREA
+    de token parecida (h≈uH/√aspecto en vez de limitar todos al mismo
+    ancho) — la altura sube a ~0.54-0.74× según el tier (antes 0.36-0.69×),
+    una mejora notable y pareja entre Caballo/Caballero/Paladín/Héroe
+    Jinete, sin reabrir el bug de "se encoge al evolucionar" de la tanda
+    anterior (cada tier sigue alcanzando una altura consistente).
+  - **Centro Urbano 1.5× más grande**: pasa de 4×4 a 6×6 casillas del
+    tablero (160px → 240px de huella visual, pedido explícito: "por lo
+    menos 1.5 de lo que es hoy"). El Castillo queda igual (4×4, no se pidió
+    cambiarlo). Ajustados de paso el offset de aparición de los 3 aldeanos
+    iniciales (90→150px) y del cluster de recursos de cada base (130→190px/
+    120→150px) para que no queden pisando la nueva huella, más grande, del
+    Centro Urbano.
+  - Verificado headless: `BLD.town.size*BLD_VIS_SCALE===240`; los 3
+    aldeanos iniciales confirmados fuera de esa huella; captura mostrando
+    Caballo/Héroe Jinete/Milicia lado a lado a tamaño comparable (antes el
+    Caballo se perdía diminuto junto a la Milicia); captura del Centro
+    Urbano notablemente más grande junto a sus aldeanos; regresión de
+    aldeanos-en-murallas (16/16, 0 atrapados) y partida simulada con IA
+    Difícil, ambas sin errores de consola.
